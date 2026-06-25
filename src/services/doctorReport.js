@@ -501,10 +501,10 @@ export function buildDoctorReportHtml({ entries, selectedDate, patientName = "",
           table-layout: fixed;
         }
         .label-column {
-          width: 116px;
+          width: 156px;
         }
         .hour-column {
-          width: calc((100% - 116px) / 20);
+          width: calc((100% - 156px) / 20);
         }
         .diary-table th,
         .diary-table td,
@@ -540,7 +540,7 @@ export function buildDoctorReportHtml({ entries, selectedDate, patientName = "",
         }
         .medication-timeline {
           display: grid;
-          grid-template-columns: 116px 1fr;
+          grid-template-columns: 156px 1fr;
           gap: 0;
           margin-top: 2px;
         }
