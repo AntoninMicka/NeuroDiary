@@ -1,9 +1,15 @@
 export const HOUR_STATES = [
-  { key: "on", label: "ON", description: "steady movement" },
-  { key: "slow", label: "SLOW", description: "slower movement" },
-  { key: "off", label: "OFF", description: "strong symptoms" },
-  { key: "sleep", label: "SLEEP", description: "resting or asleep" },
+  { key: "dyskinesia", label: "Mimovolni pohyby", shortLabel: "D", description: "mimovolni pohyby" },
+  { key: "on", label: 'Dobra hybnost ("ON")', shortLabel: "ON", description: "dobra hybnost" },
+  { key: "partial", label: "Ne zcela dobra hybnost", shortLabel: "MID", description: "ne zcela dobra hybnost" },
+  { key: "off", label: 'Tres, ztuhlost, zpomalenost ("OFF")', shortLabel: "OFF", description: "tres, ztuhlost, zpomalenost" },
+  { key: "sleep", label: "Spanek", shortLabel: "S", description: "spanek" },
 ];
+
+export const TRACKING_HOURS = Array.from({ length: 20 }, (_, index) => {
+  const hour = index + 5;
+  return String(hour);
+});
 
 export function generateId() {
   if (globalThis.crypto?.randomUUID) {
@@ -30,12 +36,30 @@ export function formatLongDate(dateKey) {
 export function createDefaultHours() {
   const hours = {};
 
-  for (let hour = 6; hour <= 21; hour += 1) {
-    const label = `${String(hour).padStart(2, "0")}:00`;
-    hours[label] = hour < 8 ? "sleep" : hour < 11 ? "on" : hour < 14 ? "slow" : "on";
+  for (const label of TRACKING_HOURS) {
+    const hour = Number(label);
+    hours[label] = hour < 8 ? "sleep" : hour < 11 ? "on" : hour < 14 ? "partial" : "on";
   }
 
   return hours;
+}
+
+export function getStateDefinition(stateKey) {
+  return HOUR_STATES.find((item) => item.key === stateKey) ?? HOUR_STATES[0];
+}
+
+export function getTrackableHourLabel(date = new Date()) {
+  const hour = date.getHours();
+  if (hour === 0) {
+    return "24";
+  }
+  if (hour < 5) {
+    return "5";
+  }
+  if (hour > 24) {
+    return "24";
+  }
+  return String(hour);
 }
 
 export function createMedication(payload) {
@@ -64,14 +88,47 @@ export function createDefaultEntry() {
 export function createInitialState() {
   return {
     selectedDate: getTodayKey(),
+    patientName: "",
+    birthYear: "",
     entries: {},
   };
+}
+
+export function normalizeHourState(stateKey) {
+  const mapping = {
+    slow: "partial",
+  };
+
+  const normalizedKey = mapping[stateKey] ?? stateKey;
+  return HOUR_STATES.some((item) => item.key === normalizedKey) ? normalizedKey : "on";
+}
+
+export function normalizeEntryHours(rawHours) {
+  const normalizedHours = createDefaultHours();
+
+  if (!rawHours || typeof rawHours !== "object") {
+    return normalizedHours;
+  }
+
+  for (const [rawLabel, rawState] of Object.entries(rawHours)) {
+    const normalizedLabel = rawLabel.endsWith(":00")
+      ? String(Number(rawLabel.split(":")[0]))
+      : String(Number(rawLabel));
+
+    if (TRACKING_HOURS.includes(normalizedLabel)) {
+      normalizedHours[normalizedLabel] = normalizeHourState(rawState);
+    }
+  }
+
+  return normalizedHours;
 }
 
 export function ensureEntry(state, dateKey) {
   if (!state.entries[dateKey]) {
     state.entries[dateKey] = createDefaultEntry();
   }
+
+  state.entries[dateKey].hours = normalizeEntryHours(state.entries[dateKey].hours);
 
   return state.entries[dateKey];
 }
@@ -87,6 +144,18 @@ export function normalizeState(parsed) {
     state.entries = {};
   }
 
+  if (typeof state.patientName !== "string") {
+    state.patientName = "";
+  }
+
+  if (typeof state.birthYear !== "string") {
+    state.birthYear = "";
+  }
+
+  for (const entry of Object.values(state.entries)) {
+    entry.hours = normalizeEntryHours(entry.hours);
+  }
+
   ensureEntry(state, state.selectedDate);
 
   return state;
@@ -97,4 +166,24 @@ export function summarizeHours(hours) {
     accumulator[item] = (accumulator[item] ?? 0) + 1;
     return accumulator;
   }, {});
+}
+
+export function formatSleepQuality(value) {
+  const mapping = {
+    poor: "Spatna",
+    mixed: "Promenliva",
+    good: "Dobra",
+  };
+
+  return mapping[value] ?? value;
+}
+
+export function formatOverallStatus(value) {
+  const mapping = {
+    hard: "Narocny den",
+    stable: "Stabilni den",
+    good: "Dobry den",
+  };
+
+  return mapping[value] ?? value;
 }

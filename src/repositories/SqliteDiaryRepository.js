@@ -126,8 +126,16 @@ export class SqliteDiaryRepository extends DiaryRepository {
   loadState() {
     const state = createInitialState();
     const selectedDate = this.selectSetting("selected_date");
+    const patientName = this.selectSetting("patient_name");
+    const birthYear = this.selectSetting("birth_year");
     if (selectedDate) {
       state.selectedDate = selectedDate;
+    }
+    if (patientName) {
+      state.patientName = patientName;
+    }
+    if (birthYear) {
+      state.birthYear = birthYear;
     }
 
     const entries = this.db.exec(`
@@ -164,6 +172,14 @@ export class SqliteDiaryRepository extends DiaryRepository {
       this.db.run("INSERT INTO app_settings (key, value) VALUES (?, ?)", [
         "selected_date",
         state.selectedDate,
+      ]);
+      this.db.run("INSERT INTO app_settings (key, value) VALUES (?, ?)", [
+        "patient_name",
+        state.patientName ?? "",
+      ]);
+      this.db.run("INSERT INTO app_settings (key, value) VALUES (?, ?)", [
+        "birth_year",
+        state.birthYear ?? "",
       ]);
 
       for (const [entryDate, entry] of Object.entries(state.entries)) {

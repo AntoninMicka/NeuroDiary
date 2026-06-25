@@ -5,10 +5,12 @@ import MedicationPlan from "./components/MedicationPlan.vue";
 import HourMatrix from "./components/HourMatrix.vue";
 import DaySummary from "./components/DaySummary.vue";
 import {
-  HOUR_STATES,
   createMedication,
   ensureEntry,
   formatLongDate,
+  getStateDefinition,
+  getTodayKey,
+  getTrackableHourLabel,
 } from "./domain/diary.js";
 import { createDiaryRepository } from "./repositories/index.js";
 import { openDoctorReportPrint } from "./services/doctorReport.js";
@@ -18,8 +20,12 @@ const fileInput = ref(null);
 const isReady = ref(false);
 const repositoryMode = ref("loading");
 const storageMessage = ref("");
+const currentHourLabel = ref(getTrackableHourLabel());
+const selectedStateKey = ref("on");
 const state = reactive({
-  selectedDate: "",
+  selectedDate: getTodayKey(),
+  patientName: "",
+  birthYear: "",
   entries: {},
 });
 
@@ -61,6 +67,18 @@ function updateEntry(nextEntry) {
   };
 }
 
+function updateProfile(field, value) {
+  state[field] = value;
+}
+
+function updateCurrentHourLabel(value) {
+  currentHourLabel.value = value;
+}
+
+function updateSelectedStateKey(value) {
+  selectedStateKey.value = value;
+}
+
 function addMedication(payload) {
   selectedEntry.value.medications.push(createMedication(payload));
 }
@@ -71,10 +89,13 @@ function removeMedication(medicationId) {
   );
 }
 
-function cycleHour(label) {
-  const currentIndex = HOUR_STATES.findIndex((item) => item.key === selectedEntry.value.hours[label]);
-  const nextState = HOUR_STATES[(currentIndex + 1) % HOUR_STATES.length];
-  selectedEntry.value.hours[label] = nextState.key;
+function updateHour({ label, stateKey }) {
+  selectedEntry.value.hours[label] = stateKey;
+}
+
+function writeCurrentState() {
+  selectedEntry.value.hours[currentHourLabel.value] = selectedStateKey.value;
+  storageMessage.value = `Stav ${getStateDefinition(selectedStateKey.value).label} zapsan pro hodinu ${currentHourLabel.value}.`;
 }
 
 function resetDemo() {
@@ -114,6 +135,8 @@ function printDoctorReport() {
     openDoctorReportPrint({
       entries: state.entries,
       selectedDate: state.selectedDate,
+      patientName: state.patientName,
+      birthYear: state.birthYear,
     });
     storageMessage.value = "Doctor report opened for print.";
   } catch (error) {
@@ -184,18 +207,39 @@ async function importDatabase(event) {
         <section class="panel panel-wide">
           <div class="panel-heading">
             <div>
-              <p class="section-kicker">Navigation</p>
-              <h2>Choose a diary day</h2>
+              <p class="section-kicker">Udaje</p>
+              <h2>Denik a pacient</h2>
             </div>
-            <label class="date-picker">
-              <span>Date</span>
+          </div>
+          <form class="day-form">
+            <label>
+              <span>Datum</span>
               <input
                 :value="state.selectedDate"
                 type="date"
                 @input="updateSelectedDate($event.target.value)"
               />
             </label>
-          </div>
+            <label>
+              <span>Jmeno pacienta</span>
+              <input
+                :value="state.patientName"
+                type="text"
+                placeholder="Jan Novak"
+                @input="updateProfile('patientName', $event.target.value)"
+              />
+            </label>
+            <label>
+              <span>Rok narozeni</span>
+              <input
+                :value="state.birthYear"
+                type="text"
+                inputmode="numeric"
+                placeholder="1958"
+                @input="updateProfile('birthYear', $event.target.value)"
+              />
+            </label>
+          </form>
         </section>
 
         <MedicationPlan
@@ -206,7 +250,15 @@ async function importDatabase(event) {
 
         <DailyOverview :model-value="selectedEntry" @patch-entry="updateEntry" />
         <DaySummary :entry="selectedEntry" />
-        <HourMatrix :hours="selectedEntry.hours" @cycle-hour="cycleHour" />
+        <HourMatrix
+          :hours="selectedEntry.hours"
+          :current-hour-label="currentHourLabel"
+          :selected-state-key="selectedStateKey"
+          @update-hour="updateHour"
+          @update-current-hour-label="updateCurrentHourLabel"
+          @update-selected-state-key="updateSelectedStateKey"
+          @write-current-state="writeCurrentState"
+        />
       </main>
       <input
         ref="fileInput"

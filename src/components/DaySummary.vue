@@ -1,5 +1,6 @@
 <script setup>
 import { computed } from "vue";
+import { formatOverallStatus, formatSleepQuality, getStateDefinition } from "../domain/diary.js";
 
 const props = defineProps({
   entry: {
@@ -18,17 +19,17 @@ const cards = computed(() => {
 
   return [
     {
-      title: "Medication moments",
-      value: `${props.entry.medications.length} planned doses`,
+      title: "Leky",
+      value: `${props.entry.medications.length} zapsanych davek`,
     },
     {
-      title: "Dominant state",
-      value: `${dominantState ? dominantState.toUpperCase() : "N/A"} for most hours`,
+      title: "Prevladajici stav",
+      value: dominantState ? getStateDefinition(dominantState).label : "Bez dat",
     },
     {
-      title: "Sleep and notes",
-      value: `${props.entry.sleepQuality} sleep, ${props.entry.overallStatus} day, ${
-        props.entry.notes.trim() ? "notes filled in" : "no notes yet"
+      title: "Spanek a poznamky",
+      value: `${formatSleepQuality(props.entry.sleepQuality)}, ${formatOverallStatus(props.entry.overallStatus)}, ${
+        props.entry.notes.trim() ? "poznamky vyplneny" : "bez poznamek"
       }`,
     },
   ];
@@ -39,8 +40,8 @@ const cards = computed(() => {
   <section class="panel">
     <div class="panel-heading">
       <div>
-        <p class="section-kicker">Snapshot</p>
-        <h2>Quick summary</h2>
+        <p class="section-kicker">Souhrn</p>
+        <h2>Rychly prehled</h2>
       </div>
     </div>
 

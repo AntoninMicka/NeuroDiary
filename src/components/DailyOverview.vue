@@ -19,42 +19,42 @@ function patchEntry(field, value) {
   <section class="panel panel-wide">
     <div class="panel-heading">
       <div>
-        <p class="section-kicker">Daily diary</p>
-        <h2>Day overview</h2>
+        <p class="section-kicker">Denni zaznam</p>
+        <h2>Prehled dne</h2>
       </div>
     </div>
 
     <form class="day-form">
       <label>
-        <span>Sleep quality</span>
+        <span>Kvalita spanku</span>
         <select
           :value="props.modelValue.sleepQuality"
           @input="patchEntry('sleepQuality', $event.target.value)"
         >
-          <option value="poor">Poor</option>
-          <option value="mixed">Mixed</option>
-          <option value="good">Good</option>
+          <option value="poor">Spatna</option>
+          <option value="mixed">Promenliva</option>
+          <option value="good">Dobra</option>
         </select>
       </label>
 
       <label>
-        <span>Overall day</span>
+        <span>Celkovy den</span>
         <select
           :value="props.modelValue.overallStatus"
           @input="patchEntry('overallStatus', $event.target.value)"
         >
-          <option value="hard">Hard day</option>
-          <option value="stable">Stable day</option>
-          <option value="good">Good day</option>
+          <option value="hard">Narocny den</option>
+          <option value="stable">Stabilni den</option>
+          <option value="good">Dobry den</option>
         </select>
       </label>
 
       <label class="notes-field">
-        <span>Notes</span>
+        <span>Poznamky</span>
         <textarea
           :value="props.modelValue.notes"
           rows="4"
-          placeholder="Examples: stiffness after lunch, tremor improved after walk..."
+          placeholder="Napriklad: ztuhlost po obede, tres lepsi po prochazce..."
           @input="patchEntry('notes', $event.target.value)"
         />
       </label>
