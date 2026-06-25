@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NeuroDiary PoC</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Offline-first prototype</p>
+          <h1>NeuroDiary PoC</h1>
+          <p class="lede">
+            A fast local diary for daily symptom tracking, medication timing,
+            and simple day summaries.
+          </p>
+        </div>
+        <div class="hero-card">
+          <p class="hero-label">Today</p>
+          <p class="hero-date" id="selected-date-label"></p>
+          <button id="reset-demo" class="ghost-button" type="button">
+            Reset demo data
+          </button>
+        </div>
+      </header>
+
+      <main class="grid">
+        <section class="panel panel-wide">
+          <div class="panel-heading">
+            <div>
+              <p class="section-kicker">Daily diary</p>
+              <h2>Day overview</h2>
+            </div>
+            <label class="date-picker">
+              <span>Date</span>
+              <input id="date-input" type="date" />
+            </label>
+          </div>
+
+          <form id="day-form" class="day-form">
+            <label>
+              <span>Sleep quality</span>
+              <select id="sleep-quality">
+                <option value="poor">Poor</option>
+                <option value="mixed">Mixed</option>
+                <option value="good">Good</option>
+              </select>
+            </label>
+            <label>
+              <span>Overall day</span>
+              <select id="overall-status">
+                <option value="hard">Hard day</option>
+                <option value="stable">Stable day</option>
+                <option value="good">Good day</option>
+              </select>
+            </label>
+            <label class="notes-field">
+              <span>Notes</span>
+              <textarea
+                id="daily-notes"
+                rows="4"
+                placeholder="Examples: stiffness after lunch, tremor improved after walk..."
+              ></textarea>
+            </label>
+          </form>
+        </section>
+
+        <section class="panel">
+          <div class="panel-heading">
+            <div>
+              <p class="section-kicker">Medication</p>
+              <h2>Medication plan</h2>
+            </div>
+          </div>
+          <form id="medication-form" class="stack-form">
+            <label>
+              <span>Name</span>
+              <input id="medication-name" type="text" placeholder="Levodopa" />
+            </label>
+            <label>
+              <span>Dose</span>
+              <input id="medication-dose" type="text" placeholder="100 mg" />
+            </label>
+            <label>
+              <span>Time</span>
+              <input id="medication-time" type="time" />
+            </label>
+            <button class="primary-button" type="submit">Add medication</button>
+          </form>
+          <ul id="medication-list" class="list"></ul>
+        </section>
+
+        <section class="panel panel-wide">
+          <div class="panel-heading">
+            <div>
+              <p class="section-kicker">Hourly matrix</p>
+              <h2>Symptoms through the day</h2>
+            </div>
+            <p class="panel-tip">Tap each hour to cycle through states.</p>
+          </div>
+          <div id="hour-grid" class="hour-grid"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-heading">
+            <div>
+              <p class="section-kicker">Snapshot</p>
+              <h2>Quick summary</h2>
+            </div>
+          </div>
+          <div id="summary" class="summary"></div>
+        </section>
+      </main>
+    </div>
+
+    <template id="hour-card-template">
+      <button class="hour-card" type="button">
+        <span class="hour-label"></span>
+        <span class="hour-state"></span>
+      </button>
+    </template>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

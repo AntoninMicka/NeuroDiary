@@ -75,20 +75,24 @@ Výstup:
 
 ## Fáze 2 – Lokální offline aplikace (MVP)
 
-### [pending] 2.1 Inicializace projektu
+### [poc_done] 2.1 Inicializace projektu
+
+Statický offline PoC ve složce `poc/`.
 
 ### [pending] 2.2 Lokální SQLite databáze
 
-### [pending] 2.3 Správa léků
+### [poc_done] 2.3 Správa léků
 
-### [pending] 2.4 Denní záznam
+### [poc_done] 2.4 Denní záznam
 
 * hodinové sloty
 * zdravotní stav
 * spánek
 * poznámky
 
-### [pending] 2.5 Offline ukládání
+### [poc_done] 2.5 Offline ukládání
+
+Lokální persistence přes `localStorage` jako PoC vrstva před SQLite.
 
 ### [pending] 2.6 PWA
 
