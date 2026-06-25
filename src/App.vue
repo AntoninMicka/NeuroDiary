@@ -249,7 +249,11 @@ async function importDatabase(event) {
         />
 
         <DailyOverview :model-value="selectedEntry" @patch-entry="updateEntry" />
-        <DaySummary :entry="selectedEntry" />
+        <DaySummary
+          :entry="selectedEntry"
+          :entries="state.entries"
+          :selected-date="state.selectedDate"
+        />
         <HourMatrix
           :hours="selectedEntry.hours"
           :current-hour-label="currentHourLabel"

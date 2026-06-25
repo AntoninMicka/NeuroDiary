@@ -136,7 +136,7 @@ Výstup:
 
 ## Fáze 3 – Analýza dat
 
-### [in_progress] 3.1 Agregační algoritmy
+### [done] 3.1 Agregační algoritmy
 
 První implementační vlna pro analytickou vrstvu:
 
