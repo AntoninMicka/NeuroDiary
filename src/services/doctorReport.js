@@ -317,7 +317,7 @@ export function buildDoctorReportHtml({ entries, selectedDate, patientName = "",
       <title>NeuroDiary Report</title>
       <style>
         @page {
-          size: A4 portrait;
+          size: A4 landscape;
           margin: 8mm;
         }
         :root {
@@ -344,10 +344,14 @@ export function buildDoctorReportHtml({ entries, selectedDate, patientName = "",
           display: flex;
           flex-direction: column;
           gap: 10mm;
+          width: 281mm;
+          margin: 0 auto;
         }
         .sheet {
           border: 1.5px solid var(--blue);
           page-break-after: always;
+          width: 100%;
+          min-height: 194mm;
         }
         .sheet:last-child {
           page-break-after: auto;
@@ -589,8 +593,17 @@ export function buildDoctorReportHtml({ entries, selectedDate, patientName = "",
         .state-dyskinesia { background: var(--dyskinesia); }
         .state-sleep { background: var(--sleep); }
         @media print {
+          html, body {
+            width: 297mm;
+            height: 210mm;
+          }
           .page {
             gap: 0;
+            width: auto;
+            margin: 0;
+          }
+          .sheet {
+            min-height: calc(210mm - 16mm);
           }
         }
       </style>
