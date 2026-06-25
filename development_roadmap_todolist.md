@@ -157,6 +157,12 @@ hodinovou maticí, barevně zvýrazněnými stavy a timeline medikace.
 
 ### [pending] 4.5 Automatické lokální zálohy
 
+### [pending] 4.6 Mobilní cloudové zálohy
+
+* Android: záloha/export na Google Drive
+* Apple ekosystém: záloha/export do iCloud Drive nebo Files
+* obnova dat ze vzdálené zálohy
+
 ---
 
 # 🎯 Milník M2 – Analýza a reporty
@@ -201,6 +207,12 @@ Výstup:
 * download
 * konflikty
 * verzování
+
+### [pending] 6.5 Integrace mobilních úložišť
+
+* Android sdílení a export do Google Drive
+* Apple sdílení a export do iCloud Drive / Files
+* napojení na nativní systémové dialogy pro výběr umístění zálohy
 
 ### [pending] 6.4 Sdílení s lékařem
 
