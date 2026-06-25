@@ -47,6 +47,12 @@ Cíl MVP:
 * Dialogové zadávání
 * Přístupnost
 
+### [pending] 1.6 Pravidla validace a kvality dat
+
+* validace časů, dávek a povinných polí
+* detekce nekonzistentních denních záznamů
+* pravidla pro chybějící nebo neúplná data
+
 ### [pending] 1.4 Návrh doménové architektury
 
 * DiaryService
@@ -87,6 +93,12 @@ Připraven Vue repository layer, `LocalStorageDiaryRepository` a první `SqliteD
 s fallbackem na localStorage, včetně import/export `.sqlite`.
 
 ### [poc_done] 2.3 Správa léků
+
+### [pending] 2.7 Léčebný plán vs. skutečně užité dávky
+
+* definice pravidelné medikace
+* odlišení plánované a skutečně užité dávky
+* příprava podkladů pro pozdější adherence analýzy
 
 ### [poc_done] 2.4 Denní záznam
 
@@ -140,6 +152,12 @@ První implementační vlna pro analytickou vrstvu:
 
 ### [pending] 3.5 Dlouhodobé trendy
 
+### [pending] 3.6 Kvalita dat pro analýzy
+
+* práce s chybějícími dny
+* označení neúplných nebo málo spolehlivých období
+* pravidla pro interpretaci neúplných dat v reportech
+
 ---
 
 ## Fáze 4 – Export a zálohy
@@ -162,6 +180,12 @@ hodinovou maticí, barevně zvýrazněnými stavy a timeline medikace.
 * Android: záloha/export na Google Drive
 * Apple ekosystém: záloha/export do iCloud Drive nebo Files
 * obnova dat ze vzdálené zálohy
+
+### [pending] 4.7 Export pro podporu a diagnostiku
+
+* export anonymizovaného debug balíčku
+* přiložení verze aplikace a stavu databáze
+* bezpečné sdílení technických podkladů při řešení chyb
 
 ---
 
@@ -193,6 +217,12 @@ Výstup:
 
 ### [pending] 5.4 GDPR
 
+### [pending] 5.5 Bezpečné sdílení a souhlas
+
+* potvrzení uživatele před sdílením reportu nebo exportu
+* možnost anonymizace vybraných výstupů
+* evidence, co a kdy bylo exportováno nebo sdíleno
+
 ---
 
 ## Fáze 6 – Cloud
@@ -213,6 +243,12 @@ Výstup:
 * Android sdílení a export do Google Drive
 * Apple sdílení a export do iCloud Drive / Files
 * napojení na nativní systémové dialogy pro výběr umístění zálohy
+
+### [pending] 6.6 Více profilů a role pečující osoby
+
+* pacient
+* rodinný příslušník / pečující
+* oddělení dat a oprávnění mezi profily
 
 ### [pending] 6.4 Sdílení s lékařem
 
@@ -279,6 +315,12 @@ Výstup:
 
 ### [pending] 9.4 Crash reporting
 
+### [pending] 9.5 Výkon a škálování lokálních dat
+
+* výkon při stovkách až tisících dnů záznamů
+* velikost lokální databáze a exportů
+* odezva reportů a analýz nad delší historií
+
 ---
 
 ## Fáze 10 – Testování
@@ -296,6 +338,12 @@ Výstup:
 ### [pending] 10.6 Bezpečnostní audit
 
 ### [pending] 10.7 Beta test s pacienty
+
+### [pending] 10.8 Přístupnost a usability testy
+
+* ověření čitelnosti pro cílovou skupinu
+* testování ovládání na mobilu i desktopu
+* validace reportů a exportů s reálnými uživateli
 
 ---
 
