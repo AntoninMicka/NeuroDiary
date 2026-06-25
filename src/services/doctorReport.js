@@ -93,7 +93,10 @@ function buildMedicationTimelineRow(entry) {
       return `
         <div class="medication-marker" style="left: ${left}%;">
           <span class="medication-dot"></span>
-          <span class="medication-caption">${escapeHtml(`${medication.time} ${medication.name} ${medication.dose}`)}</span>
+          <span class="medication-caption">
+            <strong>${escapeHtml(medication.name)}</strong>
+            <span>${escapeHtml(`${medication.time} ${medication.dose}`)}</span>
+          </span>
         </div>
       `;
     })
@@ -598,6 +601,13 @@ export function buildDoctorReportHtml({ entries, selectedDate, patientName = "",
           font-size: 6px;
           line-height: 1.05;
           color: var(--blue);
+        }
+        .medication-caption strong,
+        .medication-caption span {
+          display: block;
+        }
+        .medication-caption strong {
+          font-weight: 700;
         }
         .medication-empty {
           position: absolute;
