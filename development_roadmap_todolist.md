@@ -139,7 +139,9 @@ Výstup:
 
 ### [pending] 4.1 PDF engine
 
-### [pending] 4.2 Lékařský report
+### [in_progress] 4.2 Lékařský report
+
+První tiskový report pro lékaře z vybraného dne s medikací, hodinovým logem a krátkým trendem.
 
 ### [pending] 4.3 Export JSON
 

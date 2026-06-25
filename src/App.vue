@@ -11,6 +11,7 @@ import {
   formatLongDate,
 } from "./domain/diary.js";
 import { createDiaryRepository } from "./repositories/index.js";
+import { openDoctorReportPrint } from "./services/doctorReport.js";
 
 const diaryRepository = ref(null);
 const fileInput = ref(null);
@@ -108,6 +109,19 @@ function openImportPicker() {
   fileInput.value?.click();
 }
 
+function printDoctorReport() {
+  try {
+    openDoctorReportPrint({
+      entries: state.entries,
+      selectedDate: state.selectedDate,
+    });
+    storageMessage.value = "Doctor report opened for print.";
+  } catch (error) {
+    console.error("Doctor report print failed", error);
+    storageMessage.value = "Unable to open the printable doctor report.";
+  }
+}
+
 async function importDatabase(event) {
   const [file] = event.target.files ?? [];
   if (!file) {
@@ -151,6 +165,9 @@ async function importDatabase(event) {
           <p class="hero-label">Selected day · {{ repositoryMode }}</p>
           <p class="hero-date">{{ selectedDateLabel }}</p>
           <div class="hero-actions">
+            <button class="ghost-button" type="button" @click="printDoctorReport">
+              Print report
+            </button>
             <button class="ghost-button" type="button" @click="exportDatabase">
               Export .sqlite
             </button>

@@ -22,3 +22,4 @@ It also includes:
 - SQLite schema versioning via migrations
 - export of a local `.sqlite` backup
 - import of an existing `.sqlite` backup
+- printable doctor report for the selected diary day

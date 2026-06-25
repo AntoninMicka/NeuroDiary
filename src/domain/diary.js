@@ -91,3 +91,10 @@ export function normalizeState(parsed) {
 
   return state;
 }
+
+export function summarizeHours(hours) {
+  return Object.values(hours).reduce((accumulator, item) => {
+    accumulator[item] = (accumulator[item] ?? 0) + 1;
+    return accumulator;
+  }, {});
+}
