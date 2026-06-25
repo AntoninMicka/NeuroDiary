@@ -1,5 +1,5 @@
 <script setup>
-import { HOUR_STATES } from "../services/diaryStore.js";
+import { HOUR_STATES } from "../domain/diary.js";
 
 defineProps({
   hours: {

@@ -9,12 +9,11 @@ import {
   createMedication,
   ensureEntry,
   formatLongDate,
-  loadState,
-  resetState,
-  saveState,
-} from "./services/diaryStore.js";
+} from "./domain/diary.js";
+import { createDiaryRepository } from "./repositories/index.js";
 
-const state = reactive(loadState());
+const diaryRepository = createDiaryRepository();
+const state = reactive(diaryRepository.loadState());
 
 const selectedEntry = computed(() => ensureEntry(state, state.selectedDate));
 const selectedDateLabel = computed(() => formatLongDate(state.selectedDate));
@@ -25,7 +24,7 @@ const sortedMedications = computed(() =>
 watch(
   state,
   () => {
-    saveState(state);
+    diaryRepository.saveState(state);
   },
   { deep: true },
 );
@@ -59,7 +58,7 @@ function cycleHour(label) {
 }
 
 function resetDemo() {
-  const fresh = resetState();
+  const fresh = diaryRepository.resetState();
   Object.assign(state, fresh);
 }
 </script>
