@@ -216,7 +216,7 @@ function buildHistogramCells(counts, totalDays) {
 
     return `
       <td class="histogram-cell" title="${escapeHtml(`${state.shortLabel}: ${value} / ${totalDays}`)}">
-        <div class="mini-cylinder">
+        <div class="histogram-cell-inner">
           <div class="mini-cylinder-fill state-${escapeHtml(state.key)}" style="height: ${height}%;"></div>
         </div>
       </td>
@@ -717,18 +717,19 @@ export function buildDoctorReportHtml({ entries, selectedDate, patientName = "",
         .hour-summary-table th:nth-child(2) { width: 20%; }
         .hour-summary-table th[colspan="5"] { width: 34%; }
         .histogram-cell {
-          padding: 1px 0;
+          padding: 0;
           text-align: center;
+          vertical-align: bottom;
         }
-        .mini-cylinder {
+        .histogram-cell-inner {
           display: flex;
           align-items: end;
-          width: 100%;
-          max-width: 7px;
+          justify-content: center;
+          width: calc(100% - 4px);
           height: 28px;
-          margin: 0 auto;
-          border: 1px solid var(--line);
+          margin: 2px;
           background: #f7fafc;
+          border: 1px solid var(--line-soft);
           overflow: hidden;
         }
         .mini-cylinder-fill {
