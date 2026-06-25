@@ -42,10 +42,7 @@ export function analyzeEntry(entry) {
 }
 
 export function analyzePeriod(entries, endDateKey, days = 7) {
-  const dateKeys = [];
-  for (let index = days - 1; index >= 0; index -= 1) {
-    dateKeys.push(shiftDateKey(endDateKey, -index));
-  }
+  const dateKeys = getPeriodDateKeys(endDateKey, days);
 
   const totals = TRACKED_SUMMARY_STATES.reduce((accumulator, stateKey) => {
     accumulator[stateKey] = 0;
@@ -91,4 +88,29 @@ export function analyzePeriod(entries, endDateKey, days = 7) {
     dominantState:
       getDominantState(dominantStateDays) ?? (recordedDays > 0 ? getDominantState(totals) : null),
   };
+}
+
+export function getPeriodDateKeys(endDateKey, days = 7) {
+  const dateKeys = [];
+  for (let index = days - 1; index >= 0; index -= 1) {
+    dateKeys.push(shiftDateKey(endDateKey, -index));
+  }
+  return dateKeys;
+}
+
+export function buildMetricSeries(entries, endDateKey, days = 7) {
+  return getPeriodDateKeys(endDateKey, days).map((dateKey) => {
+    const entry = entries[dateKey];
+    const analysis = entry ? analyzeEntry(entry) : null;
+
+    return {
+      dateKey,
+      hasEntry: Boolean(entry),
+      on: analysis?.hourCounts.on ?? 0,
+      partial: analysis?.hourCounts.partial ?? 0,
+      off: analysis?.hourCounts.off ?? 0,
+      sleep: analysis?.hourCounts.sleep ?? 0,
+      medications: analysis?.medicationCount ?? 0,
+    };
+  });
 }

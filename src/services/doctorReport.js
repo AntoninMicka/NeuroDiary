@@ -10,6 +10,7 @@ import {
 
 const REPORT_DAYS_PAGE_ONE = 4;
 const ANALYSIS_DAYS = 7;
+const ANALYSIS_LONG_DAYS = 30;
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -192,6 +193,37 @@ function summarizeWindow(entries, selectedDate, count) {
   };
 }
 
+function summarizeHourWindow(entries, selectedDate, hourLabel, count) {
+  const counts = HOUR_STATES.reduce((accumulator, state) => {
+    accumulator[state.key] = 0;
+    return accumulator;
+  }, {});
+
+  for (const { entry } of collectEntries(entries, selectedDate, count)) {
+    const stateKey = entry?.hours?.[hourLabel];
+    if (stateKey && counts[stateKey] !== undefined) {
+      counts[stateKey] += 1;
+    }
+  }
+
+  return counts;
+}
+
+function buildHistogramCells(counts, totalDays) {
+  return HOUR_STATES.map((state) => {
+    const value = counts[state.key] ?? 0;
+    const height = value > 0 ? Math.max((value / totalDays) * 100, 8) : 0;
+
+    return `
+      <td class="histogram-cell" title="${escapeHtml(`${state.shortLabel}: ${value} / ${totalDays}`)}">
+        <div class="mini-cylinder">
+          <div class="mini-cylinder-fill state-${escapeHtml(state.key)}" style="height: ${height}%;"></div>
+        </div>
+      </td>
+    `;
+  }).join("");
+}
+
 function buildTrendRows(entries, selectedDate) {
   return collectEntries(entries, selectedDate, ANALYSIS_DAYS)
     .reverse()
@@ -223,33 +255,18 @@ function buildTrendRows(entries, selectedDate) {
 
 function buildHourSummaryRows(entries, selectedDate) {
   return TRACKING_HOURS.map((hourLabel) => {
-    const counts = HOUR_STATES.reduce((accumulator, state) => {
-      accumulator[state.key] = 0;
-      return accumulator;
-    }, {});
-
-    for (const { entry } of collectEntries(entries, selectedDate, ANALYSIS_DAYS)) {
-      const stateKey = entry?.hours?.[hourLabel];
-      if (stateKey && counts[stateKey] !== undefined) {
-        counts[stateKey] += 1;
-      }
-    }
-
-    const total = Object.values(counts).reduce((sum, value) => sum + value, 0);
-    const dominantStateKey = Object.entries(counts).sort((left, right) => right[1] - left[1])[0]?.[0] ?? "on";
+    const weeklyCounts = summarizeHourWindow(entries, selectedDate, hourLabel, ANALYSIS_DAYS);
+    const monthlyCounts = summarizeHourWindow(entries, selectedDate, hourLabel, ANALYSIS_LONG_DAYS);
+    const dominantStateKey =
+      Object.entries(weeklyCounts).sort((left, right) => right[1] - left[1])[0]?.[0] ?? "on";
     const dominantState = getStateDefinition(dominantStateKey);
-    const width = total ? Math.max((counts[dominantStateKey] / total) * 100, 10) : 0;
 
     return `
       <tr>
         <td>${escapeHtml(hourLabel)}:00</td>
-        <td>${escapeHtml(dominantState.label)}</td>
-        <td>
-          <div class="bar-track">
-            <div class="bar-fill state-${escapeHtml(dominantState.key)}" style="width: ${width}%;"></div>
-          </div>
-        </td>
-        <td>${escapeHtml(`${counts.on} ON / ${counts.partial} MID / ${counts.off} OFF`)}</td>
+        <td>${escapeHtml(dominantState.shortLabel)}</td>
+        ${buildHistogramCells(weeklyCounts, ANALYSIS_DAYS)}
+        ${buildHistogramCells(monthlyCounts, ANALYSIS_LONG_DAYS)}
       </tr>
     `;
   }).join("");
@@ -309,10 +326,14 @@ function buildAnalysisPage(entries, selectedDate) {
           <table class="hour-summary-table">
             <thead>
               <tr>
-                <th>Cas</th>
-                <th>Nejcasteji</th>
-                <th>Stabilita</th>
-                <th>Poznamka</th>
+                <th rowspan="2">Cas</th>
+                <th rowspan="2">Nejcastejsi hodnota</th>
+                <th colspan="5">7 dni</th>
+                <th colspan="5">30 dni</th>
+              </tr>
+              <tr>
+                ${HOUR_STATES.map((state) => `<th>${escapeHtml(state.shortLabel)}</th>`).join("")}
+                ${HOUR_STATES.map((state) => `<th>${escapeHtml(state.shortLabel)}</th>`).join("")}
               </tr>
             </thead>
             <tbody>${buildHourSummaryRows(entries, selectedDate)}</tbody>
@@ -345,6 +366,10 @@ export function buildDoctorReportHtml({ entries, selectedDate, patientName = "",
       <style>
         @page {
           size: A4 landscape;
+          margin: 8mm;
+        }
+        @page analysis-report {
+          size: A4 portrait;
           margin: 8mm;
         }
         :root {
@@ -449,6 +474,12 @@ export function buildDoctorReportHtml({ entries, selectedDate, patientName = "",
         .content,
         .analysis-page {
           padding: 8px;
+        }
+        .analysis-page {
+          page: analysis-report;
+          width: 194mm;
+          min-height: 281mm;
+          margin: 0 auto;
         }
         .analysis-card strong {
           display: block;
@@ -668,22 +699,41 @@ export function buildDoctorReportHtml({ entries, selectedDate, patientName = "",
           padding-left: 6px;
         }
         .trend-table td:first-child,
-        .hour-summary-table td:first-child,
-        .hour-summary-table td:nth-child(2),
-        .hour-summary-table td:nth-child(4) {
+        .hour-summary-table td:first-child {
           text-align: left;
           padding-left: 6px;
         }
-        .bar-track {
+        .hour-summary-table td:nth-child(2) {
+          text-align: center;
+          font-weight: 700;
+          color: var(--blue);
+        }
+        .hour-summary-table thead th {
+          text-align: center;
+          padding-left: 0;
+          vertical-align: middle;
+        }
+        .hour-summary-table th:nth-child(1) { width: 12%; }
+        .hour-summary-table th:nth-child(2) { width: 20%; }
+        .hour-summary-table th[colspan="5"] { width: 34%; }
+        .histogram-cell {
+          padding: 1px 0;
+          text-align: center;
+        }
+        .mini-cylinder {
+          display: flex;
+          align-items: end;
           width: 100%;
-          height: 10px;
-          border-radius: 999px;
-          background: #e9f0f6;
+          max-width: 7px;
+          height: 28px;
+          margin: 0 auto;
+          border: 1px solid var(--line);
+          background: #f7fafc;
           overflow: hidden;
         }
-        .bar-fill {
-          height: 100%;
-          border-radius: 999px;
+        .mini-cylinder-fill {
+          display: block;
+          width: 100%;
         }
         .state-on { background: #d9ebf8; }
         .state-partial { background: #f8e7b7; }
@@ -692,8 +742,8 @@ export function buildDoctorReportHtml({ entries, selectedDate, patientName = "",
         .state-sleep { background: #e7edf2; }
         @media print {
           html, body {
-            width: 297mm;
-            height: 210mm;
+            width: auto;
+            height: auto;
           }
           .page {
             gap: 0;
@@ -702,6 +752,10 @@ export function buildDoctorReportHtml({ entries, selectedDate, patientName = "",
           }
           .sheet {
             min-height: calc(210mm - 16mm);
+          }
+          .analysis-page {
+            width: auto;
+            min-height: calc(297mm - 16mm);
           }
         }
       </style>
