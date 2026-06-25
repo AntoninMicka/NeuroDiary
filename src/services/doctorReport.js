@@ -30,10 +30,13 @@ function buildDateKeys(selectedDate, count) {
   return Array.from({ length: count }, (_, index) => shiftDateKey(selectedDate, index - count + 1));
 }
 
-function buildLegend() {
-  return HOUR_STATES.map(
-    (state) => `<li><strong>${escapeHtml(state.shortLabel)}</strong> ${escapeHtml(state.label)}</li>`,
-  ).join("");
+function formatNumericDate(dateKey) {
+  const date = new Date(`${dateKey}T12:00:00`);
+  return new Intl.DateTimeFormat("cs-CZ", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(date);
 }
 
 function buildMatrixRows(entry) {
@@ -43,7 +46,8 @@ function buildMatrixRows(entry) {
     const cells = TRACKING_HOURS.map((hourLabel) => {
       const stateKey = entry?.hours?.[hourLabel];
       const marker = stateKey === state.key ? "X" : "";
-      return `<td>${marker}</td>`;
+      const cellClass = marker ? `filled state-${escapeHtml(state.key)}` : "";
+      return `<td class="${cellClass}">${marker}</td>`;
     }).join("");
 
     return `
@@ -57,7 +61,10 @@ function buildMatrixRows(entry) {
   rows.push(`
     <tr>
       <th>Spanek</th>
-      ${TRACKING_HOURS.map((hourLabel) => `<td>${entry?.hours?.[hourLabel] === "sleep" ? "S" : ""}</td>`).join("")}
+      ${TRACKING_HOURS.map((hourLabel) => {
+        const isSleep = entry?.hours?.[hourLabel] === "sleep";
+        return `<td class="${isSleep ? "filled state-sleep" : ""}">${isSleep ? "S" : ""}</td>`;
+      }).join("")}
     </tr>
   `);
 
@@ -65,24 +72,32 @@ function buildMatrixRows(entry) {
 }
 
 function buildMedicationTimelineRow(entry) {
-  const medicationsByHour = new Map();
-
-  for (const medication of entry?.medications ?? []) {
-    const [hour] = medication.time.split(":");
-    if (!medicationsByHour.has(hour)) {
-      medicationsByHour.set(hour, []);
-    }
-    medicationsByHour.get(hour).push(`${medication.time} ${medication.name}`);
+  if (!entry?.medications?.length) {
+    return `<div class="medication-empty">Bez medikace</div>`;
   }
 
-  return TRACKING_HOURS.map((hourLabel) => {
-    const items = medicationsByHour.get(hourLabel) ?? [];
-    const content = items.length
-      ? items.map((item) => `<span>${escapeHtml(item)}</span>`).join("")
-      : "";
+  const startHour = Number(TRACKING_HOURS[0]);
+  const endHour = Number(TRACKING_HOURS.at(-1)) + 1;
+  const totalHours = endHour - startHour;
 
-    return `<td class="med-cell">${content}</td>`;
-  }).join("");
+  return entry.medications
+    .slice()
+    .sort((left, right) => left.time.localeCompare(right.time))
+    .map((medication) => {
+      const [hoursRaw, minutesRaw] = medication.time.split(":");
+      const hours = Number(hoursRaw);
+      const minutes = Number(minutesRaw);
+      const offsetHours = Math.min(Math.max(hours + minutes / 60 - startHour, 0), totalHours);
+      const left = (offsetHours / totalHours) * 100;
+
+      return `
+        <div class="medication-marker" style="left: ${left}%;">
+          <span class="medication-dot"></span>
+          <span class="medication-caption">${escapeHtml(`${medication.time} ${medication.name} ${medication.dose}`)}</span>
+        </div>
+      `;
+    })
+    .join("");
 }
 
 function buildDayTable(dateKey, entry) {
@@ -101,6 +116,10 @@ function buildDayTable(dateKey, entry) {
       </div>
 
       <table class="diary-table">
+        <colgroup>
+          <col class="label-column" />
+          ${TRACKING_HOURS.map(() => '<col class="hour-column" />').join("")}
+        </colgroup>
         <thead>
           <tr>
             <th>Stav / Hod.</th>
@@ -109,12 +128,17 @@ function buildDayTable(dateKey, entry) {
         </thead>
         <tbody>
           ${buildMatrixRows(entry)}
-          <tr class="med-row">
-            <th>Lecba</th>
-            ${buildMedicationTimelineRow(entry)}
-          </tr>
         </tbody>
       </table>
+
+      <div class="medication-timeline">
+        <div class="medication-label">Lecba</div>
+        <div class="medication-track">
+          <div class="medication-grid"></div>
+          <div class="medication-axis"></div>
+          ${buildMedicationTimelineRow(entry)}
+        </div>
+      </div>
 
       <div class="day-note">
         <strong>Poznamka:</strong> ${escapeHtml(note)}
@@ -358,45 +382,43 @@ export function buildDoctorReportHtml({ entries, selectedDate, patientName = "",
         }
         .header {
           display: grid;
-          grid-template-columns: 1.35fr 0.95fr;
-          background: var(--blue);
-          color: white;
+          grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.9fr);
+          align-items: stretch;
+          background: white;
+          color: var(--text);
+          border-bottom: 1.5px solid var(--blue);
         }
         .header-main {
-          padding: 12px 14px;
+          padding: 6px 8px;
+          border-right: 1px solid var(--line);
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
         }
         .header-main h1 {
-          margin: 0 0 5px;
-          font-size: 22px;
-          line-height: 1.08;
-        }
-        .header-main p {
           margin: 0;
           font-size: 12px;
+          line-height: 1.05;
+          text-transform: uppercase;
+          letter-spacing: 0.03em;
+          color: var(--blue);
+        }
+        .header-main p {
+          display: none;
         }
         .header-side {
-          padding: 12px 14px;
-          border-left: 1px solid rgba(255,255,255,0.25);
-        }
-        .header-side p {
-          margin: 0 0 6px;
-          font-size: 11px;
-        }
-        .header-side ul {
-          margin: 6px 0 0 16px;
           padding: 0;
-          font-size: 10px;
-        }
-        .meta {
           display: grid;
-          grid-template-columns: 1.2fr 0.8fr 0.6fr 0.6fr;
-          border-top: 1px solid var(--blue);
+          grid-template-columns: 1.45fr 0.95fr 0.9fr 0.7fr;
         }
         .meta-cell {
-          min-height: 54px;
-          padding: 8px 10px;
+          min-height: 40px;
+          padding: 4px 8px;
           border-right: 1px solid var(--line);
-          background: var(--blue-soft);
+          background: white;
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
         }
         .meta-cell:last-child {
           border-right: 0;
@@ -404,43 +426,48 @@ export function buildDoctorReportHtml({ entries, selectedDate, patientName = "",
         .meta-label,
         .section-label {
           display: block;
-          font-size: 10px;
+          font-size: 9px;
           font-weight: 700;
           text-transform: uppercase;
           color: var(--blue);
           letter-spacing: 0.04em;
-          margin: 0 0 4px;
+          margin: 0 0 2px;
         }
         .meta-value {
-          font-size: 12px;
+          font-size: 10px;
           font-weight: 600;
-          line-height: 1.3;
+          line-height: 1.2;
+        }
+        .meta-value.compact {
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
         .content,
         .analysis-page {
-          padding: 10px;
+          padding: 8px;
         }
         .content-head {
           display: flex;
           justify-content: space-between;
           align-items: end;
           gap: 12px;
-          margin-bottom: 8px;
+          margin-bottom: 4px;
         }
         .content-head strong,
         .analysis-card strong {
           display: block;
           color: var(--blue);
           text-transform: uppercase;
-          font-size: 10px;
+          font-size: 9px;
           letter-spacing: 0.04em;
-          margin-bottom: 3px;
+          margin-bottom: 2px;
         }
         .content-head span {
-          font-size: 12px;
+          font-size: 10px;
         }
         .day-sheet {
-          margin-bottom: 8px;
+          margin-bottom: 4px;
           page-break-inside: avoid;
         }
         .day-sheet:last-of-type {
@@ -450,17 +477,17 @@ export function buildDoctorReportHtml({ entries, selectedDate, patientName = "",
           display: flex;
           justify-content: space-between;
           align-items: end;
-          margin-bottom: 4px;
+          margin-bottom: 2px;
         }
         .day-title {
           margin: 0;
-          font-size: 13px;
+          font-size: 11px;
           font-weight: 700;
           color: var(--blue);
         }
         .day-subtitle {
-          margin: 2px 0 0;
-          font-size: 11px;
+          margin: 1px 0 0;
+          font-size: 9px;
           color: var(--muted);
         }
         .diary-table,
@@ -470,6 +497,12 @@ export function buildDoctorReportHtml({ entries, selectedDate, patientName = "",
           border-collapse: collapse;
           table-layout: fixed;
         }
+        .label-column {
+          width: 116px;
+        }
+        .hour-column {
+          width: calc((100% - 116px) / 20);
+        }
         .diary-table th,
         .diary-table td,
         .trend-table th,
@@ -477,8 +510,8 @@ export function buildDoctorReportHtml({ entries, selectedDate, patientName = "",
         .hour-summary-table th,
         .hour-summary-table td {
           border: 1px solid var(--line);
-          padding: 4px 2px;
-          font-size: 10px;
+          padding: 2px 1px;
+          font-size: 8px;
           text-align: center;
           vertical-align: middle;
         }
@@ -486,39 +519,105 @@ export function buildDoctorReportHtml({ entries, selectedDate, patientName = "",
           background: var(--blue);
           color: white;
           font-weight: 700;
+          font-size: 8px;
         }
         .diary-table tbody th {
-          width: 134px;
           text-align: left;
-          padding-left: 6px;
+          padding-left: 4px;
           background: #eef5fb;
           font-weight: 600;
+          font-size: 8px;
         }
-        .med-row th {
-          background: #edf7f1 !important;
+        .diary-table tbody td {
+          height: 15px;
         }
-        .med-cell {
-          height: 34px;
-          padding: 1px !important;
-          font-size: 8px !important;
-          line-height: 1.1;
+        .diary-table td.filled {
+          font-weight: 700;
+          color: #18324a;
         }
-        .med-cell span {
+        .medication-timeline {
+          display: grid;
+          grid-template-columns: 116px 1fr;
+          gap: 0;
+          margin-top: 2px;
+        }
+        .medication-label {
+          border: 1px solid var(--line);
+          border-right: 0;
+          background: #edf7f1;
+          font-size: 9px;
+          font-weight: 600;
+          display: flex;
+          align-items: center;
+          padding: 0 0 0 4px;
+          min-height: 28px;
+        }
+        .medication-track {
+          position: relative;
+          min-height: 28px;
+          border: 1px solid var(--line);
+          background: #fff;
+          overflow: hidden;
+        }
+        .medication-grid {
+          position: absolute;
+          inset: 0;
+          background:
+            repeating-linear-gradient(
+              to right,
+              transparent 0,
+              transparent calc(5% - 1px),
+              var(--line-soft) calc(5% - 1px),
+              var(--line-soft) 5%
+            );
+        }
+        .medication-axis {
+          position: absolute;
+          left: 0;
+          right: 0;
+          top: 12px;
+          border-top: 1px dashed var(--line);
+        }
+        .medication-marker {
+          position: absolute;
+          top: 1px;
+          transform: translateX(-50%);
+          width: 58px;
+          text-align: center;
+        }
+        .medication-dot {
+          display: inline-block;
+          width: 7px;
+          height: 7px;
+          border-radius: 999px;
+          background: var(--blue);
+        }
+        .medication-caption {
           display: block;
+          margin-top: 1px;
+          font-size: 6px;
+          line-height: 1.05;
           color: var(--blue);
         }
+        .medication-empty {
+          position: absolute;
+          inset: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 8px;
+          color: var(--muted);
+        }
         .day-note {
-          margin-top: 4px;
+          margin-top: 2px;
           border: 1px solid var(--line-soft);
           background: #fafcfe;
-          padding: 5px 7px;
-          font-size: 10px;
-          line-height: 1.3;
+          padding: 3px 5px;
+          font-size: 8px;
+          line-height: 1.2;
         }
         .footer {
-          margin-top: 8px;
-          color: #587086;
-          font-size: 12px;
+          display: none;
         }
         .analysis-header h2 {
           margin: 0 0 4px;
@@ -587,11 +686,11 @@ export function buildDoctorReportHtml({ entries, selectedDate, patientName = "",
           height: 100%;
           border-radius: 999px;
         }
-        .state-on { background: var(--on); }
-        .state-partial { background: var(--partial); }
-        .state-off { background: var(--off); }
-        .state-dyskinesia { background: var(--dyskinesia); }
-        .state-sleep { background: var(--sleep); }
+        .state-on { background: #d9ebf8; }
+        .state-partial { background: #f8e7b7; }
+        .state-off { background: #f6c9c9; }
+        .state-dyskinesia { background: #ead8ff; }
+        .state-sleep { background: #e7edf2; }
         @media print {
           html, body {
             width: 297mm;
@@ -614,45 +713,34 @@ export function buildDoctorReportHtml({ entries, selectedDate, patientName = "",
           <header class="header">
             <div class="header-main">
               <h1>Hodnoceni vlastniho stavu hybnosti a rozpis lecby</h1>
-              <p>Tabulkova verze reportu inspirovana papirovym denikem.</p>
             </div>
-            <div class="header-side">
-              <p><strong>Legenda</strong></p>
-              <p>Krizek oznacuje prevladajici stav v dane hodine, spanek je oznacen pismenem S.</p>
-              <ul>${buildLegend()}</ul>
-            </div>
-          </header>
-
-          <section class="meta">
-            <div class="meta-cell">
-              <span class="meta-label">Vybrane obdobi</span>
-              <div class="meta-value">
-                ${escapeHtml(formatLongDate(dateKeys[0]))} az ${escapeHtml(formatLongDate(selectedDate))}
+            <section class="header-side">
+              <div class="meta-cell">
+                <span class="meta-label">Obdobi</span>
+                <div class="meta-value compact">
+                  ${escapeHtml(formatNumericDate(dateKeys[0]))} - ${escapeHtml(formatNumericDate(selectedDate))}
+                </div>
               </div>
-            </div>
-            <div class="meta-cell">
-              <span class="meta-label">Pocet dni na stranu</span>
-              <div class="meta-value">${escapeHtml(String(REPORT_DAYS_PAGE_ONE))}</div>
-            </div>
-            <div class="meta-cell">
-              <span class="meta-label">Jmeno pacienta</span>
-              <div class="meta-value">${escapeHtml(patientName || "Neuvedeno")}</div>
-            </div>
-            <div class="meta-cell">
-              <span class="meta-label">Rok narozeni</span>
-              <div class="meta-value">${escapeHtml(birthYear || "Neuvedeno")}</div>
-            </div>
-          </section>
+              <div class="meta-cell">
+                <span class="meta-label">Vygenerovano</span>
+                <div class="meta-value">${escapeHtml(generatedAt)}</div>
+              </div>
+              <div class="meta-cell">
+                <span class="meta-label">Jmeno</span>
+                <div class="meta-value">${escapeHtml(patientName || "Neuvedeno")}</div>
+              </div>
+              <div class="meta-cell">
+                <span class="meta-label">Rok narozeni</span>
+                <div class="meta-value">${escapeHtml(birthYear || "Neuvedeno")}</div>
+              </div>
+            </section>
+          </header>
 
           <section class="content">
             <div class="content-head">
               <div>
                 <strong>Prehled</strong>
-                <span>Na prvni strance jsou ${REPORT_DAYS_PAGE_ONE} dny, aby zustala zachovana citelna tabulkova struktura papiroveho deniku.</span>
-              </div>
-              <div>
-                <strong>Vygenerovano</strong>
-                <span>${escapeHtml(generatedAt)}</span>
+                <span>Na prvni strance jsou ${REPORT_DAYS_PAGE_ONE} dny.</span>
               </div>
             </div>
 
