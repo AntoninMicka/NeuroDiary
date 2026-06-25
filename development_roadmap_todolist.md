@@ -99,6 +99,7 @@ s fallbackem na localStorage, včetně import/export `.sqlite`.
 * definice pravidelné medikace
 * odlišení plánované a skutečně užité dávky
 * příprava podkladů pro pozdější adherence analýzy
+* evidence skutečně užitých léčiv včetně času a dávky
 
 ### [poc_done] 2.4 Denní záznam
 
@@ -168,6 +169,11 @@ První implementační vlna pro analytickou vrstvu:
 
 Tiskový report pro lékaře v A4 landscape podobě s kompaktní hlavičkou, 4 dny na první stránce,
 hodinovou maticí, barevně zvýrazněnými stavy a timeline medikace.
+
+Navazující rozšíření:
+
+* promítnutí skutečně užitých léčiv do časové osy reportu
+* odlišení plánované medikace a skutečně užité dávky v reportu
 
 ### [pending] 4.3 Export JSON
 
