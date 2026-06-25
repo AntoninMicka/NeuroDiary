@@ -8,7 +8,7 @@ import {
   TRACKING_HOURS,
 } from "../domain/diary.js";
 
-const REPORT_DAYS_PAGE_ONE = 3;
+const REPORT_DAYS_PAGE_ONE = 4;
 const ANALYSIS_DAYS = 7;
 
 function escapeHtml(value) {
@@ -450,14 +450,6 @@ export function buildDoctorReportHtml({ entries, selectedDate, patientName = "",
         .analysis-page {
           padding: 8px;
         }
-        .content-head {
-          display: flex;
-          justify-content: space-between;
-          align-items: end;
-          gap: 12px;
-          margin-bottom: 4px;
-        }
-        .content-head strong,
         .analysis-card strong {
           display: block;
           color: var(--blue);
@@ -466,11 +458,8 @@ export function buildDoctorReportHtml({ entries, selectedDate, patientName = "",
           letter-spacing: 0.04em;
           margin-bottom: 2px;
         }
-        .content-head span {
-          font-size: 10px;
-        }
         .day-sheet {
-          margin-bottom: 4px;
+          margin-bottom: 3px;
           page-break-inside: avoid;
         }
         .day-sheet:last-of-type {
@@ -484,13 +473,13 @@ export function buildDoctorReportHtml({ entries, selectedDate, patientName = "",
         }
         .day-title {
           margin: 0;
-          font-size: 11px;
+          font-size: 10px;
           font-weight: 700;
           color: var(--blue);
         }
         .day-subtitle {
           margin: 1px 0 0;
-          font-size: 9px;
+          font-size: 8px;
           color: var(--muted);
         }
         .diary-table,
@@ -532,7 +521,7 @@ export function buildDoctorReportHtml({ entries, selectedDate, patientName = "",
           font-size: 8px;
         }
         .diary-table tbody td {
-          height: 15px;
+          height: 13px;
         }
         .diary-table td.filled {
           font-weight: 700;
@@ -542,7 +531,7 @@ export function buildDoctorReportHtml({ entries, selectedDate, patientName = "",
           display: grid;
           grid-template-columns: 156px 1fr;
           gap: 0;
-          margin-top: 2px;
+          margin-top: 1px;
         }
         .medication-label {
           border: 1px solid var(--line);
@@ -553,11 +542,11 @@ export function buildDoctorReportHtml({ entries, selectedDate, patientName = "",
           display: flex;
           align-items: center;
           padding: 0 0 0 4px;
-          min-height: 28px;
+          min-height: 24px;
         }
         .medication-track {
           position: relative;
-          min-height: 28px;
+          min-height: 24px;
           border: 1px solid var(--line);
           background: #fff;
           overflow: hidden;
@@ -578,14 +567,14 @@ export function buildDoctorReportHtml({ entries, selectedDate, patientName = "",
           position: absolute;
           left: 0;
           right: 0;
-          top: 12px;
+          top: 10px;
           border-top: 1px dashed var(--line);
         }
         .medication-marker {
           position: absolute;
           top: 1px;
           transform: translateX(-50%);
-          width: 58px;
+          width: 54px;
           text-align: center;
         }
         .medication-dot {
@@ -597,7 +586,7 @@ export function buildDoctorReportHtml({ entries, selectedDate, patientName = "",
         }
         .medication-caption {
           display: block;
-          margin-top: 1px;
+          margin-top: 0;
           font-size: 6px;
           line-height: 1.05;
           color: var(--blue);
@@ -619,12 +608,12 @@ export function buildDoctorReportHtml({ entries, selectedDate, patientName = "",
           color: var(--muted);
         }
         .day-note {
-          margin-top: 2px;
+          margin-top: 1px;
           border: 1px solid var(--line-soft);
           background: #fafcfe;
-          padding: 3px 5px;
+          padding: 2px 4px;
           font-size: 8px;
-          line-height: 1.2;
+          line-height: 1.1;
         }
         .footer {
           display: none;
@@ -747,13 +736,6 @@ export function buildDoctorReportHtml({ entries, selectedDate, patientName = "",
           </header>
 
           <section class="content">
-            <div class="content-head">
-              <div>
-                <strong>Prehled</strong>
-                <span>Na prvni strance jsou ${REPORT_DAYS_PAGE_ONE} dny.</span>
-              </div>
-            </div>
-
             ${dateKeys.map((dateKey) => buildDayTable(dateKey, entries[dateKey])).join("")}
 
             <p class="footer">NeuroDiary · tiskovy report pro lekare</p>
