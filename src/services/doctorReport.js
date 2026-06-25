@@ -17,70 +17,107 @@ function escapeHtml(value) {
     .replaceAll("'", "&#39;");
 }
 
-function buildMedicationSummary(entry) {
-  if (entry.medications.length === 0) {
-    return "Neuvedeno";
-  }
-
-  return entry.medications
-    .slice()
-    .sort((left, right) => left.time.localeCompare(right.time))
-    .map((item) => `${item.time} ${item.name} ${item.dose}`)
-    .join(", ");
-}
-
 function buildLegend() {
   return HOUR_STATES.map(
     (state) => `<li><strong>${escapeHtml(state.shortLabel)}</strong> ${escapeHtml(state.label)}</li>`,
   ).join("");
 }
 
-function buildMatrixRows(entry) {
-  const movementStates = HOUR_STATES.filter((state) => state.key !== "sleep");
-
-  const rows = movementStates.map((state) => {
-    const cells = TRACKING_HOURS.map((hourLabel) => {
-      const stateKey = entry.hours[hourLabel];
-      const marker = stateKey === state.key ? "X" : "";
-      return `<td>${marker}</td>`;
-    }).join("");
-
-    return `
-      <tr>
-        <th>${escapeHtml(state.label)}</th>
-        ${cells}
-      </tr>
-    `;
-  });
-
-  rows.push(`
-    <tr>
-      <th>Spanek</th>
-      ${TRACKING_HOURS.map((hourLabel) => `<td>${entry.hours[hourLabel] === "sleep" ? "S" : ""}</td>`).join("")}
-    </tr>
-  `);
-
-  return rows.join("");
+function formatShortDate(dateKey) {
+  const date = new Date(`${dateKey}T12:00:00`);
+  return new Intl.DateTimeFormat("cs-CZ", {
+    weekday: "short",
+    day: "numeric",
+    month: "numeric",
+  }).format(date);
 }
 
-function buildTrendRows(entries, selectedDate) {
-  return Object.keys(entries)
-    .sort((left, right) => right.localeCompare(left))
-    .filter((dateKey) => dateKey <= selectedDate)
-    .slice(0, 7)
-    .map((dateKey) => {
-      const entry = entries[dateKey];
-      const counts = summarizeHours(entry.hours);
-      const dominantStateKey = Object.entries(counts).sort((left, right) => right[1] - left[1])[0]?.[0];
+function shiftDateKey(dateKey, offsetDays) {
+  const date = new Date(`${dateKey}T12:00:00`);
+  date.setDate(date.getDate() + offsetDays);
+  return date.toISOString().slice(0, 10);
+}
+
+function buildReportDateKeys(selectedDate, count = 5) {
+  return Array.from({ length: count }, (_, index) => shiftDateKey(selectedDate, index - count + 1));
+}
+
+function buildHourCells(entry) {
+  return TRACKING_HOURS.map((hourLabel) => {
+    const definition = getStateDefinition(entry?.hours?.[hourLabel] ?? "sleep");
+    return `
+      <div class="hour-cell state-${escapeHtml(definition.key)}">
+        <span>${escapeHtml(definition.shortLabel)}</span>
+      </div>
+    `;
+  }).join("");
+}
+
+function buildMedicationMarkers(entry) {
+  if (!entry || entry.medications.length === 0) {
+    return `<div class="med-empty">Bez medikace</div>`;
+  }
+
+  const startHour = Number(TRACKING_HOURS[0]);
+  const endHour = Number(TRACKING_HOURS.at(-1)) + 1;
+  const totalHours = endHour - startHour;
+
+  return entry.medications
+    .slice()
+    .sort((left, right) => left.time.localeCompare(right.time))
+    .map((medication) => {
+      const [hoursRaw, minutesRaw] = medication.time.split(":");
+      const hours = Number(hoursRaw);
+      const minutes = Number(minutesRaw);
+      const offsetHours = Math.min(Math.max(hours + minutes / 60 - startHour, 0), totalHours);
+      const left = (offsetHours / totalHours) * 100;
 
       return `
-        <tr>
-          <td>${escapeHtml(formatLongDate(dateKey))}</td>
-          <td>${escapeHtml(formatSleepQuality(entry.sleepQuality))}</td>
-          <td>${escapeHtml(getStateDefinition(dominantStateKey ?? "on").label)}</td>
-          <td>${escapeHtml(String(entry.medications.length))}</td>
-          <td>${escapeHtml(formatOverallStatus(entry.overallStatus))}</td>
-        </tr>
+        <div class="med-marker" style="left: ${left}%;">
+          <span class="med-dot"></span>
+          <span class="med-label">${escapeHtml(`${medication.time} ${medication.name} ${medication.dose}`)}</span>
+        </div>
+      `;
+    })
+    .join("");
+}
+
+function buildDaySections(entries, selectedDate) {
+  return buildReportDateKeys(selectedDate)
+    .map((dateKey) => {
+      const entry = entries[dateKey];
+      const counts = summarizeHours(entry?.hours ?? {});
+      const dominantStateKey = Object.entries(counts).sort((left, right) => right[1] - left[1])[0]?.[0];
+      const dominantState = entry
+        ? getStateDefinition(dominantStateKey ?? "on").label
+        : "Bez zaznamu";
+
+      return `
+        <section class="day-block">
+          <div class="day-meta">
+            <p class="day-date">${escapeHtml(formatShortDate(dateKey))}</p>
+            <p>${escapeHtml(entry ? formatSleepQuality(entry.sleepQuality) : "Bez zaznamu")}</p>
+            <p>${escapeHtml(entry ? formatOverallStatus(entry.overallStatus) : "Bez zaznamu")}</p>
+            <p>${escapeHtml(dominantState)}</p>
+          </div>
+
+          <div class="day-body">
+            <div class="timeline-labels">
+              <span>Hybnost</span>
+              <span>Leky</span>
+            </div>
+
+            <div class="timeline-stack">
+              <div class="hours-grid">
+                ${buildHourCells(entry)}
+              </div>
+              <div class="med-track">
+                <div class="med-track-line"></div>
+                ${buildMedicationMarkers(entry)}
+              </div>
+            </div>
+          </div>
+        </section>
       `;
     })
     .join("");
@@ -104,11 +141,22 @@ export function buildDoctorReportHtml({ entries, selectedDate, patientName = "",
       <meta name="viewport" content="width=device-width, initial-scale=1.0" />
       <title>NeuroDiary Report</title>
       <style>
+        @page {
+          size: A4 portrait;
+          margin: 8mm;
+        }
         :root {
           --blue: #315979;
           --blue-soft: #d9ebf8;
           --line: #9fb5c8;
           --text: #22313f;
+          --muted: #5c7285;
+          --on: #d9ebf8;
+          --partial: #f8e7b7;
+          --off: #f6c9c9;
+          --dyskinesia: #ead8ff;
+          --sleep: #e7edf2;
+          --timeline-offset: 178px;
         }
         * { box-sizing: border-box; }
         body {
@@ -118,48 +166,50 @@ export function buildDoctorReportHtml({ entries, selectedDate, patientName = "",
           background: white;
         }
         .page {
-          padding: 22px;
+          padding: 0;
         }
         .sheet {
-          border: 2px solid var(--blue);
+          border: 1.5px solid var(--blue);
         }
         .header {
           display: grid;
-          grid-template-columns: 1.4fr 1fr;
+          grid-template-columns: 1.35fr 0.95fr;
           background: var(--blue);
           color: white;
         }
         .header-main {
-          padding: 18px 20px;
+          padding: 12px 14px;
         }
         .header-main h1 {
-          margin: 0 0 8px;
-          font-size: 34px;
-          line-height: 1.05;
+          margin: 0 0 5px;
+          font-size: 22px;
+          line-height: 1.08;
         }
         .header-main p {
           margin: 0;
-          font-size: 16px;
+          font-size: 12px;
         }
         .header-side {
-          padding: 18px 20px;
-          border-left: 2px solid rgba(255,255,255,0.25);
+          padding: 12px 14px;
+          border-left: 1px solid rgba(255,255,255,0.25);
         }
         .header-side p {
-          margin: 0 0 8px;
+          margin: 0 0 6px;
+          font-size: 11px;
         }
         .header-side ul {
-          margin: 8px 0 0 18px;
+          margin: 6px 0 0 16px;
           padding: 0;
+          font-size: 10px;
         }
         .meta {
           display: grid;
           grid-template-columns: 1.2fr 0.8fr 0.6fr;
-          border-top: 2px solid var(--blue);
+          border-top: 1px solid var(--blue);
         }
         .meta-cell {
-          min-height: 72px;
-          padding: 10px 14px;
+          min-height: 54px;
+          padding: 8px 10px;
           border-right: 1px solid var(--line);
           background: var(--blue-soft);
         }
@@ -168,87 +218,170 @@ export function buildDoctorReportHtml({ entries, selectedDate, patientName = "",
         }
         .meta-label {
           display: block;
-          font-size: 12px;
+          font-size: 10px;
           font-weight: 700;
           text-transform: uppercase;
           color: var(--blue);
-          margin-bottom: 6px;
+          margin-bottom: 4px;
         }
         .meta-value {
-          font-size: 18px;
+          font-size: 12px;
           font-weight: 600;
+          line-height: 1.3;
         }
         .content {
-          padding: 16px;
+          padding: 10px;
         }
-        .summary {
+        .content-head {
           display: grid;
-          grid-template-columns: repeat(4, minmax(0, 1fr));
-          gap: 10px;
-          margin-bottom: 14px;
+          grid-template-columns: 1fr auto;
+          gap: 8px;
+          align-items: end;
+          margin-bottom: 8px;
         }
-        .summary-card {
-          border: 1px solid var(--line);
-          padding: 10px 12px;
-          background: #f8fbfe;
-        }
-        .summary-card strong {
+        .content-head strong,
+        .hours-header strong {
           display: block;
-          font-size: 12px;
-          text-transform: uppercase;
           color: var(--blue);
+          text-transform: uppercase;
+          font-size: 10px;
+          letter-spacing: 0.04em;
+        }
+        .content-head span,
+        .hours-header span {
+          font-size: 12px;
+        }
+        .hours-header {
+          display: grid;
+          grid-template-columns: var(--timeline-offset) repeat(20, minmax(0, 1fr));
+          gap: 0;
           margin-bottom: 6px;
+          align-items: end;
         }
-        .diary-table {
-          width: 100%;
-          border-collapse: collapse;
-          table-layout: fixed;
-          margin-bottom: 16px;
-        }
-        .diary-table th,
-        .diary-table td {
-          border: 1px solid var(--line);
+        .hour-header-cell {
           text-align: center;
-          padding: 8px 4px;
-          min-width: 32px;
-          font-size: 13px;
+          font-size: 10px;
+          color: var(--muted);
         }
-        .diary-table thead th {
-          background: var(--blue);
-          color: white;
+        .day-block {
+          display: grid;
+          grid-template-columns: 116px 1fr;
+          gap: 6px;
+          border: 1px solid var(--line);
+          margin-bottom: 6px;
+          page-break-inside: avoid;
+        }
+        .day-block:last-of-type {
+          margin-bottom: 0;
+        }
+        .day-meta {
+          background: #f5f9fc;
+          border-right: 1px solid var(--line);
+          padding: 7px 8px;
+        }
+        .day-meta p {
+          margin: 0 0 4px;
+          font-size: 10px;
+          line-height: 1.2;
+        }
+        .day-meta p:last-child {
+          margin-bottom: 0;
+        }
+        .day-date {
+          font-size: 12px !important;
+          font-weight: 700;
+          color: var(--blue);
+        }
+        .day-body {
+          padding: 6px 8px 7px 0;
+        }
+        .timeline-labels {
+          display: grid;
+          grid-template-rows: 30px 34px;
+          align-items: center;
+          justify-items: start;
+          width: 52px;
+          float: left;
+          font-size: 10px;
+          color: var(--muted);
+        }
+        .timeline-stack {
+          margin-left: 56px;
+        }
+        .hours-grid {
+          display: grid;
+          grid-template-columns: repeat(20, minmax(0, 1fr));
+          gap: 1px;
+          border: 1px solid var(--line);
+          background: var(--line);
+          height: 30px;
+        }
+        .hour-cell {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: white;
+          font-size: 9px;
           font-weight: 700;
         }
-        .diary-table tbody th {
-          text-align: left;
-          background: #eef5fb;
-          width: 220px;
-        }
-        .notes, .trend {
-          margin-top: 12px;
-        }
-        .notes-box {
+        .state-on { background: var(--on); }
+        .state-partial { background: var(--partial); }
+        .state-off { background: var(--off); }
+        .state-dyskinesia { background: var(--dyskinesia); }
+        .state-sleep { background: var(--sleep); }
+        .med-track {
+          position: relative;
+          height: 34px;
+          margin-top: 4px;
           border: 1px solid var(--line);
-          padding: 12px;
-          min-height: 84px;
-          white-space: pre-wrap;
+          background:
+            repeating-linear-gradient(
+              to right,
+              transparent 0,
+              transparent calc(5% - 1px),
+              rgba(159, 181, 200, 0.5) calc(5% - 1px),
+              rgba(159, 181, 200, 0.5) 5%
+            ),
+            #fff;
         }
-        .trend table {
-          width: 100%;
-          border-collapse: collapse;
+        .med-track-line {
+          position: absolute;
+          left: 0;
+          right: 0;
+          top: 16px;
+          border-top: 1px dashed var(--line);
         }
-        .trend th, .trend td {
-          border: 1px solid var(--line);
-          padding: 8px 10px;
-          text-align: left;
+        .med-marker {
+          position: absolute;
+          top: 4px;
+          transform: translateX(-50%);
+          text-align: center;
+          max-width: 72px;
         }
-        .trend th {
-          background: #eef5fb;
-          color: var(--blue);
-          text-transform: uppercase;
-          font-size: 12px;
+        .med-dot {
+          display: inline-block;
+          width: 8px;
+          height: 8px;
+          border-radius: 999px;
+          background: var(--blue);
+        }
+        .med-label {
+          display: block;
+          margin-top: 3px;
+          font-size: 8px;
+          line-height: 1.1;
+        }
+        .med-empty {
+          position: absolute;
+          inset: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 9px;
+          color: var(--muted);
         }
         .footer {
-          margin-top: 12px;
+          margin-top: 8px;
           color: #587086;
           font-size: 12px;
         }
@@ -274,8 +407,11 @@ export function buildDoctorReportHtml({ entries, selectedDate, patientName = "",
 
           <section class="meta">
             <div class="meta-cell">
-              <span class="meta-label">Nazev leku</span>
-              <div class="meta-value">${escapeHtml(buildMedicationSummary(entry))}</div>
+              <span class="meta-label">Vybrane obdobi</span>
+              <div class="meta-value">
+                ${escapeHtml(formatLongDate(buildReportDateKeys(selectedDate)[0]))} az
+                ${escapeHtml(formatLongDate(selectedDate))}
+              </div>
             </div>
             <div class="meta-cell">
               <span class="meta-label">Jmeno pacienta</span>
@@ -288,57 +424,23 @@ export function buildDoctorReportHtml({ entries, selectedDate, patientName = "",
           </section>
 
           <section class="content">
-            <div class="summary">
-              <div class="summary-card">
-                <strong>Datum</strong>
-                <span>${escapeHtml(formatLongDate(selectedDate))}</span>
+            <div class="content-head">
+              <div>
+                <strong>Prehled</strong>
+                <span>5 po sobe jdoucich dni s hodinovou hybnosti a casy uziti leku.</span>
               </div>
-              <div class="summary-card">
-                <strong>Kvalita spanku</strong>
-                <span>${escapeHtml(formatSleepQuality(entry.sleepQuality))}</span>
-              </div>
-              <div class="summary-card">
-                <strong>Celkovy den</strong>
-                <span>${escapeHtml(formatOverallStatus(entry.overallStatus))}</span>
-              </div>
-              <div class="summary-card">
+              <div>
                 <strong>Vygenerovano</strong>
                 <span>${escapeHtml(generatedAt)}</span>
               </div>
             </div>
 
-            <table class="diary-table">
-              <thead>
-                <tr>
-                  <th>Datum / Hod.</th>
-                  ${TRACKING_HOURS.map((hourLabel) => `<th>${escapeHtml(hourLabel)}</th>`).join("")}
-                </tr>
-              </thead>
-              <tbody>
-                ${buildMatrixRows(entry)}
-              </tbody>
-            </table>
+            <div class="hours-header">
+              <div></div>
+              ${TRACKING_HOURS.map((hourLabel) => `<div class="hour-header-cell">${escapeHtml(hourLabel)}</div>`).join("")}
+            </div>
 
-            <section class="notes">
-              <p><strong>Poznamky</strong></p>
-              <div class="notes-box">${escapeHtml(entry.notes.trim() || "Bez poznamek.")}</div>
-            </section>
-
-            <section class="trend">
-              <p><strong>Poslednich 7 dni</strong></p>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Datum</th>
-                    <th>Spanek</th>
-                    <th>Prevladajici stav</th>
-                    <th>Pocet davek</th>
-                    <th>Celkovy den</th>
-                  </tr>
-                </thead>
-                <tbody>${buildTrendRows(entries, selectedDate)}</tbody>
-              </table>
-            </section>
+            ${buildDaySections(entries, selectedDate)}
 
             <p class="footer">NeuroDiary · tiskovy report pro lekare</p>
           </section>
