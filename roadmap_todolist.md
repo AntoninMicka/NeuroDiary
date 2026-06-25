@@ -2,28 +2,28 @@
 
 ## Fáze 0 – Produktová vize
 
-### [pending] 0.1. Definovat cílové uživatele
+### [pending] 0.1 Definovat cílové uživatele
 
 * Parkinsonovi pacienti
 * Rodinní příslušníci
 * Lékaři
 
-### [pending] 0.2. Definovat hlavní scénáře použití
+### [pending] 0.2 Definovat hlavní scénáře použití
 
-* Každodenní evidence stavu
+* Každodenní evidence zdravotního stavu
 * Dlouhodobé sledování vývoje
 * Sdílení dat s lékařem
 * Tvorba reportů
 
-### [pending] 0.3. Stanovit MVP
+### [pending] 0.3 Definovat MVP
 
 Cíl MVP:
 
-> Pacient si několik dní zapisuje stav, zobrazí si základní grafy a během několika sekund vytvoří PDF report pro lékaře – vše funguje kompletně offline.
+> Pacient si několik dní zapisuje zdravotní stav, zobrazí základní grafy a během několika sekund vytvoří PDF report pro lékaře – vše funguje kompletně offline.
 
 ---
 
-# Fáze 1 – Analýza a návrh
+## Fáze 1 – Analýza a návrh
 
 ### [done] 1.1 Výběr technologického stacku
 
@@ -58,12 +58,22 @@ Cíl MVP:
 
 ### [pending] 1.5 Návrh databázových migrací
 
-* verzování schématu
-* migrace mezi verzemi
+---
+
+# 🎯 Milník M0 – Architektura připravena
+
+Projekt má dokončený návrh architektury a je připraven k implementaci.
+
+Výstup:
+
+* technologický stack
+* datový model
+* UI návrh
+* doménová architektura
 
 ---
 
-# Fáze 2 – Lokální offline aplikace (MVP)
+## Fáze 2 – Lokální offline aplikace (MVP)
 
 ### [pending] 2.1 Inicializace projektu
 
@@ -71,15 +81,11 @@ Cíl MVP:
 
 ### [pending] 2.3 Správa léků
 
-* název
-* dávkování
-* časy užívání
-
 ### [pending] 2.4 Denní záznam
 
 * hodinové sloty
+* zdravotní stav
 * spánek
-* stav
 * poznámky
 
 ### [pending] 2.5 Offline ukládání
@@ -92,7 +98,21 @@ Cíl MVP:
 
 ---
 
-# Fáze 3 – Analýza dat
+# 🎯 Milník M1 – Offline MVP
+
+Pacient může aplikaci používat každý den bez připojení k internetu.
+
+Výstup:
+
+* evidence léků
+* denní deník
+* hodinová matice
+* lokální databáze
+* plně funkční PWA
+
+---
+
+## Fáze 3 – Analýza dat
 
 ### [pending] 3.1 Agregační algoritmy
 
@@ -104,21 +124,13 @@ Cíl MVP:
 
 ### [pending] 3.5 Dlouhodobé trendy
 
-* týden
-* měsíc
-* rok
-
 ---
 
-# Fáze 4 – Export a zálohy
+## Fáze 4 – Export a zálohy
 
 ### [pending] 4.1 PDF engine
 
-### [pending] 4.2 Report
-
-* tabulka
-* grafy
-* shrnutí
+### [pending] 4.2 Lékařský report
 
 ### [pending] 4.3 Export JSON
 
@@ -128,7 +140,21 @@ Cíl MVP:
 
 ---
 
-# Fáze 5 – Bezpečnost
+# 🎯 Milník M2 – Analýza a reporty
+
+Nasbíraná data mají praktickou hodnotu.
+
+Výstup:
+
+* analytické grafy
+* dlouhodobé trendy
+* PDF report
+* export/import
+* lokální zálohování
+
+---
+
+## Fáze 5 – Bezpečnost
 
 ### [pending] 5.1 Přihlášení
 
@@ -138,16 +164,13 @@ Cíl MVP:
 
 ### [pending] 5.2 Šifrování dat
 
-* lokální šifrování
-* cloudové E2EE
-
 ### [pending] 5.3 Audit log
 
 ### [pending] 5.4 GDPR
 
 ---
 
-# Fáze 6 – Cloud
+## Fáze 6 – Cloud
 
 ### [pending] 6.1 Backend
 
@@ -157,24 +180,37 @@ Cíl MVP:
 
 * upload
 * download
-* řešení konfliktů
+* konflikty
 * verzování
 
 ### [pending] 6.4 Sdílení s lékařem
 
 ---
 
-# Fáze 7 – Notifikace
+# 🎯 Milník M3 – Bezpečný cloud
+
+Data jsou bezpečně synchronizována mezi zařízeními.
+
+Výstup:
+
+* bezpečné přihlášení
+* šifrování
+* synchronizace
+* sdílení dat
+
+---
+
+## Fáze 7 – Notifikace
 
 ### [pending] 7.1 Připomenutí léků
 
 ### [pending] 7.2 Připomenutí vyplnění deníku
 
-### [pending] 7.3 Chytré připomenutí
+### [pending] 7.3 Chytré notifikace
 
 ---
 
-# Fáze 8 – AI analýza
+## Fáze 8 – AI analýza
 
 ### [pending] 8.1 Týdenní shrnutí
 
@@ -184,11 +220,25 @@ Cíl MVP:
 
 ### [pending] 8.4 Doporučení vhodného období pro konzultaci s lékařem
 
-### [pending] 8.5 AI komentář k reportům
+### [pending] 8.5 AI komentáře k reportům
 
 ---
 
-# Fáze 9 – Infrastruktura
+# 🎯 Milník M4 – Chytrý zdravotní deník
+
+NeuroDiary aktivně pomáhá pacientovi porozumět jeho zdravotnímu stavu.
+
+Výstup:
+
+* připomenutí
+* AI shrnutí
+* analýza trendů
+* doporučení
+* inteligentní reporty
+
+---
+
+## Fáze 9 – Infrastruktura
 
 ### [pending] 9.1 GitHub Actions
 
@@ -196,15 +246,11 @@ Cíl MVP:
 
 ### [pending] 9.3 Monitoring
 
-* backend
-* frontend
-* výkon
-
 ### [pending] 9.4 Crash reporting
 
 ---
 
-# Fáze 10 – Testování
+## Fáze 10 – Testování
 
 ### [pending] 10.1 Jednotkové testy
 
@@ -222,11 +268,11 @@ Cíl MVP:
 
 ---
 
-# Fáze 11 – Budoucí rozvoj
+## Fáze 11 – Rozšiřitelnost
 
 ### [pending] 11.1 Plugin architektura
 
-### [pending] 11.2 Další diagnózy
+### [pending] 11.2 Podpora dalších diagnóz
 
 * Migréna
 * Roztroušená skleróza
@@ -239,6 +285,63 @@ Cíl MVP:
 
 * chytré hodinky
 * krokoměry
-* měření spánku
+* sledování spánku
 
-### [pending] 11.5 Výzkumný anonymizovaný export dat
+### [pending] 11.5 Anonymizovaný export dat pro výzkum
+
+---
+
+# 🎯 Milník M5 – Otevřená platforma
+
+NeuroDiary je připraveno pro dlouhodobý rozvoj a spolupráci s komunitou.
+
+Výstup:
+
+* pluginy
+* veřejné API
+* wearables
+* další diagnózy
+* výzkumné integrace
+
+---
+
+# 🚀 Meta milník – Verze 1.0
+
+První veřejné produkční vydání aplikace.
+
+## Funkčnost
+
+* dokončeny všechny milníky M0–M5
+* stabilní architektura
+* ověřená synchronizace
+* bezpečné šifrování
+* kvalitní AI analýzy
+
+## Kvalita
+
+* úspěšně dokončené testování
+* bezpečnostní audit
+* beta test s pacienty
+* odstraněny kritické chyby
+
+## Dokumentace
+
+* uživatelská příručka
+* vývojářská dokumentace
+* architektura systému
+* API dokumentace
+
+## Open Source
+
+* automatické buildy
+* GitHub Releases
+* CHANGELOG
+* CONTRIBUTING.md
+* CODE_OF_CONDUCT.md
+* Issue Templates
+* Pull Request Template
+* licence
+
+## Cíl
+
+NeuroDiary je připraveno pro každodenní používání pacienty, testování lékaři a otevřenou spolupráci komunity.
