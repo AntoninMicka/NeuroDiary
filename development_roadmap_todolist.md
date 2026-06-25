@@ -77,7 +77,7 @@ Výstup:
 
 ### [poc_done] 2.1 Inicializace projektu
 
-Statický offline PoC ve složce `poc/`.
+Statický offline PoC ve složce `poc/` a navazující Vue skeleton v `src/`.
 
 ### [pending] 2.2 Lokální SQLite databáze
 

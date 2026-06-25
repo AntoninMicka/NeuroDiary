@@ -4,3 +4,12 @@ Take control of your daily rhythm. NeuroDiary turns the traditional paper diary 
 ## Prototype
 
 An initial offline proof of concept lives in [poc/README.md](/home/antonin/Projects/NeuroDiary/NeuroDiary/poc/README.md:1).
+
+## Frontend Skeleton
+
+The current application skeleton uses Vue + Vite.
+
+```bash
+npm install
+npm run dev
+```
