@@ -10,6 +10,45 @@ import {
 import { DiaryRepository } from "./DiaryRepository.js";
 
 const STORAGE_KEY = "neurodiary-sqlite-db-v1";
+const SCHEMA_VERSION = 1;
+
+const MIGRATIONS = [
+  {
+    version: 1,
+    run(db) {
+      db.run(`
+        CREATE TABLE IF NOT EXISTS app_settings (
+          key TEXT PRIMARY KEY,
+          value TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS diary_entries (
+          entry_date TEXT PRIMARY KEY,
+          sleep_quality TEXT NOT NULL,
+          overall_status TEXT NOT NULL,
+          notes TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS medications (
+          id TEXT PRIMARY KEY,
+          entry_date TEXT NOT NULL,
+          name TEXT NOT NULL,
+          dose TEXT NOT NULL,
+          time TEXT NOT NULL,
+          FOREIGN KEY (entry_date) REFERENCES diary_entries(entry_date) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS hourly_states (
+          entry_date TEXT NOT NULL,
+          hour_label TEXT NOT NULL,
+          state_key TEXT NOT NULL,
+          PRIMARY KEY (entry_date, hour_label),
+          FOREIGN KEY (entry_date) REFERENCES diary_entries(entry_date) ON DELETE CASCADE
+        );
+      `);
+    },
+  },
+];
 
 function bytesToBase64(bytes) {
   let binary = "";
@@ -33,7 +72,8 @@ export class SqliteDiaryRepository extends DiaryRepository {
     super();
     this.SQL = SQL;
     this.db = db;
-    this.ensureSchema();
+    this.enableForeignKeys();
+    this.runMigrations();
   }
 
   static async create() {
@@ -46,39 +86,41 @@ export class SqliteDiaryRepository extends DiaryRepository {
     return new SqliteDiaryRepository(SQL, db);
   }
 
-  ensureSchema() {
-    this.db.run(`
-      PRAGMA foreign_keys = ON;
+  getMode() {
+    return "sqlite";
+  }
 
-      CREATE TABLE IF NOT EXISTS app_settings (
-        key TEXT PRIMARY KEY,
-        value TEXT NOT NULL
-      );
+  supportsBinaryImportExport() {
+    return true;
+  }
 
-      CREATE TABLE IF NOT EXISTS diary_entries (
-        entry_date TEXT PRIMARY KEY,
-        sleep_quality TEXT NOT NULL,
-        overall_status TEXT NOT NULL,
-        notes TEXT NOT NULL
-      );
+  enableForeignKeys() {
+    this.db.run("PRAGMA foreign_keys = ON");
+  }
 
-      CREATE TABLE IF NOT EXISTS medications (
-        id TEXT PRIMARY KEY,
-        entry_date TEXT NOT NULL,
-        name TEXT NOT NULL,
-        dose TEXT NOT NULL,
-        time TEXT NOT NULL,
-        FOREIGN KEY (entry_date) REFERENCES diary_entries(entry_date) ON DELETE CASCADE
+  runMigrations() {
+    const currentVersion = this.readUserVersion();
+    if (currentVersion > SCHEMA_VERSION) {
+      throw new Error(
+        `Database schema version ${currentVersion} is newer than supported version ${SCHEMA_VERSION}.`,
       );
+    }
 
-      CREATE TABLE IF NOT EXISTS hourly_states (
-        entry_date TEXT NOT NULL,
-        hour_label TEXT NOT NULL,
-        state_key TEXT NOT NULL,
-        PRIMARY KEY (entry_date, hour_label),
-        FOREIGN KEY (entry_date) REFERENCES diary_entries(entry_date) ON DELETE CASCADE
-      );
-    `);
+    this.db.run("BEGIN");
+    try {
+      for (const migration of MIGRATIONS) {
+        if (migration.version > currentVersion) {
+          migration.run(this.db);
+          this.db.run(`PRAGMA user_version = ${migration.version}`);
+        }
+      }
+      this.db.run("COMMIT");
+      this.enableForeignKeys();
+      this.persistDatabase();
+    } catch (error) {
+      this.db.run("ROLLBACK");
+      throw error;
+    }
   }
 
   loadState() {
@@ -165,7 +207,8 @@ export class SqliteDiaryRepository extends DiaryRepository {
   resetState() {
     this.db.close();
     this.db = new this.SQL.Database();
-    this.ensureSchema();
+    this.enableForeignKeys();
+    this.runMigrations();
 
     const state = createInitialState();
     state.entries[state.selectedDate] = createDefaultEntry();
@@ -173,9 +216,50 @@ export class SqliteDiaryRepository extends DiaryRepository {
     return state;
   }
 
+  exportDatabase() {
+    return this.db.export();
+  }
+
+  importDatabase(arrayBuffer) {
+    const importedDb = new this.SQL.Database(new Uint8Array(arrayBuffer));
+    const previousDb = this.db;
+
+    try {
+      this.db = importedDb;
+      this.enableForeignKeys();
+      this.runMigrations();
+      const state = this.loadState();
+      this.persistDatabase();
+      previousDb.close();
+      return state;
+    } catch (error) {
+      this.db = previousDb;
+      importedDb.close();
+      throw error;
+    }
+  }
+
   persistDatabase() {
     const exported = this.db.export();
     localStorage.setItem(STORAGE_KEY, bytesToBase64(exported));
+  }
+
+  readUserVersion() {
+    return Number(this.readPragmaValue("user_version") ?? 0);
+  }
+
+  readPragmaValue(name) {
+    const statement = this.db.prepare(`PRAGMA ${name}`);
+    try {
+      if (statement.step()) {
+        const row = statement.getAsObject();
+        const firstValue = Object.values(row)[0];
+        return firstValue;
+      }
+      return null;
+    } finally {
+      statement.free();
+    }
   }
 
   selectSetting(key) {

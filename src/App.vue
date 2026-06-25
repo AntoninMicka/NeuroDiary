@@ -13,8 +13,10 @@ import {
 import { createDiaryRepository } from "./repositories/index.js";
 
 const diaryRepository = ref(null);
+const fileInput = ref(null);
 const isReady = ref(false);
 const repositoryMode = ref("loading");
+const storageMessage = ref("");
 const state = reactive({
   selectedDate: "",
   entries: {},
@@ -42,7 +44,7 @@ onMounted(async () => {
   const initialState = repository.loadState();
   Object.assign(state, initialState);
   diaryRepository.value = repository;
-  repositoryMode.value = repository.constructor.name === "SqliteDiaryRepository" ? "sqlite" : "local";
+  repositoryMode.value = repository.getMode();
   isReady.value = true;
 });
 
@@ -77,6 +79,52 @@ function cycleHour(label) {
 function resetDemo() {
   const fresh = diaryRepository.value.resetState();
   Object.assign(state, fresh);
+  storageMessage.value = "Demo data restored.";
+}
+
+function exportDatabase() {
+  if (!diaryRepository.value?.supportsBinaryImportExport()) {
+    storageMessage.value = "SQLite export is not available in local fallback mode.";
+    return;
+  }
+
+  const bytes = diaryRepository.value.exportDatabase();
+  const blob = new Blob([bytes], { type: "application/vnd.sqlite3" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `neurodiary-${state.selectedDate || "backup"}.sqlite`;
+  link.click();
+  URL.revokeObjectURL(url);
+  storageMessage.value = "SQLite backup exported.";
+}
+
+function openImportPicker() {
+  if (!diaryRepository.value?.supportsBinaryImportExport()) {
+    storageMessage.value = "SQLite import is not available in local fallback mode.";
+    return;
+  }
+
+  fileInput.value?.click();
+}
+
+async function importDatabase(event) {
+  const [file] = event.target.files ?? [];
+  if (!file) {
+    return;
+  }
+
+  try {
+    const buffer = await file.arrayBuffer();
+    const importedState = diaryRepository.value.importDatabase(buffer);
+    Object.assign(state, importedState);
+    storageMessage.value = `Imported ${file.name}.`;
+  } catch (error) {
+    console.error("SQLite import failed", error);
+    storageMessage.value = "Import failed. Please choose a valid NeuroDiary SQLite file.";
+  } finally {
+    event.target.value = "";
+  }
 }
 </script>
 
@@ -89,51 +137,67 @@ function resetDemo() {
     </div>
 
     <template v-else>
-    <header class="hero">
-      <div>
-        <p class="eyebrow">Vue prototype</p>
-        <h1>NeuroDiary</h1>
-        <p class="lede">
-          A structured offline diary for daily symptom tracking, medication timing, and rapid
-          trend review.
-        </p>
-      </div>
-
-      <div class="hero-card">
-        <p class="hero-label">Selected day · {{ repositoryMode }}</p>
-        <p class="hero-date">{{ selectedDateLabel }}</p>
-        <button class="ghost-button" type="button" @click="resetDemo">Reset demo data</button>
-      </div>
-    </header>
-
-    <main class="grid">
-      <section class="panel panel-wide">
-        <div class="panel-heading">
-          <div>
-            <p class="section-kicker">Navigation</p>
-            <h2>Choose a diary day</h2>
-          </div>
-          <label class="date-picker">
-            <span>Date</span>
-            <input
-              :value="state.selectedDate"
-              type="date"
-              @input="updateSelectedDate($event.target.value)"
-            />
-          </label>
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Vue prototype</p>
+          <h1>NeuroDiary</h1>
+          <p class="lede">
+            A structured offline diary for daily symptom tracking, medication timing, and rapid
+            trend review.
+          </p>
         </div>
-      </section>
 
-      <MedicationPlan
-        :medications="sortedMedications"
-        @add-medication="addMedication"
-        @remove-medication="removeMedication"
+        <div class="hero-card">
+          <p class="hero-label">Selected day · {{ repositoryMode }}</p>
+          <p class="hero-date">{{ selectedDateLabel }}</p>
+          <div class="hero-actions">
+            <button class="ghost-button" type="button" @click="exportDatabase">
+              Export .sqlite
+            </button>
+            <button class="ghost-button" type="button" @click="openImportPicker">
+              Import .sqlite
+            </button>
+            <button class="ghost-button" type="button" @click="resetDemo">Reset demo data</button>
+          </div>
+          <p v-if="storageMessage" class="storage-message">{{ storageMessage }}</p>
+        </div>
+      </header>
+
+      <main class="grid">
+        <section class="panel panel-wide">
+          <div class="panel-heading">
+            <div>
+              <p class="section-kicker">Navigation</p>
+              <h2>Choose a diary day</h2>
+            </div>
+            <label class="date-picker">
+              <span>Date</span>
+              <input
+                :value="state.selectedDate"
+                type="date"
+                @input="updateSelectedDate($event.target.value)"
+              />
+            </label>
+          </div>
+        </section>
+
+        <MedicationPlan
+          :medications="sortedMedications"
+          @add-medication="addMedication"
+          @remove-medication="removeMedication"
+        />
+
+        <DailyOverview :model-value="selectedEntry" @patch-entry="updateEntry" />
+        <DaySummary :entry="selectedEntry" />
+        <HourMatrix :hours="selectedEntry.hours" @cycle-hour="cycleHour" />
+      </main>
+      <input
+        ref="fileInput"
+        class="visually-hidden"
+        type="file"
+        accept=".sqlite,.db,.sqlite3"
+        @change="importDatabase"
       />
-
-      <DailyOverview :model-value="selectedEntry" @patch-entry="updateEntry" />
-      <DaySummary :entry="selectedEntry" />
-      <HourMatrix :hours="selectedEntry.hours" @cycle-hour="cycleHour" />
-    </main>
     </template>
   </div>
 </template>

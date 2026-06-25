@@ -56,7 +56,9 @@ Cíl MVP:
 * SyncService
 * NotificationService
 
-### [pending] 1.5 Návrh databázových migrací
+### [in_progress] 1.5 Návrh databázových migrací
+
+Základní schema versioning přes SQLite `PRAGMA user_version` a první migration runner.
 
 ---
 
@@ -82,7 +84,7 @@ Statický offline PoC ve složce `poc/` a navazující Vue skeleton v `src/`.
 ### [in_progress] 2.2 Lokální SQLite databáze
 
 Připraven Vue repository layer, `LocalStorageDiaryRepository` a první `SqliteDiaryRepository`
-s fallbackem na localStorage.
+s fallbackem na localStorage, včetně import/export `.sqlite`.
 
 ### [poc_done] 2.3 Správa léků
 

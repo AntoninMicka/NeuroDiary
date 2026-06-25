@@ -4,6 +4,14 @@ import { DiaryRepository } from "./DiaryRepository.js";
 const STORAGE_KEY = "neurodiary-vue-poc-v1";
 
 export class LocalStorageDiaryRepository extends DiaryRepository {
+  static async create() {
+    return new LocalStorageDiaryRepository();
+  }
+
+  getMode() {
+    return "local";
+  }
+
   loadState() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {

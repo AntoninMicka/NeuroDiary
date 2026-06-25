@@ -16,3 +16,9 @@ npm run dev
 
 The app now attempts to bootstrap a local SQLite/WASM repository first and falls back to
 `localStorage` if SQLite initialization fails.
+
+It also includes:
+
+- SQLite schema versioning via migrations
+- export of a local `.sqlite` backup
+- import of an existing `.sqlite` backup

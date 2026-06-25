@@ -3,6 +3,10 @@ export class DiaryRepository {
     throw new Error("DiaryRepository.create must be implemented");
   }
 
+  getMode() {
+    throw new Error("DiaryRepository.getMode must be implemented");
+  }
+
   loadState() {
     throw new Error("DiaryRepository.loadState must be implemented");
   }
@@ -13,5 +17,17 @@ export class DiaryRepository {
 
   resetState() {
     throw new Error("DiaryRepository.resetState must be implemented");
+  }
+
+  supportsBinaryImportExport() {
+    return false;
+  }
+
+  exportDatabase() {
+    throw new Error("DiaryRepository.exportDatabase must be implemented");
+  }
+
+  importDatabase(_arrayBuffer) {
+    throw new Error("DiaryRepository.importDatabase must be implemented");
   }
 }

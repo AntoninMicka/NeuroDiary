@@ -6,6 +6,6 @@ export async function createDiaryRepository() {
     return await SqliteDiaryRepository.create();
   } catch (error) {
     console.warn("SQLite repository initialization failed, falling back to localStorage", error);
-    return new LocalStorageDiaryRepository();
+    return await LocalStorageDiaryRepository.create();
   }
 }
