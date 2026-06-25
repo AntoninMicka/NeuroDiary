@@ -79,9 +79,10 @@ Výstup:
 
 Statický offline PoC ve složce `poc/` a navazující Vue skeleton v `src/`.
 
-### [pending] 2.2 Lokální SQLite databáze
+### [in_progress] 2.2 Lokální SQLite databáze
 
-Připraven Vue repository layer a `LocalStorageDiaryRepository` jako mezikrok před SQLite/WASM.
+Připraven Vue repository layer, `LocalStorageDiaryRepository` a první `SqliteDiaryRepository`
+s fallbackem na localStorage.
 
 ### [poc_done] 2.3 Správa léků
 

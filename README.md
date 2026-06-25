@@ -13,3 +13,6 @@ The current application skeleton uses Vue + Vite.
 npm install
 npm run dev
 ```
+
+The app now attempts to bootstrap a local SQLite/WASM repository first and falls back to
+`localStorage` if SQLite initialization fails.

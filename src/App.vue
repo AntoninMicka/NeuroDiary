@@ -1,5 +1,5 @@
 <script setup>
-import { computed, reactive, watch } from "vue";
+import { computed, onMounted, reactive, ref, watch } from "vue";
 import DailyOverview from "./components/DailyOverview.vue";
 import MedicationPlan from "./components/MedicationPlan.vue";
 import HourMatrix from "./components/HourMatrix.vue";
@@ -12,8 +12,13 @@ import {
 } from "./domain/diary.js";
 import { createDiaryRepository } from "./repositories/index.js";
 
-const diaryRepository = createDiaryRepository();
-const state = reactive(diaryRepository.loadState());
+const diaryRepository = ref(null);
+const isReady = ref(false);
+const repositoryMode = ref("loading");
+const state = reactive({
+  selectedDate: "",
+  entries: {},
+});
 
 const selectedEntry = computed(() => ensureEntry(state, state.selectedDate));
 const selectedDateLabel = computed(() => formatLongDate(state.selectedDate));
@@ -24,10 +29,22 @@ const sortedMedications = computed(() =>
 watch(
   state,
   () => {
-    diaryRepository.saveState(state);
+    if (!isReady.value || !diaryRepository.value) {
+      return;
+    }
+    diaryRepository.value.saveState(state);
   },
   { deep: true },
 );
+
+onMounted(async () => {
+  const repository = await createDiaryRepository();
+  const initialState = repository.loadState();
+  Object.assign(state, initialState);
+  diaryRepository.value = repository;
+  repositoryMode.value = repository.constructor.name === "SqliteDiaryRepository" ? "sqlite" : "local";
+  isReady.value = true;
+});
 
 function updateSelectedDate(dateKey) {
   state.selectedDate = dateKey;
@@ -58,13 +75,20 @@ function cycleHour(label) {
 }
 
 function resetDemo() {
-  const fresh = diaryRepository.resetState();
+  const fresh = diaryRepository.value.resetState();
   Object.assign(state, fresh);
 }
 </script>
 
 <template>
   <div class="shell">
+    <div v-if="!isReady" class="boot-card">
+      <p class="section-kicker">Bootstrapping</p>
+      <h2>Preparing local diary storage</h2>
+      <p class="panel-tip">Initializing the offline repository and loading your local data.</p>
+    </div>
+
+    <template v-else>
     <header class="hero">
       <div>
         <p class="eyebrow">Vue prototype</p>
@@ -76,7 +100,7 @@ function resetDemo() {
       </div>
 
       <div class="hero-card">
-        <p class="hero-label">Selected day</p>
+        <p class="hero-label">Selected day · {{ repositoryMode }}</p>
         <p class="hero-date">{{ selectedDateLabel }}</p>
         <button class="ghost-button" type="button" @click="resetDemo">Reset demo data</button>
       </div>
@@ -110,5 +134,6 @@ function resetDemo() {
       <DaySummary :entry="selectedEntry" />
       <HourMatrix :hours="selectedEntry.hours" @cycle-hour="cycleHour" />
     </main>
+    </template>
   </div>
 </template>

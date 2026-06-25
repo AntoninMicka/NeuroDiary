@@ -1,4 +1,8 @@
 export class DiaryRepository {
+  static async create() {
+    throw new Error("DiaryRepository.create must be implemented");
+  }
+
   loadState() {
     throw new Error("DiaryRepository.loadState must be implemented");
   }
