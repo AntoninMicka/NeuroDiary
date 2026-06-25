@@ -1,55 +1,244 @@
-1. Analýza, návrh a výběr technologií
+# NeuroDiary – Roadmap
 
-    [ done ] 1.1. Výběr technologického stacku (Svelte/Vue, SQLite via Wasm, Python FastAPI na Cloud Run)
+## Fáze 0 – Produktová vize
 
-    [ analysed/ready_to_implementation ] 1.2. Návrh datového modelu (Základní entity: Pacient, DenniZaznam, UzitiLeku, HodinovyStav)
+### [pending] 0.1. Definovat cílové uživatele
 
-    [ analysed/ready_to_implementation ] 1.3. Návrh UI/UX (Kombinovaný layout: horizontální mřížka pro desktop, vertikální timeline pro mobil + fixní tlačítko dialogu)
+* Parkinsonovi pacienti
+* Rodinní příslušníci
+* Lékaři
 
-2. Bezpečnost, autentizace a sdílení dat
+### [pending] 0.2. Definovat hlavní scénáře použití
 
-    [ analysed/ready_to_implementation ] 2.1. Implementace bezpečného přihlašování (Vlastní JWT backend s Passkeys/WebAuthn pro snadný biometrický přístup)
+* Každodenní evidence stavu
+* Dlouhodobé sledování vývoje
+* Sdílení dat s lékařem
+* Tvorba reportů
 
-    [ pending ] 2.2. Šifrování citlivých zdravotních dat (E2EE lokální vs. cloud)
+### [pending] 0.3. Stanovit MVP
 
-    [ pending ] 2.3. Systém pro bezpečné sdílení dat s lékařem
+Cíl MVP:
 
-3. Základní PWA infrastruktura a CI/CD
+> Pacient si několik dní zapisuje stav, zobrazí si základní grafy a během několika sekund vytvoří PDF report pro lékaře – vše funguje kompletně offline.
 
-    [ pending ] 3.1. Inicializace projektu a nastavení repozitáře na GitHubu
+---
 
-    [ pending ] 3.2. Konfigurace automatického nasazení (CI/CD pipeline z GitHubu na Google Cloud)
+# Fáze 1 – Analýza a návrh
 
-    [ pending ] 3.3. PWA konfigurace (Web App Manifest, Service Worker pro plný offline režim)
+### [done] 1.1 Výběr technologického stacku
 
-4. Vývoj hlavních funkcí (Jádro deníku)
+* Svelte/Vue
+* SQLite (WASM)
+* Python FastAPI
+* Google Cloud Run
 
-    [ pending ] 4.1. Správa léků (Zadávání názvů medikace a fixních časů užívání)
+### [analysed/ready_to_implementation] 1.2 Návrh datového modelu
 
-    [ pending ] 4.2. Interaktivní matice pro denní záznam (Hodinové sloty 5:00–24:00, stavy, spánek)
+* Pacient
+* Denní záznam
+* Hodinový stav
+* Užívání léků
+* Nastavení aplikace
 
-    [ pending ] 4.3. Lokální ukládání do DB a mechanismus synchronizace s cloudem po obnovení připojení
+### [analysed/ready_to_implementation] 1.3 Návrh UI/UX
 
-5. Analýza dat a vizualizace
+* Desktopová matice
+* Mobilní timeline
+* Dialogové zadávání
+* Přístupnost
 
-    [ pending ] 5.1. Vývoj algoritmů pro agregaci hodinových stavů
+### [pending] 1.4 Návrh doménové architektury
 
-    [ pending ] 5.2. Graf 1: Chronologický denní profil hybnosti (Časová osa v průběhu dne)
+* DiaryService
+* MedicationService
+* StatisticsService
+* ExportService
+* SyncService
+* NotificationService
 
-    [ pending ] 5.3. Graf 2: Proporční rozložení stavů (Koláčový graf / Skládaný sloupec)
+### [pending] 1.5 Návrh databázových migrací
 
-    [ pending ] 5.4. Graf 3: Analýza wearing-off fenoménu (Závislost stavu na čase od poslední dávky)
+* verzování schématu
+* migrace mezi verzemi
 
-6. Export do PDF a reporty
+---
 
-    [ pending ] 6.1. Integrace a konfigurace knihovny pro generování PDF
+# Fáze 2 – Lokální offline aplikace (MVP)
 
-    [ pending ] 6.2. Logika pro rychlý export dat (posledních 3 až 5 dnů)
+### [pending] 2.1 Inicializace projektu
 
-    [ pending ] 6.3. Tvorba dvoustránkového layoutu PDF reportu (Strana 1: tabulka matice, Strana 2: analytické grafy)
+### [pending] 2.2 Lokální SQLite databáze
 
-7. Testování, optimalizace a nasazení
+### [pending] 2.3 Správa léků
 
-    [ pending ] 7.1. Testování UI na reálných mobilních zařízeních a simulace offline chování
+* název
+* dávkování
+* časy užívání
 
-    [ pending ] 7.2. Bezpečnostní audit (ověření funkčnosti Passkeys a E2EE šifrování)
+### [pending] 2.4 Denní záznam
+
+* hodinové sloty
+* spánek
+* stav
+* poznámky
+
+### [pending] 2.5 Offline ukládání
+
+### [pending] 2.6 PWA
+
+* Manifest
+* Service Worker
+* Offline režim
+
+---
+
+# Fáze 3 – Analýza dat
+
+### [pending] 3.1 Agregační algoritmy
+
+### [pending] 3.2 Denní časová osa
+
+### [pending] 3.3 Rozložení stavů
+
+### [pending] 3.4 Wearing-off analýza
+
+### [pending] 3.5 Dlouhodobé trendy
+
+* týden
+* měsíc
+* rok
+
+---
+
+# Fáze 4 – Export a zálohy
+
+### [pending] 4.1 PDF engine
+
+### [pending] 4.2 Report
+
+* tabulka
+* grafy
+* shrnutí
+
+### [pending] 4.3 Export JSON
+
+### [pending] 4.4 Import JSON
+
+### [pending] 4.5 Automatické lokální zálohy
+
+---
+
+# Fáze 5 – Bezpečnost
+
+### [pending] 5.1 Přihlášení
+
+* Passkeys
+* WebAuthn
+* JWT
+
+### [pending] 5.2 Šifrování dat
+
+* lokální šifrování
+* cloudové E2EE
+
+### [pending] 5.3 Audit log
+
+### [pending] 5.4 GDPR
+
+---
+
+# Fáze 6 – Cloud
+
+### [pending] 6.1 Backend
+
+### [pending] 6.2 REST API v1
+
+### [pending] 6.3 Synchronizace
+
+* upload
+* download
+* řešení konfliktů
+* verzování
+
+### [pending] 6.4 Sdílení s lékařem
+
+---
+
+# Fáze 7 – Notifikace
+
+### [pending] 7.1 Připomenutí léků
+
+### [pending] 7.2 Připomenutí vyplnění deníku
+
+### [pending] 7.3 Chytré připomenutí
+
+---
+
+# Fáze 8 – AI analýza
+
+### [pending] 8.1 Týdenní shrnutí
+
+### [pending] 8.2 Vyhledávání trendů
+
+### [pending] 8.3 Detekce změn zdravotního stavu
+
+### [pending] 8.4 Doporučení vhodného období pro konzultaci s lékařem
+
+### [pending] 8.5 AI komentář k reportům
+
+---
+
+# Fáze 9 – Infrastruktura
+
+### [pending] 9.1 GitHub Actions
+
+### [pending] 9.2 CI/CD
+
+### [pending] 9.3 Monitoring
+
+* backend
+* frontend
+* výkon
+
+### [pending] 9.4 Crash reporting
+
+---
+
+# Fáze 10 – Testování
+
+### [pending] 10.1 Jednotkové testy
+
+### [pending] 10.2 Integrační testy
+
+### [pending] 10.3 UI testy
+
+### [pending] 10.4 Offline testy
+
+### [pending] 10.5 Synchronizační testy
+
+### [pending] 10.6 Bezpečnostní audit
+
+### [pending] 10.7 Beta test s pacienty
+
+---
+
+# Fáze 11 – Budoucí rozvoj
+
+### [pending] 11.1 Plugin architektura
+
+### [pending] 11.2 Další diagnózy
+
+* Migréna
+* Roztroušená skleróza
+* Epilepsie
+* Diabetes
+
+### [pending] 11.3 Veřejné API
+
+### [pending] 11.4 Integrace s wearables
+
+* chytré hodinky
+* krokoměry
+* měření spánku
+
+### [pending] 11.5 Výzkumný anonymizovaný export dat
