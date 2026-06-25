@@ -123,7 +123,14 @@ Výstup:
 
 ## Fáze 3 – Analýza dat
 
-### [pending] 3.1 Agregační algoritmy
+### [in_progress] 3.1 Agregační algoritmy
+
+První implementační vlna pro analytickou vrstvu:
+
+* počty hodin `ON / MID / OFF / sleep` za den
+* převládající stav dne
+* počet dávek léků za den a průměr za období
+* souhrn za posledních 7 dní pro reporty a budoucí grafy
 
 ### [pending] 3.2 Denní časová osa
 
@@ -139,9 +146,10 @@ Výstup:
 
 ### [pending] 4.1 PDF engine
 
-### [in_progress] 4.2 Lékařský report
+### [done] 4.2 Lékařský report
 
-První tiskový report pro lékaře z vybraného dne s medikací, hodinovým logem a krátkým trendem.
+Tiskový report pro lékaře v A4 landscape podobě s kompaktní hlavičkou, 4 dny na první stránce,
+hodinovou maticí, barevně zvýrazněnými stavy a timeline medikace.
 
 ### [pending] 4.3 Export JSON
 
