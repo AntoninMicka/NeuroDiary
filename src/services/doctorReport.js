@@ -475,6 +475,7 @@ export function buildDoctorReportHtml({ entries, selectedDate, patientName = "",
         }
         .analysis-page {
           width: 100%;
+          padding: 6px;
         }
         .analysis-card strong {
           display: block;
@@ -645,66 +646,71 @@ export function buildDoctorReportHtml({ entries, selectedDate, patientName = "",
           display: none;
         }
         .analysis-header h2 {
-          margin: 0 0 2px;
-          font-size: 16px;
+          margin: 0 0 1px;
+          font-size: 14px;
           color: var(--blue);
         }
         .analysis-header p {
           margin: 0;
-          font-size: 10px;
+          font-size: 9px;
           color: var(--muted);
         }
         .analysis-cards {
           display: grid;
           grid-template-columns: repeat(4, minmax(0, 1fr));
-          gap: 6px;
-          margin: 8px 0;
+          gap: 4px;
+          margin: 6px 0;
         }
         .analysis-card {
           border: 1px solid var(--line);
           background: #f8fbfe;
-          padding: 6px;
+          padding: 4px 5px;
+        }
+        .analysis-card strong {
+          font-size: 8px;
+          margin-bottom: 1px;
         }
         .analysis-card span {
           display: block;
-          font-size: 14px;
+          font-size: 12px;
           font-weight: 700;
           color: var(--text);
         }
         .analysis-grid {
           display: grid;
           grid-template-columns: 1fr;
-          gap: 6px;
+          gap: 4px;
         }
         .analysis-panel {
           border: 1px solid var(--line);
-          padding: 6px;
+          padding: 4px;
           background: white;
         }
         .analysis-panel h3 {
-          margin: 0 0 4px;
-          font-size: 12px;
+          margin: 0 0 3px;
+          font-size: 11px;
           color: var(--blue);
         }
         .trend-table th,
         .trend-table td,
         .hour-summary-table th,
         .hour-summary-table td {
-          font-size: 7px;
-          padding-top: 1px;
-          padding-bottom: 1px;
+          font-size: 6px;
+          padding-top: 0;
+          padding-bottom: 0;
+          line-height: 1.05;
         }
         .trend-table th,
         .hour-summary-table th {
           background: #eef5fb;
           color: var(--blue);
           text-align: left;
-          padding-left: 6px;
+          padding-left: 4px;
         }
         .trend-table td:first-child,
         .hour-summary-table td:first-child {
           text-align: left;
-          padding-left: 6px;
+          padding-left: 4px;
         }
         .hour-summary-table td:nth-child(2) {
           text-align: center;
@@ -737,8 +743,8 @@ export function buildDoctorReportHtml({ entries, selectedDate, patientName = "",
           align-items: end;
           justify-content: center;
           width: calc(100% - 2px);
-          height: 20px;
-          margin: 1px;
+          height: 16px;
+          margin: 1px 0;
           background: #f7fafc;
           border: 1px solid var(--line-soft);
           overflow: hidden;
