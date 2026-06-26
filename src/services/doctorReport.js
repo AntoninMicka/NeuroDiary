@@ -266,6 +266,7 @@ function buildHourSummaryRows(entries, selectedDate) {
         <td>${escapeHtml(hourLabel)}:00</td>
         <td>${escapeHtml(dominantState.shortLabel)}</td>
         ${buildHistogramCells(weeklyCounts, ANALYSIS_DAYS)}
+        <td class="histogram-spacer-cell"></td>
         ${buildHistogramCells(monthlyCounts, ANALYSIS_LONG_DAYS)}
       </tr>
     `;
@@ -329,6 +330,7 @@ function buildAnalysisPage(entries, selectedDate) {
                 <th rowspan="2">Cas</th>
                 <th rowspan="2">Nejcastejsi hodnota</th>
                 <th colspan="5">7 dni</th>
+                <th rowspan="2" class="histogram-spacer-head"></th>
                 <th colspan="5">30 dni</th>
               </tr>
               <tr>
@@ -366,10 +368,6 @@ export function buildDoctorReportHtml({ entries, selectedDate, patientName = "",
       <style>
         @page {
           size: A4 landscape;
-          margin: 8mm;
-        }
-        @page analysis-report {
-          size: A4 portrait;
           margin: 8mm;
         }
         :root {
@@ -476,10 +474,7 @@ export function buildDoctorReportHtml({ entries, selectedDate, patientName = "",
           padding: 8px;
         }
         .analysis-page {
-          page: analysis-report;
-          width: 194mm;
-          min-height: 281mm;
-          margin: 0 auto;
+          width: 100%;
         }
         .analysis-card strong {
           display: block;
@@ -650,46 +645,54 @@ export function buildDoctorReportHtml({ entries, selectedDate, patientName = "",
           display: none;
         }
         .analysis-header h2 {
-          margin: 0 0 4px;
-          font-size: 20px;
+          margin: 0 0 2px;
+          font-size: 16px;
           color: var(--blue);
         }
         .analysis-header p {
           margin: 0;
-          font-size: 12px;
+          font-size: 10px;
           color: var(--muted);
         }
         .analysis-cards {
           display: grid;
           grid-template-columns: repeat(4, minmax(0, 1fr));
-          gap: 8px;
-          margin: 12px 0;
+          gap: 6px;
+          margin: 8px 0;
         }
         .analysis-card {
           border: 1px solid var(--line);
           background: #f8fbfe;
-          padding: 10px;
+          padding: 6px;
         }
         .analysis-card span {
           display: block;
-          font-size: 18px;
+          font-size: 14px;
           font-weight: 700;
           color: var(--text);
         }
         .analysis-grid {
           display: grid;
           grid-template-columns: 1fr;
-          gap: 10px;
+          gap: 6px;
         }
         .analysis-panel {
           border: 1px solid var(--line);
-          padding: 10px;
+          padding: 6px;
           background: white;
         }
         .analysis-panel h3 {
-          margin: 0 0 8px;
-          font-size: 14px;
+          margin: 0 0 4px;
+          font-size: 12px;
           color: var(--blue);
+        }
+        .trend-table th,
+        .trend-table td,
+        .hour-summary-table th,
+        .hour-summary-table td {
+          font-size: 7px;
+          padding-top: 1px;
+          padding-bottom: 1px;
         }
         .trend-table th,
         .hour-summary-table th {
@@ -714,8 +717,16 @@ export function buildDoctorReportHtml({ entries, selectedDate, patientName = "",
           vertical-align: middle;
         }
         .hour-summary-table th:nth-child(1) { width: 12%; }
-        .hour-summary-table th:nth-child(2) { width: 20%; }
-        .hour-summary-table th[colspan="5"] { width: 34%; }
+        .hour-summary-table th:nth-child(2) { width: 28%; }
+        .hour-summary-table th[colspan="5"] { width: 18%; }
+        .histogram-spacer-head,
+        .histogram-spacer-cell {
+          width: 8px;
+          min-width: 8px;
+          background: white !important;
+          border-left: 0 !important;
+          border-right: 0 !important;
+        }
         .histogram-cell {
           padding: 0;
           text-align: center;
@@ -725,9 +736,9 @@ export function buildDoctorReportHtml({ entries, selectedDate, patientName = "",
           display: flex;
           align-items: end;
           justify-content: center;
-          width: calc(100% - 4px);
-          height: 28px;
-          margin: 2px;
+          width: calc(100% - 2px);
+          height: 20px;
+          margin: 1px;
           background: #f7fafc;
           border: 1px solid var(--line-soft);
           overflow: hidden;
@@ -756,7 +767,7 @@ export function buildDoctorReportHtml({ entries, selectedDate, patientName = "",
           }
           .analysis-page {
             width: auto;
-            min-height: calc(297mm - 16mm);
+            min-height: calc(210mm - 16mm);
           }
         }
       </style>
