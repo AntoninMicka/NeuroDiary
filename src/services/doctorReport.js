@@ -210,9 +210,14 @@ function summarizeHourWindow(entries, selectedDate, hourLabel, count) {
 }
 
 function buildHistogramCells(counts, totalDays) {
+  const maxValue = HOUR_STATES.reduce((currentMax, state) => {
+    const value = counts[state.key] ?? 0;
+    return Math.max(currentMax, value);
+  }, 0);
+
   return HOUR_STATES.map((state) => {
     const value = counts[state.key] ?? 0;
-    const height = value > 0 ? Math.max((value / totalDays) * 100, 8) : 0;
+    const height = value > 0 && maxValue > 0 ? (value / maxValue) * 100 : 0;
 
     return `
       <td class="histogram-cell" title="${escapeHtml(`${state.shortLabel}: ${value} / ${totalDays}`)}">
