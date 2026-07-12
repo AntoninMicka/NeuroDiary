@@ -13,6 +13,7 @@
   --bad: #b84a4a;
   --shadow: 0 24px 70px rgba(54, 62, 73, 0.12);
   --sticky-offset: 1rem;
+  --floating-menu-height: 120px;
   font-family: "Segoe UI", "Helvetica Neue", sans-serif;
 }
 
@@ -82,11 +83,11 @@ textarea {
 }
 
 .hero {
-  display: flex;
-  justify-content: space-between;
-  gap: 1.5rem;
-  align-items: end;
-  margin-bottom: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.hero-copy {
+  max-width: 42rem;
 }
 
 .eyebrow,
@@ -116,7 +117,7 @@ textarea {
   margin: 0.9rem 0 0;
 }
 
-.hero-card,
+.floating-menu,
 .panel {
   background: var(--surface);
   backdrop-filter: blur(18px);
@@ -125,14 +126,31 @@ textarea {
   border-radius: 24px;
 }
 
-.hero-card {
-  min-width: 220px;
-  padding: 1rem 1.2rem;
+.floating-menu {
+  position: sticky;
+  top: var(--sticky-offset);
+  z-index: 40;
+  margin-bottom: 1.1rem;
+  padding: 0.9rem 1rem 1rem;
 }
 
-.hero-actions {
-  display: grid;
-  gap: 0.65rem;
+.floating-menu-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: start;
+  margin-bottom: 0.8rem;
+}
+
+.floating-menu-status {
+  min-width: 220px;
+}
+
+.floating-menu-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  justify-content: end;
 }
 
 .hero-date {
@@ -144,6 +162,10 @@ textarea {
   margin: 0.85rem 0 0;
   color: var(--muted);
   font-size: 0.92rem;
+}
+
+.floating-menu-message {
+  margin-top: 0.8rem;
 }
 
 .grid {
@@ -167,16 +189,7 @@ textarea {
   display: flex;
   flex-wrap: wrap;
   gap: 0.65rem;
-  margin: 0 0 1.1rem;
-  padding: 0.8rem 0.95rem;
-  border-radius: 18px;
-  background: rgba(255, 252, 246, 0.72);
-  border: 1px solid rgba(255, 255, 255, 0.45);
-  backdrop-filter: blur(14px);
-  box-shadow: 0 12px 30px rgba(54, 62, 73, 0.08);
-  position: sticky;
-  top: var(--sticky-offset);
-  z-index: 40;
+  margin: 0;
 }
 
 .section-nav a {
@@ -209,7 +222,7 @@ html {
 .layout-overview,
 .layout-medication,
 .layout-summary {
-  scroll-margin-top: 1rem;
+  scroll-margin-top: calc(var(--floating-menu-height) + var(--sticky-offset) + 1rem);
 }
 
 .panel {
@@ -730,7 +743,8 @@ textarea {
 
 @media (max-width: 860px) {
   .hero,
-  .panel-heading {
+  .panel-heading,
+  .floating-menu-top {
     flex-direction: column;
     align-items: stretch;
   }
@@ -759,9 +773,17 @@ textarea {
     grid-template-columns: 1fr;
   }
 
-  .section-nav {
+  .floating-menu {
     top: 0.6rem;
-    padding: 0.7rem 0.75rem;
+    padding: 0.75rem 0.8rem 0.85rem;
+  }
+
+  .floating-menu-actions {
+    justify-content: stretch;
+  }
+
+  .floating-menu-actions .ghost-button {
+    width: 100%;
   }
 
   .capture-bar,

@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, reactive, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import DailyOverview from "./components/DailyOverview.vue";
 import MedicationPlan from "./components/MedicationPlan.vue";
 import HourMatrix from "./components/HourMatrix.vue";
@@ -18,6 +18,7 @@ import { openDoctorReportPrint } from "./services/doctorReport.js";
 
 const diaryRepository = ref(null);
 const fileInput = ref(null);
+const floatingMenu = ref(null);
 const isReady = ref(false);
 const repositoryMode = ref("loading");
 const storageMessage = ref("");
@@ -35,6 +36,8 @@ const selectedDateLabel = computed(() => formatLongDate(state.selectedDate));
 const sortedMedications = computed(() =>
   [...selectedEntry.value.medications].sort((left, right) => left.time.localeCompare(right.time)),
 );
+
+let menuResizeObserver = null;
 
 watch(
   state,
@@ -54,6 +57,20 @@ onMounted(async () => {
   diaryRepository.value = repository;
   repositoryMode.value = repository.getMode();
   isReady.value = true;
+
+  await nextTick();
+  syncFloatingMenuHeight();
+
+  if (globalThis.ResizeObserver && floatingMenu.value) {
+    menuResizeObserver = new ResizeObserver(() => {
+      syncFloatingMenuHeight();
+    });
+    menuResizeObserver.observe(floatingMenu.value);
+  }
+});
+
+onUnmounted(() => {
+  menuResizeObserver?.disconnect();
 });
 
 function updateSelectedDate(dateKey) {
@@ -164,6 +181,11 @@ async function importDatabase(event) {
     event.target.value = "";
   }
 }
+
+function syncFloatingMenuHeight() {
+  const height = floatingMenu.value?.offsetHeight ?? 0;
+  document.documentElement.style.setProperty("--floating-menu-height", `${height}px`);
+}
 </script>
 
 <template>
@@ -176,7 +198,7 @@ async function importDatabase(event) {
 
     <template v-else>
       <header class="hero">
-        <div>
+        <div class="hero-copy">
           <p class="eyebrow">Vue prototype</p>
           <h1>NeuroDiary</h1>
           <p class="lede">
@@ -184,34 +206,34 @@ async function importDatabase(event) {
             trend review.
           </p>
         </div>
-
-        <div class="hero-card">
-          <p class="hero-label">Selected day · {{ repositoryMode }}</p>
-          <p class="hero-date">{{ selectedDateLabel }}</p>
-          <div class="hero-actions">
-            <button class="ghost-button" type="button" @click="printDoctorReport">
-              Print report
-            </button>
-            <button class="ghost-button" type="button" @click="exportDatabase">
-              Export .sqlite
-            </button>
-            <button class="ghost-button" type="button" @click="openImportPicker">
-              Import .sqlite
-            </button>
-            <button class="ghost-button" type="button" @click="resetDemo">Reset demo data</button>
-          </div>
-          <p v-if="storageMessage" class="storage-message">{{ storageMessage }}</p>
-        </div>
       </header>
 
-      <nav class="section-nav" aria-label="Rychla navigace">
-        <a href="#sekce-udaje">Udaje</a>
-        <a href="#sekce-matice">Hodinova matice</a>
-        <a href="#sekce-osa">Casova osa</a>
-        <a href="#sekce-prehled">Denni zapis</a>
-        <a href="#sekce-leky">Lecba</a>
-        <a href="#sekce-souhrn">Souhrn</a>
-      </nav>
+      <section ref="floatingMenu" class="floating-menu" aria-label="Rychla navigace a akce">
+        <div class="floating-menu-top">
+          <div class="floating-menu-status">
+            <p class="hero-label">Selected day · {{ repositoryMode }}</p>
+            <p class="hero-date">{{ selectedDateLabel }}</p>
+          </div>
+
+          <div class="floating-menu-actions">
+            <button class="ghost-button" type="button" @click="printDoctorReport">Print report</button>
+            <button class="ghost-button" type="button" @click="exportDatabase">Export .sqlite</button>
+            <button class="ghost-button" type="button" @click="openImportPicker">Import .sqlite</button>
+            <button class="ghost-button" type="button" @click="resetDemo">Reset demo data</button>
+          </div>
+        </div>
+
+        <nav class="section-nav" aria-label="Rychla navigace">
+          <a href="#sekce-udaje">Udaje</a>
+          <a href="#sekce-matice">Hodinova matice</a>
+          <a href="#sekce-osa">Casova osa</a>
+          <a href="#sekce-prehled">Denni zapis</a>
+          <a href="#sekce-leky">Lecba</a>
+          <a href="#sekce-souhrn">Souhrn</a>
+        </nav>
+
+        <p v-if="storageMessage" class="storage-message floating-menu-message">{{ storageMessage }}</p>
+      </section>
 
       <main class="grid dashboard-grid">
         <section id="sekce-udaje" class="panel panel-wide layout-profile">
