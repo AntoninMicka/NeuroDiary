@@ -12,6 +12,7 @@
   --ok: #2c8c5a;
   --bad: #b84a4a;
   --shadow: 0 24px 70px rgba(54, 62, 73, 0.12);
+  --sticky-offset: 1rem;
   font-family: "Segoe UI", "Helvetica Neue", sans-serif;
 }
 
@@ -27,6 +28,31 @@ body {
     radial-gradient(circle at right center, rgba(201, 123, 52, 0.18), transparent 24%),
     linear-gradient(180deg, #f7f2e8 0%, #efe8da 100%);
   color: var(--text);
+  scrollbar-width: auto;
+  scrollbar-color: var(--accent-strong) rgba(31, 41, 51, 0.16);
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+  width: 16px;
+  height: 16px;
+}
+
+html::-webkit-scrollbar-track,
+body::-webkit-scrollbar-track {
+  background: rgba(31, 41, 51, 0.12);
+}
+
+html::-webkit-scrollbar-thumb,
+body::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, var(--accent), var(--accent-strong));
+  border-radius: 999px;
+  border: 3px solid rgba(247, 242, 232, 0.95);
+}
+
+html::-webkit-scrollbar-thumb:hover,
+body::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #176979, #08414b);
 }
 
 button,
@@ -148,6 +174,9 @@ textarea {
   border: 1px solid rgba(255, 255, 255, 0.45);
   backdrop-filter: blur(14px);
   box-shadow: 0 12px 30px rgba(54, 62, 73, 0.08);
+  position: sticky;
+  top: var(--sticky-offset);
+  z-index: 40;
 }
 
 .section-nav a {
@@ -728,6 +757,11 @@ textarea {
 
   .day-form {
     grid-template-columns: 1fr;
+  }
+
+  .section-nav {
+    top: 0.6rem;
+    padding: 0.7rem 0.75rem;
   }
 
   .capture-bar,
