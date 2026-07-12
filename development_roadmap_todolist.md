@@ -211,6 +211,17 @@ Navazující rozšíření:
 * přiložení verze aplikace a stavu databáze
 * bezpečné sdílení technických podkladů při řešení chyb
 
+### [pending] 4.10 Odeslání reportu e-mailem
+
+* možnost odeslat lékařský report e-mailem přímo z aplikace
+* možnost uložit a spravovat cílový e-mailový kontakt pro odeslání
+* report nebo příloha musí být šifrovaná
+* přístup k souboru pouze pomocí předem domluveného hesla sdíleného jiným kanálem
+* vhodné jako řízená varianta sdílení před plnou implementací bezpečného cloudového sdílení
+* zvážit efektivnější formát přenosu podle scénáře:
+  PDF pro rychlé čtení a tisk
+  JSON report pro strojové načtení, import a další zpracování
+
 ---
 
 # 🎯 Milník M2 – Analýza a reporty
@@ -275,6 +286,20 @@ Výstup:
 * oddělení dat a oprávnění mezi profily
 
 ### [pending] 6.4 Sdílení s lékařem
+
+### [pending] 6.7 Lékařský režim / kartotéka
+
+* speciální režim pro ambulanci nebo poradnu
+* načítání doručených reportů a jejich evidence
+* ukládání kontaktů pacientů pro příjem reportů
+* evidence dohodnutých přístupových údajů nebo pravidel pro otevření šifrovaných reportů
+* centrální tisk reportů v ordinaci nebo poradně
+* jednoduchá kartotéka pacientů s vazbou na doručené reporty a historii přijetí
+* zvážit oddělený lékařský klient nebo samostatné rozhraní, aby pacientská a ambulantní část nebyly zbytečně promíchané
+
+Poznámka:
+
+> Ukládání hesel pacientů v přímé podobě není vhodné. Pokud bude tento scénář dále rozpracován, je potřeba navrhnout bezpečnější provozní model pro práci se šifrovanými reporty.
 
 ---
 
