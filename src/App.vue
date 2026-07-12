@@ -15,10 +15,12 @@ import {
   getTrackableHourLabel,
 } from "./domain/diary.js";
 import { createDiaryRepository } from "./repositories/index.js";
+import { parseJsonBackup, serializeJsonBackup } from "./services/jsonTransfer.js";
 import { openDoctorReportPrint } from "./services/doctorReport.js";
 
 const diaryRepository = ref(null);
 const fileInput = ref(null);
+const jsonFileInput = ref(null);
 const floatingMenu = ref(null);
 const isReady = ref(false);
 const repositoryMode = ref("loading");
@@ -119,7 +121,7 @@ function writeCurrentState() {
 
 function resetDemo() {
   const fresh = diaryRepository.value.resetState();
-  Object.assign(state, fresh);
+  applyImportedState(fresh);
   storageMessage.value = "Demo data restored.";
 }
 
@@ -140,6 +142,18 @@ function exportDatabase() {
   storageMessage.value = "SQLite backup exported.";
 }
 
+function exportJson() {
+  const json = serializeJsonBackup(state);
+  const blob = new Blob([json], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `neurodiary-${state.selectedDate || "backup"}.json`;
+  link.click();
+  URL.revokeObjectURL(url);
+  storageMessage.value = "JSON backup exported.";
+}
+
 function openImportPicker() {
   if (!diaryRepository.value?.supportsBinaryImportExport()) {
     storageMessage.value = "SQLite import is not available in local fallback mode.";
@@ -147,6 +161,10 @@ function openImportPicker() {
   }
 
   fileInput.value?.click();
+}
+
+function openJsonImportPicker() {
+  jsonFileInput.value?.click();
 }
 
 function printDoctorReport() {
@@ -170,10 +188,19 @@ async function importDatabase(event) {
     return;
   }
 
+  const confirmed = globalThis.confirm(
+    `Import souboru ${file.name} prepise aktualni lokalni data v aplikaci. Chcete pokracovat?`,
+  );
+  if (!confirmed) {
+    event.target.value = "";
+    storageMessage.value = "SQLite import cancelled.";
+    return;
+  }
+
   try {
     const buffer = await file.arrayBuffer();
     const importedState = diaryRepository.value.importDatabase(buffer);
-    Object.assign(state, importedState);
+    applyImportedState(importedState);
     storageMessage.value = `Imported ${file.name}.`;
   } catch (error) {
     console.error("SQLite import failed", error);
@@ -181,6 +208,40 @@ async function importDatabase(event) {
   } finally {
     event.target.value = "";
   }
+}
+
+async function importJson(event) {
+  const [file] = event.target.files ?? [];
+  if (!file) {
+    return;
+  }
+
+  const confirmed = globalThis.confirm(
+    `Import souboru ${file.name} prepise aktualni lokalni data v aplikaci. Chcete pokracovat?`,
+  );
+  if (!confirmed) {
+    event.target.value = "";
+    storageMessage.value = "JSON import cancelled.";
+    return;
+  }
+
+  try {
+    const raw = await file.text();
+    const importedState = parseJsonBackup(raw);
+    applyImportedState(importedState);
+    storageMessage.value = `Imported ${file.name}.`;
+  } catch (error) {
+    console.error("JSON import failed", error);
+    storageMessage.value = "Import failed. Please choose a valid NeuroDiary JSON backup.";
+  } finally {
+    event.target.value = "";
+  }
+}
+
+function applyImportedState(nextState) {
+  Object.assign(state, nextState);
+  ensureEntry(state, state.selectedDate);
+  diaryRepository.value?.saveState(state);
 }
 
 function syncFloatingMenuHeight() {
@@ -219,7 +280,9 @@ function syncFloatingMenuHeight() {
           <div class="floating-menu-actions">
             <button class="ghost-button" type="button" @click="printDoctorReport">Print report</button>
             <button class="ghost-button" type="button" @click="exportDatabase">Export .sqlite</button>
+            <button class="ghost-button" type="button" @click="exportJson">Export JSON</button>
             <button class="ghost-button" type="button" @click="openImportPicker">Import .sqlite</button>
+            <button class="ghost-button" type="button" @click="openJsonImportPicker">Import JSON</button>
             <button class="ghost-button" type="button" @click="resetDemo">Reset demo data</button>
           </div>
         </div>
@@ -327,6 +390,13 @@ function syncFloatingMenuHeight() {
         type="file"
         accept=".sqlite,.db,.sqlite3"
         @change="importDatabase"
+      />
+      <input
+        ref="jsonFileInput"
+        class="visually-hidden"
+        type="file"
+        accept=".json,application/json"
+        @change="importJson"
       />
     </template>
   </div>

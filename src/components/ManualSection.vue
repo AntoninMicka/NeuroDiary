@@ -82,9 +82,12 @@
         <div class="manual-block">
           <h4>2. Export a import</h4>
           <p>
-            Tlacitka <strong>Export .sqlite</strong> a <strong>Import .sqlite</strong> slouzi pro
-            prenos nebo obnovu lokalni databaze. Pokud fallback rezim SQLite nepodporuje, aplikace na
-            to uzivatele upozorni.
+            Tlacitka <strong>Export .sqlite</strong>, <strong>Export JSON</strong> a
+            <strong>Import .sqlite</strong>, <strong>Import JSON</strong> slouzi pro prenos nebo
+            obnovu lokalni databaze.
+            JSON export je vhodny jako citelna zalohovaci a integracni varianta, SQLite export jako
+            plna binarni kopie. Pokud fallback rezim SQLite nepodporuje, aplikace na to uzivatele
+            upozorni.
           </p>
         </div>
 
