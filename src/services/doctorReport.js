@@ -11,6 +11,7 @@ import {
 const REPORT_DAYS_PAGE_ONE = 4;
 const ANALYSIS_DAYS = 7;
 const ANALYSIS_LONG_DAYS = 30;
+const ANALYSIS_WEEK_BLOCKS = 4;
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -209,6 +210,11 @@ function summarizeHourWindow(entries, selectedDate, hourLabel, count) {
   return counts;
 }
 
+function summarizeHourWindowInterval(entries, selectedDate, hourLabel, offsetDays, count) {
+  const intervalEndDate = shiftDateKey(selectedDate, -offsetDays);
+  return summarizeHourWindow(entries, intervalEndDate, hourLabel, count);
+}
+
 function buildHistogramCells(counts, totalDays) {
   const maxValue = HOUR_STATES.reduce((currentMax, state) => {
     const value = counts[state.key] ?? 0;
@@ -233,6 +239,38 @@ function buildHistogramCells(counts, totalDays) {
       </td>
     `;
   }).join("");
+}
+
+function buildCompactHistogramCell(counts, totalDays, title) {
+  const maxValue = HOUR_STATES.reduce((currentMax, state) => {
+    const value = counts[state.key] ?? 0;
+    return Math.max(currentMax, value);
+  }, 0);
+
+  const bars = HOUR_STATES.map((state) => {
+    const value = counts[state.key] ?? 0;
+    const height = value > 0 && maxValue > 0 ? (value / maxValue) * 100 : 0;
+    const emphasisClass =
+      value > 0 && maxValue > 0
+        ? value === maxValue
+          ? "is-peak"
+          : "is-secondary"
+        : "";
+
+    return `
+      <div class="compact-week-bar-shell">
+        <div class="compact-week-bar state-${escapeHtml(state.key)} ${emphasisClass}" style="height: ${height}%;"></div>
+      </div>
+    `;
+  }).join("");
+
+  return `
+    <td class="compact-week-cell" title="${escapeHtml(title)}">
+      <div class="compact-week-inner">
+        ${bars}
+      </div>
+    </td>
+  `;
 }
 
 function buildTrendRows(entries, selectedDate) {
@@ -268,6 +306,18 @@ function buildHourSummaryRows(entries, selectedDate) {
   return TRACKING_HOURS.map((hourLabel) => {
     const weeklyCounts = summarizeHourWindow(entries, selectedDate, hourLabel, ANALYSIS_DAYS);
     const monthlyCounts = summarizeHourWindow(entries, selectedDate, hourLabel, ANALYSIS_LONG_DAYS);
+    const monthByWeeks = Array.from({ length: ANALYSIS_WEEK_BLOCKS }, (_, index) => {
+      const offsetDays = (ANALYSIS_WEEK_BLOCKS - index - 1) * ANALYSIS_DAYS;
+      const intervalEndDate = shiftDateKey(selectedDate, -offsetDays);
+      const intervalStartDate = shiftDateKey(intervalEndDate, -(ANALYSIS_DAYS - 1));
+      const counts = summarizeHourWindowInterval(entries, selectedDate, hourLabel, offsetDays, ANALYSIS_DAYS);
+
+      return buildCompactHistogramCell(
+        counts,
+        ANALYSIS_DAYS,
+        `${hourLabel}:00 · ${formatNumericDate(intervalStartDate)} - ${formatNumericDate(intervalEndDate)}`,
+      );
+    }).join("");
     const dominantStateKey =
       Object.entries(weeklyCounts).sort((left, right) => right[1] - left[1])[0]?.[0] ?? "on";
     const dominantState = getStateDefinition(dominantStateKey);
@@ -279,9 +329,15 @@ function buildHourSummaryRows(entries, selectedDate) {
         ${buildHistogramCells(weeklyCounts, ANALYSIS_DAYS)}
         <td class="histogram-spacer-cell"></td>
         ${buildHistogramCells(monthlyCounts, ANALYSIS_LONG_DAYS)}
+        <td class="histogram-spacer-cell"></td>
+        ${monthByWeeks}
       </tr>
     `;
   }).join("");
+}
+
+function buildWeekBlockHeaders() {
+  return Array.from({ length: ANALYSIS_WEEK_BLOCKS }, (_, index) => `<th>W${index + 1}</th>`).join("");
 }
 
 function buildAnalysisPage(entries, selectedDate) {
@@ -343,10 +399,13 @@ function buildAnalysisPage(entries, selectedDate) {
                 <th colspan="5">7 dni</th>
                 <th rowspan="2" class="histogram-spacer-head"></th>
                 <th colspan="5">30 dni</th>
+                <th rowspan="2" class="histogram-spacer-head"></th>
+                <th colspan="${ANALYSIS_WEEK_BLOCKS}">${ANALYSIS_WEEK_BLOCKS}x7 dni</th>
               </tr>
               <tr>
                 ${HOUR_STATES.map((state) => `<th>${escapeHtml(state.shortLabel)}</th>`).join("")}
                 ${HOUR_STATES.map((state) => `<th>${escapeHtml(state.shortLabel)}</th>`).join("")}
+                ${buildWeekBlockHeaders()}
               </tr>
             </thead>
             <tbody>${buildHourSummaryRows(entries, selectedDate)}</tbody>
@@ -733,9 +792,8 @@ export function buildDoctorReportHtml({ entries, selectedDate, patientName = "",
           padding-left: 0;
           vertical-align: middle;
         }
-        .hour-summary-table th:nth-child(1) { width: 12%; }
-        .hour-summary-table th:nth-child(2) { width: 28%; }
-        .hour-summary-table th[colspan="5"] { width: 18%; }
+        .hour-summary-table th:nth-child(1) { width: 10%; }
+        .hour-summary-table th:nth-child(2) { width: 20%; }
         .histogram-spacer-head,
         .histogram-spacer-cell {
           width: 8px;
@@ -778,6 +836,34 @@ export function buildDoctorReportHtml({ entries, selectedDate, patientName = "",
             transparent 1.2px,
             transparent 2.6px
           );
+        }
+        .compact-week-cell {
+          padding: 0;
+          text-align: center;
+          vertical-align: bottom;
+        }
+        .compact-week-inner {
+          display: grid;
+          grid-template-columns: repeat(5, 1fr);
+          align-items: end;
+          gap: 1px;
+          width: calc(100% - 2px);
+          height: 16px;
+          margin: 1px 0;
+          padding: 0 1px;
+          background: #f7fafc;
+          border: 1px solid var(--line-soft);
+          overflow: hidden;
+          box-sizing: border-box;
+        }
+        .compact-week-bar-shell {
+          display: flex;
+          align-items: end;
+          height: 100%;
+        }
+        .compact-week-bar {
+          display: block;
+          width: 100%;
         }
         .state-on { background: #d9ebf8; }
         .state-partial { background: #f8e7b7; }
