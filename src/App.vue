@@ -5,6 +5,7 @@ import MedicationPlan from "./components/MedicationPlan.vue";
 import HourMatrix from "./components/HourMatrix.vue";
 import DaySummary from "./components/DaySummary.vue";
 import DailyTimeline from "./components/DailyTimeline.vue";
+import ManualSection from "./components/ManualSection.vue";
 import {
   createMedication,
   ensureEntry,
@@ -230,6 +231,7 @@ function syncFloatingMenuHeight() {
           <a href="#sekce-prehled">Denni zapis</a>
           <a href="#sekce-leky">Lecba</a>
           <a href="#sekce-souhrn">Souhrn</a>
+          <a href="#sekce-manualy">Manualy</a>
         </nav>
 
         <p v-if="storageMessage" class="storage-message floating-menu-message">{{ storageMessage }}</p>
@@ -317,6 +319,7 @@ function syncFloatingMenuHeight() {
           :entries="state.entries"
           :selected-date="state.selectedDate"
         />
+        <ManualSection id="sekce-manualy" class="layout-manuals" />
       </main>
       <input
         ref="fileInput"

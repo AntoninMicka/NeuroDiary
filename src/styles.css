@@ -181,7 +181,8 @@ textarea {
     "matrix matrix"
     "timeline timeline"
     "overview medication"
-    "summary summary";
+    "summary summary"
+    "manuals manuals";
   align-items: start;
 }
 
@@ -256,6 +257,10 @@ html {
 
 .layout-summary {
   grid-area: summary;
+}
+
+.layout-manuals {
+  grid-area: manuals;
 }
 
 .panel-heading {
@@ -824,6 +829,54 @@ textarea {
   opacity: 0.55;
 }
 
+.manual-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.manual-card {
+  padding: 1rem;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid rgba(31, 41, 51, 0.08);
+}
+
+.manual-card-head {
+  margin-bottom: 0.9rem;
+}
+
+.manual-card-head h3 {
+  margin: 0.2rem 0 0;
+  font-size: 1.15rem;
+}
+
+.manual-badge {
+  margin: 0;
+  color: var(--accent-strong);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.manual-block + .manual-block {
+  margin-top: 0.9rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid rgba(31, 41, 51, 0.08);
+}
+
+.manual-block h4 {
+  margin: 0 0 0.35rem;
+  font-size: 0.98rem;
+}
+
+.manual-block p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -917,6 +970,10 @@ textarea {
     min-height: 1.6rem;
     font-size: 0.62rem;
     padding: 0;
+  }
+
+  .manual-grid {
+    grid-template-columns: 1fr;
   }
 
   .distribution-grid {
