@@ -1,6 +1,6 @@
-import { getStateDefinition } from "../domain/diary.js";
+import { HOUR_STATES, getStateDefinition } from "../domain/diary.js";
 
-const TRACKED_SUMMARY_STATES = ["on", "partial", "off", "sleep"];
+const TRACKED_SUMMARY_STATES = HOUR_STATES.map((state) => state.key);
 
 function parseDateKey(dateKey) {
   const [year, month, day] = dateKey.split("-").map(Number);
@@ -107,10 +107,28 @@ export function buildMetricSeries(entries, endDateKey, days = 7) {
       dateKey,
       hasEntry: Boolean(entry),
       on: analysis?.hourCounts.on ?? 0,
+      dyskinesia: analysis?.hourCounts.dyskinesia ?? 0,
       partial: analysis?.hourCounts.partial ?? 0,
       off: analysis?.hourCounts.off ?? 0,
       sleep: analysis?.hourCounts.sleep ?? 0,
       medications: analysis?.medicationCount ?? 0,
+    };
+  });
+}
+
+export function buildStateDistribution(hourCounts = {}) {
+  const total = TRACKED_SUMMARY_STATES.reduce((sum, stateKey) => sum + (hourCounts[stateKey] ?? 0), 0);
+
+  return HOUR_STATES.map((state) => {
+    const hours = hourCounts[state.key] ?? 0;
+    const percent = total > 0 ? (hours / total) * 100 : 0;
+
+    return {
+      key: state.key,
+      label: state.label,
+      shortLabel: state.shortLabel,
+      hours,
+      percent,
     };
   });
 }

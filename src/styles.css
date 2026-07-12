@@ -646,6 +646,101 @@ textarea {
   border-top: 1px solid rgba(31, 41, 51, 0.08);
 }
 
+.distribution-panel {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(31, 41, 51, 0.08);
+}
+
+.distribution-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.distribution-card {
+  padding: 0.85rem;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.58);
+  border: 1px solid rgba(31, 41, 51, 0.08);
+}
+
+.distribution-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.distribution-card-head span {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.distribution-list {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.distribution-row {
+  display: grid;
+  grid-template-columns: minmax(52px, 62px) minmax(0, 1fr) 44px;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.distribution-row-label {
+  display: grid;
+  gap: 0.08rem;
+}
+
+.distribution-row-label span {
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.distribution-row-label small {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.distribution-track {
+  height: 0.7rem;
+  border-radius: 999px;
+  background: rgba(31, 41, 51, 0.08);
+  overflow: hidden;
+}
+
+.distribution-fill {
+  height: 100%;
+  min-width: 0;
+  border-radius: 999px;
+  opacity: 0.95;
+}
+
+.distribution-fill.state-on {
+  background: var(--ok);
+}
+
+.distribution-fill.state-partial {
+  background: var(--warn);
+}
+
+.distribution-fill.state-off,
+.distribution-fill.state-dyskinesia {
+  background: var(--bad);
+}
+
+.distribution-fill.state-sleep {
+  background: var(--accent);
+}
+
+.distribution-value {
+  text-align: right;
+  font-size: 0.82rem;
+}
+
 .histogram-header {
   display: grid;
   gap: 0.25rem;
@@ -822,6 +917,10 @@ textarea {
     min-height: 1.6rem;
     font-size: 0.62rem;
     padding: 0;
+  }
+
+  .distribution-grid {
+    grid-template-columns: 1fr;
   }
 
   .histogram-table {

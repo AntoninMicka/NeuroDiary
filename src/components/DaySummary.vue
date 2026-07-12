@@ -1,7 +1,7 @@
 <script setup>
 import { computed } from "vue";
-import { formatOverallStatus, formatSleepQuality, getStateDefinition } from "../domain/diary.js";
-import { analyzeEntry, analyzePeriod, buildMetricSeries } from "../services/statistics.js";
+import { HOUR_STATES, formatOverallStatus, formatSleepQuality, getStateDefinition } from "../domain/diary.js";
+import { analyzeEntry, analyzePeriod, buildMetricSeries, buildStateDistribution } from "../services/statistics.js";
 
 const props = defineProps({
   entry: {
@@ -26,6 +26,7 @@ const monthlySeries = computed(() => buildMetricSeries(props.entries, props.sele
 const stateBreakdown = computed(() => {
   const counts = entryAnalysis.value.hourCounts;
   return [
+    `D ${counts.dyskinesia ?? 0} h`,
     `ON ${counts.on ?? 0} h`,
     `MID ${counts.partial ?? 0} h`,
     `OFF ${counts.off ?? 0} h`,
@@ -35,8 +36,31 @@ const stateBreakdown = computed(() => {
 
 const weeklyStateBreakdown = computed(() => {
   const totals = weeklyAnalysis.value.totals;
-  return [`ON ${totals.on} h`, `MID ${totals.partial} h`, `OFF ${totals.off} h`].join(" · ");
+  return [`D ${totals.dyskinesia} h`, `ON ${totals.on} h`, `MID ${totals.partial} h`, `OFF ${totals.off} h`].join(
+    " · ",
+  );
 });
+
+const distributionPanels = computed(() => [
+  {
+    key: "today",
+    title: "Dnes",
+    meta: `${HOUR_STATES.reduce((sum, state) => sum + (entryAnalysis.value.hourCounts[state.key] ?? 0), 0)} h`,
+    items: buildStateDistribution(entryAnalysis.value.hourCounts),
+  },
+  {
+    key: "week",
+    title: "7 dni",
+    meta: `${weeklyAnalysis.value.recordedDays}/${weeklyAnalysis.value.trackedDays} dni`,
+    items: buildStateDistribution(weeklyAnalysis.value.totals),
+  },
+  {
+    key: "month",
+    title: "30 dni",
+    meta: `${monthlyAnalysis.value.recordedDays}/${monthlyAnalysis.value.trackedDays} dni`,
+    items: buildStateDistribution(monthlyAnalysis.value.totals),
+  },
+]);
 
 const cards = computed(() => {
   const dominantState = weeklyAnalysis.value.dominantState;
@@ -148,6 +172,38 @@ const histogramRows = computed(() => [
       <div v-for="card in cards" :key="card.title" class="summary-card">
         <strong>{{ card.title }}</strong>
         <span>{{ card.value }}</span>
+      </div>
+    </div>
+
+    <div class="distribution-panel">
+      <div class="histogram-header">
+        <strong>Rozlozeni stavu</strong>
+        <span>Orientacni procentualni podil zaznamenanych hodin</span>
+      </div>
+
+      <div class="distribution-grid">
+        <article v-for="panel in distributionPanels" :key="panel.key" class="distribution-card">
+          <div class="distribution-card-head">
+            <strong>{{ panel.title }}</strong>
+            <span>{{ panel.meta }}</span>
+          </div>
+
+          <div class="distribution-list">
+            <div v-for="item in panel.items" :key="`${panel.key}-${item.key}`" class="distribution-row">
+              <div class="distribution-row-label">
+                <span>{{ item.shortLabel }}</span>
+                <small>{{ item.hours }} h</small>
+              </div>
+              <div class="distribution-track">
+                <div
+                  :class="['distribution-fill', `state-${item.key}`]"
+                  :style="{ width: `${item.percent}%` }"
+                />
+              </div>
+              <strong class="distribution-value">{{ Math.round(item.percent) }} %</strong>
+            </div>
+          </div>
+        </article>
       </div>
     </div>
 
