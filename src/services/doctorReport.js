@@ -218,11 +218,17 @@ function buildHistogramCells(counts, totalDays) {
   return HOUR_STATES.map((state) => {
     const value = counts[state.key] ?? 0;
     const height = value > 0 && maxValue > 0 ? (value / maxValue) * 100 : 0;
+    const emphasisClass =
+      value > 0 && maxValue > 0
+        ? value === maxValue
+          ? "is-peak"
+          : "is-secondary"
+        : "";
 
     return `
       <td class="histogram-cell" title="${escapeHtml(`${state.shortLabel}: ${value} / ${totalDays}`)}">
         <div class="histogram-cell-inner">
-          <div class="mini-cylinder-fill state-${escapeHtml(state.key)}" style="height: ${height}%;"></div>
+          <div class="mini-cylinder-fill state-${escapeHtml(state.key)} ${emphasisClass}" style="height: ${height}%;"></div>
         </div>
       </td>
     `;
@@ -757,6 +763,21 @@ export function buildDoctorReportHtml({ entries, selectedDate, patientName = "",
         .mini-cylinder-fill {
           display: block;
           width: 100%;
+        }
+        .mini-cylinder-fill.is-peak {
+          opacity: 1;
+          box-shadow: inset 0 0 0 0.3mm rgba(52, 73, 94, 0.32);
+          filter: saturate(1.2) brightness(0.95);
+        }
+        .mini-cylinder-fill.is-secondary {
+          opacity: 0.82;
+          background-image: repeating-linear-gradient(
+            -45deg,
+            rgba(255, 255, 255, 0.28) 0,
+            rgba(255, 255, 255, 0.28) 1.2px,
+            transparent 1.2px,
+            transparent 2.6px
+          );
         }
         .state-on { background: #d9ebf8; }
         .state-partial { background: #f8e7b7; }
