@@ -204,8 +204,17 @@ async function importDatabase(event) {
         </div>
       </header>
 
-      <main class="grid">
-        <section class="panel panel-wide">
+      <nav class="section-nav" aria-label="Rychla navigace">
+        <a href="#sekce-udaje">Udaje</a>
+        <a href="#sekce-matice">Hodinova matice</a>
+        <a href="#sekce-osa">Casova osa</a>
+        <a href="#sekce-prehled">Denni zapis</a>
+        <a href="#sekce-leky">Lecba</a>
+        <a href="#sekce-souhrn">Souhrn</a>
+      </nav>
+
+      <main class="grid dashboard-grid">
+        <section id="sekce-udaje" class="panel panel-wide layout-profile">
           <div class="panel-heading">
             <div>
               <p class="section-kicker">Udaje</p>
@@ -243,31 +252,48 @@ async function importDatabase(event) {
           </form>
         </section>
 
+        <HourMatrix
+          id="sekce-matice"
+          class="layout-matrix"
+          :hours="selectedEntry.hours"
+          :current-hour-label="currentHourLabel"
+          :selected-state-key="selectedStateKey"
+          :selected-date="state.selectedDate"
+          @update-hour="updateHour"
+          @update-current-hour-label="updateCurrentHourLabel"
+          @update-selected-state-key="updateSelectedStateKey"
+          @write-current-state="writeCurrentState"
+          @select-date="updateSelectedDate"
+        />
+
+        <DailyOverview
+          id="sekce-prehled"
+          class="layout-overview"
+          :model-value="selectedEntry"
+          @patch-entry="updateEntry"
+        />
+
         <MedicationPlan
+          id="sekce-leky"
+          class="layout-medication"
           :medications="sortedMedications"
           @add-medication="addMedication"
           @remove-medication="removeMedication"
         />
 
-        <DailyOverview :model-value="selectedEntry" @patch-entry="updateEntry" />
         <DailyTimeline
+          id="sekce-osa"
+          class="layout-timeline"
           :entries="state.entries"
           :selected-date="state.selectedDate"
           @select-date="updateSelectedDate"
         />
         <DaySummary
+          id="sekce-souhrn"
+          class="layout-summary"
           :entry="selectedEntry"
           :entries="state.entries"
           :selected-date="state.selectedDate"
-        />
-        <HourMatrix
-          :hours="selectedEntry.hours"
-          :current-hour-label="currentHourLabel"
-          :selected-state-key="selectedStateKey"
-          @update-hour="updateHour"
-          @update-current-hour-label="updateCurrentHourLabel"
-          @update-selected-state-key="updateSelectedStateKey"
-          @write-current-state="writeCurrentState"
         />
       </main>
       <input

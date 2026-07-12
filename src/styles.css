@@ -126,12 +126,94 @@ textarea {
   gap: 1.25rem;
 }
 
+.dashboard-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-areas:
+    "profile profile"
+    "matrix matrix"
+    "timeline timeline"
+    "overview medication"
+    "summary summary";
+  align-items: start;
+}
+
+.section-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin: 0 0 1.1rem;
+  padding: 0.8rem 0.95rem;
+  border-radius: 18px;
+  background: rgba(255, 252, 246, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 12px 30px rgba(54, 62, 73, 0.08);
+}
+
+.section-nav a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.4rem;
+  padding: 0.55rem 0.9rem;
+  border-radius: 999px;
+  background: rgba(31, 122, 140, 0.09);
+  color: var(--accent-strong);
+  text-decoration: none;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.section-nav a:hover,
+.section-nav a:focus-visible {
+  background: rgba(31, 122, 140, 0.16);
+  outline: none;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+.panel[id],
+.layout-matrix,
+.layout-timeline,
+.layout-overview,
+.layout-medication,
+.layout-summary {
+  scroll-margin-top: 1rem;
+}
+
 .panel {
   padding: 1.25rem;
 }
 
 .panel-wide {
   grid-column: span 1;
+}
+
+.layout-profile {
+  grid-area: profile;
+}
+
+.layout-matrix {
+  grid-area: matrix;
+}
+
+.layout-timeline {
+  grid-area: timeline;
+  align-self: start;
+}
+
+.layout-overview {
+  grid-area: overview;
+}
+
+.layout-medication {
+  grid-area: medication;
+}
+
+.layout-summary {
+  grid-area: summary;
 }
 
 .panel-heading {
@@ -153,6 +235,34 @@ textarea {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.9rem;
   margin-bottom: 1rem;
+}
+
+.matrix-date-toolbar {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, auto));
+  gap: 0.65rem;
+  align-items: end;
+  margin-bottom: 1rem;
+}
+
+.matrix-date-picker {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 170px;
+}
+
+.matrix-date-picker span {
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.matrix-readonly-note {
+  margin: 0 0 1rem;
+  padding: 0.7rem 0.85rem;
+  border-radius: 14px;
+  background: rgba(201, 123, 52, 0.12);
+  color: #8a5728;
+  font-size: 0.9rem;
 }
 
 .legend-card {
@@ -293,14 +403,15 @@ textarea {
 
 .hour-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  grid-template-columns: 1fr;
   gap: 0.75rem;
 }
 
 .hour-card {
   display: grid;
-  gap: 0.45rem;
-  text-align: left;
+  grid-template-columns: 84px minmax(0, 1fr) 64px;
+  gap: 0.75rem;
+  align-items: center;
   padding: 0.95rem;
   background: rgba(255, 255, 255, 0.7);
   border: 1px solid rgba(31, 41, 51, 0.08);
@@ -309,6 +420,7 @@ textarea {
 .hour-label {
   font-size: 0.85rem;
   color: var(--muted);
+  font-weight: 700;
 }
 
 .hour-select {
@@ -318,6 +430,7 @@ textarea {
 .hour-state {
   font-size: 1rem;
   font-weight: 700;
+  text-align: center;
 }
 
 .state-dyskinesia .hour-state {
@@ -346,6 +459,21 @@ textarea {
   gap: 0.75rem;
   align-items: end;
   margin-bottom: 0.55rem;
+}
+
+.timeline-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.timeline-today-button {
+  white-space: nowrap;
+}
+
+.timeline-today-button.is-active {
+  background: rgba(44, 140, 90, 0.14);
+  color: var(--ok);
 }
 
 .timeline-axis-spacer {
@@ -381,7 +509,7 @@ textarea {
   gap: 0.75rem;
   align-items: center;
   width: 100%;
-  padding: 0.85rem 0.9rem;
+  padding: 0.7rem 0.8rem;
   border-radius: 18px;
   border: 1px solid rgba(31, 41, 51, 0.08);
   background: rgba(255, 255, 255, 0.64);
@@ -412,12 +540,12 @@ textarea {
 }
 
 .timeline-hour-cell {
-  min-height: 2.15rem;
+  min-height: 1.9rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 10px;
-  font-size: 0.72rem;
+  border-radius: 9px;
+  font-size: 0.68rem;
   font-weight: 700;
   border: 1px solid rgba(31, 41, 51, 0.06);
   background: rgba(255, 255, 255, 0.86);
@@ -578,8 +706,24 @@ textarea {
     align-items: stretch;
   }
 
-  .grid {
+  .grid,
+  .dashboard-grid {
     grid-template-columns: 1fr;
+    grid-template-areas:
+      "profile"
+      "matrix"
+      "timeline"
+      "overview"
+      "medication"
+      "summary";
+  }
+
+  .section-nav {
+    padding: 0.75rem;
+  }
+
+  .section-nav a {
+    flex: 1 1 140px;
   }
 
   .day-form {
@@ -587,14 +731,41 @@ textarea {
   }
 
   .capture-bar,
+  .matrix-date-toolbar,
   .legend-list,
   .timeline-axis,
   .timeline-row {
     grid-template-columns: 1fr;
   }
 
+  .hour-card {
+    grid-template-columns: 1fr;
+    gap: 0.45rem;
+    text-align: left;
+  }
+
+  .hour-state {
+    text-align: left;
+  }
+
   .timeline-axis-spacer {
     display: none;
+  }
+
+  .timeline-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .timeline-hours,
+  .timeline-axis-hours {
+    gap: 0.16rem;
+  }
+
+  .timeline-hour-cell {
+    min-height: 1.6rem;
+    font-size: 0.62rem;
+    padding: 0;
   }
 
   .histogram-table {

@@ -1,5 +1,12 @@
 <script setup>
-import { HOUR_STATES, getStateDefinition } from "../domain/diary.js";
+import { computed } from "vue";
+import {
+  formatLongDate,
+  getStateDefinition,
+  getTodayKey,
+  HOUR_STATES,
+  shiftDateKey,
+} from "../domain/diary.js";
 
 const props = defineProps({
   hours: {
@@ -14,6 +21,10 @@ const props = defineProps({
     type: String,
     required: true,
   },
+  selectedDate: {
+    type: String,
+    required: true,
+  },
 });
 
 const emit = defineEmits([
@@ -21,7 +32,13 @@ const emit = defineEmits([
   "update-current-hour-label",
   "update-selected-state-key",
   "write-current-state",
+  "select-date",
 ]);
+
+const todayKey = getTodayKey();
+const isEditable = computed(() => props.selectedDate === todayKey);
+const selectedDateLabel = computed(() => formatLongDate(props.selectedDate));
+const canGoForward = computed(() => props.selectedDate < todayKey);
 </script>
 
 <template>
@@ -30,8 +47,36 @@ const emit = defineEmits([
       <div>
         <p class="section-kicker">Hodinova matice</p>
         <h2>Hodnoceni vlastniho stavu hybnosti</h2>
+        <p class="panel-tip">{{ selectedDateLabel }}</p>
       </div>
-      <p class="panel-tip">Vyber stav z menu nebo ho zapis tlacitkem do aktualni hodiny.</p>
+      <p class="panel-tip">
+        {{
+          isEditable
+            ? "Vyber stav z menu nebo ho zapis tlacitkem do aktualni hodiny."
+            : "Pro jiny den je matice jen pro cteni. Pro upravu se vrat na dnesni datum."
+        }}
+      </p>
+    </div>
+
+    <div class="matrix-date-toolbar">
+      <button class="ghost-button" type="button" @click="emit('select-date', shiftDateKey(props.selectedDate, -1))">
+        Predchozi den
+      </button>
+      <label class="matrix-date-picker">
+        <span>Zobrazeny den</span>
+        <input
+          :value="props.selectedDate"
+          type="date"
+          :max="todayKey"
+          @input="emit('select-date', $event.target.value)"
+        />
+      </label>
+      <button class="ghost-button" type="button" :disabled="!canGoForward" @click="emit('select-date', shiftDateKey(props.selectedDate, 1))">
+        Dalsi den
+      </button>
+      <button class="ghost-button" type="button" :disabled="props.selectedDate === todayKey" @click="emit('select-date', todayKey)">
+        Dnes
+      </button>
     </div>
 
     <div class="capture-bar">
@@ -39,6 +84,7 @@ const emit = defineEmits([
         <span>Aktualni hodina</span>
         <select
           :value="props.currentHourLabel"
+          :disabled="!isEditable"
           @input="emit('update-current-hour-label', $event.target.value)"
         >
           <option v-for="hourLabel in Object.keys(props.hours)" :key="hourLabel" :value="hourLabel">
@@ -51,6 +97,7 @@ const emit = defineEmits([
         <span>Aktualni stav</span>
         <select
           :value="props.selectedStateKey"
+          :disabled="!isEditable"
           @input="emit('update-selected-state-key', $event.target.value)"
         >
           <option v-for="state in HOUR_STATES" :key="state.key" :value="state.key">
@@ -59,10 +106,14 @@ const emit = defineEmits([
         </select>
       </label>
 
-      <button class="primary-button" type="button" @click="emit('write-current-state')">
+      <button class="primary-button" type="button" :disabled="!isEditable" @click="emit('write-current-state')">
         Zapsat aktualni stav
       </button>
     </div>
+
+    <p v-if="!isEditable" class="matrix-readonly-note">
+      Zobrazen je historicky den. V tomto rezimu nejsou povolene zmeny.
+    </p>
 
     <div class="legend-card">
       <p class="legend-title">Legenda</p>
@@ -84,6 +135,7 @@ const emit = defineEmits([
         <select
           class="hour-select"
           :value="stateKey"
+          :disabled="!isEditable"
           @input="emit('update-hour', { label, stateKey: $event.target.value })"
         >
           <option v-for="state in HOUR_STATES" :key="state.key" :value="state.key">

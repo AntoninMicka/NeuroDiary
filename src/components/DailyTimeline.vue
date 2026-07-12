@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from "vue";
-import { formatLongDate, getStateDefinition, TRACKING_HOURS } from "../domain/diary.js";
+import { formatLongDate, getStateDefinition, getTodayKey, TRACKING_HOURS } from "../domain/diary.js";
 import { analyzeEntry, getPeriodDateKeys } from "../services/statistics.js";
 
 const props = defineProps({
@@ -15,6 +15,8 @@ const props = defineProps({
 });
 
 const emit = defineEmits(["select-date"]);
+const todayKey = getTodayKey();
+const isTodaySelected = computed(() => props.selectedDate === todayKey);
 
 const axisLabels = computed(() =>
   TRACKING_HOURS.map((label, index) => ({
@@ -61,7 +63,16 @@ const rows = computed(() =>
         <p class="section-kicker">Casova osa</p>
         <h2>Denni casova osa</h2>
       </div>
-      <p class="panel-tip">Poslednich 7 dni vcetne vybraneho dne. Klik na radek prepne denik.</p>
+      <div class="timeline-toolbar">
+        <p class="panel-tip">Poslednich 7 dni vcetne vybraneho dne. Klik na radek prepne denik.</p>
+        <button
+          :class="['ghost-button', 'timeline-today-button', { 'is-active': isTodaySelected }]"
+          type="button"
+          @click="emit('select-date', todayKey)"
+        >
+          Dnes
+        </button>
+      </div>
     </div>
 
     <div class="timeline-axis">

@@ -32,28 +32,28 @@ function submitForm() {
   <section class="panel">
     <div class="panel-heading">
       <div>
-        <p class="section-kicker">Medication</p>
-        <h2>Medication plan</h2>
+        <p class="section-kicker">Lecba</p>
+        <h2>Plan medikace</h2>
       </div>
     </div>
 
     <form class="stack-form" @submit.prevent="submitForm">
       <label>
-        <span>Name</span>
+        <span>Nazev</span>
         <input v-model="form.name" type="text" placeholder="Levodopa" />
       </label>
 
       <label>
-        <span>Dose</span>
+        <span>Davka</span>
         <input v-model="form.dose" type="text" placeholder="100 mg" />
       </label>
 
       <label>
-        <span>Time</span>
+        <span>Cas</span>
         <input v-model="form.time" type="time" />
       </label>
 
-      <button class="primary-button" type="submit">Add medication</button>
+      <button class="primary-button" type="submit">Pridat lecivo</button>
     </form>
 
     <ul class="list">
@@ -63,7 +63,7 @@ function submitForm() {
           <span>{{ medication.dose }}</span>
         </div>
 
-        <button type="button" @click="emit('remove-medication', medication.id)">Remove</button>
+        <button type="button" @click="emit('remove-medication', medication.id)">Odebrat</button>
       </li>
     </ul>
   </section>
