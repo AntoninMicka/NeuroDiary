@@ -149,6 +149,12 @@ První implementační vlna pro analytickou vrstvu:
 
 ### [pending] 3.3 Rozložení stavů
 
+Pouze jako drobná doplňková informace pro orientaci v datech.
+
+Poznámka:
+
+> Užitečnost a interpretační hodnotu těchto statistik bude potřeba ověřit se specializovaným lékařem, aby se do další fáze neposouvaly metriky, které nejsou klinicky přínosné.
+
 ### [pending] 3.4 Wearing-off analýza
 
 ### [pending] 3.5 Dlouhodobé trendy
@@ -186,6 +192,18 @@ Navazující rozšíření:
 * Android: záloha/export na Google Drive
 * Apple ekosystém: záloha/export do iCloud Drive nebo Files
 * obnova dat ze vzdálené zálohy
+
+### [pending] 4.8 Zálohování na Google Drive
+
+* ruční export databáze nebo zálohy přímo na Google Drive
+* později možnost navázat automatické cloudové zálohy
+* vhodné i jako mezikrok před plnou mobilní integrací
+
+### [pending] 4.9 Zálohování do Apple úložiště
+
+* ruční export databáze nebo zálohy do iCloud Drive / Files
+* později možnost navázat automatické cloudové zálohy v Apple ekosystému
+* vhodné jako paralelní varianta ke Google Drive pro iPhone a iPad
 
 ### [pending] 4.7 Export pro podporu a diagnostiku
 
