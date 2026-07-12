@@ -11,6 +11,14 @@ export const TRACKING_HOURS = Array.from({ length: 20 }, (_, index) => {
   return String(hour);
 });
 
+const DEMO_NOTES = [
+  "Ranni ztuhlost se zlepsila po prvni davce.",
+  "Po obede prislo mirne zpomaleni a horsi jistota chuze.",
+  "Odpoledne dobra hybnost, vecer unava a zpomaleni.",
+  "Dopoledne stabilni, po 17. hodine kratky OFF.",
+  "Po prochazce lepsi koordinace a mene tresu.",
+];
+
 export function generateId() {
   if (globalThis.crypto?.randomUUID) {
     return globalThis.crypto.randomUUID();
@@ -21,6 +29,12 @@ export function generateId() {
 
 export function getTodayKey() {
   return new Date().toISOString().slice(0, 10);
+}
+
+export function shiftDateKey(dateKey, deltaDays) {
+  const date = new Date(`${dateKey}T12:00:00`);
+  date.setDate(date.getDate() + deltaDays);
+  return date.toISOString().slice(0, 10);
 }
 
 export function formatLongDate(dateKey) {
@@ -64,7 +78,7 @@ export function getTrackableHourLabel(date = new Date()) {
 
 export function createMedication(payload) {
   return {
-    id: generateId(),
+    id: payload.id ?? generateId(),
     name: payload.name.trim(),
     dose: payload.dose.trim(),
     time: payload.time,
@@ -92,6 +106,111 @@ export function createInitialState() {
     birthYear: "",
     entries: {},
   };
+}
+
+function createSimulatedHours(dayOffset) {
+  const hours = {};
+
+  for (const label of TRACKING_HOURS) {
+    const hour = Number(label);
+    let stateKey = "on";
+
+    if (hour < 8) {
+      stateKey = "sleep";
+    } else if (hour < 10) {
+      stateKey = dayOffset % 6 === 2 && hour === 9 ? "dyskinesia" : "on";
+    } else if (hour < 12) {
+      stateKey = dayOffset % 3 === 0 ? "partial" : "on";
+    } else if (hour < 14) {
+      stateKey = "partial";
+    } else if (hour < 16) {
+      stateKey = dayOffset % 4 === 1 ? "off" : "on";
+    } else if (hour < 18) {
+      stateKey = dayOffset % 5 === 3 && hour === 17 ? "dyskinesia" : "on";
+    } else if (hour < 20) {
+      stateKey = dayOffset % 3 === 1 ? "partial" : "on";
+    } else if (hour < 22) {
+      stateKey = dayOffset % 4 === 0 ? "off" : "partial";
+    } else {
+      stateKey = dayOffset % 6 === 0 ? "off" : "on";
+    }
+
+    hours[label] = stateKey;
+  }
+
+  return hours;
+}
+
+function createSimulatedMedications(dayOffset, dateKey) {
+  const shifts = [0, 10, -10, 15, -5];
+  const morningShift = shifts[dayOffset % shifts.length];
+  const noonShift = shifts[(dayOffset + 2) % shifts.length];
+  const eveningShift = shifts[(dayOffset + 4) % shifts.length];
+
+  const medications = [
+    createMedication({
+      id: `demo-${dateKey}-levodopa-morning`,
+      name: "Levodopa",
+      dose: dayOffset % 7 === 0 ? "125 mg" : "100 mg",
+      time: formatShiftedTime(8, 0, morningShift),
+    }),
+    createMedication({
+      id: `demo-${dateKey}-levodopa-noon`,
+      name: "Levodopa",
+      dose: "100 mg",
+      time: formatShiftedTime(13, 0, noonShift),
+    }),
+    createMedication({
+      id: `demo-${dateKey}-levodopa-evening`,
+      name: "Levodopa",
+      dose: "100 mg",
+      time: formatShiftedTime(18, 0, eveningShift),
+    }),
+  ];
+
+  if (dayOffset % 4 === 0) {
+    medications.push(
+      createMedication({
+        id: `demo-${dateKey}-amantadine`,
+        name: "Amantadin",
+        dose: "100 mg",
+        time: formatShiftedTime(15, 30, shifts[(dayOffset + 1) % shifts.length]),
+      }),
+    );
+  }
+
+  return medications.sort((left, right) => left.time.localeCompare(right.time));
+}
+
+function formatShiftedTime(hours, minutes, shiftMinutes) {
+  const date = new Date(Date.UTC(2024, 0, 1, hours, minutes + shiftMinutes, 0));
+  return date.toISOString().slice(11, 16);
+}
+
+function createSimulatedEntry(dayOffset, dateKey) {
+  const statusByOffset = ["stable", "good", "stable", "hard", "good"];
+  const sleepByOffset = ["good", "mixed", "good", "poor", "mixed"];
+
+  return {
+    sleepQuality: sleepByOffset[dayOffset % sleepByOffset.length],
+    overallStatus: statusByOffset[dayOffset % statusByOffset.length],
+    notes: DEMO_NOTES[dayOffset % DEMO_NOTES.length],
+    medications: createSimulatedMedications(dayOffset, dateKey),
+    hours: createSimulatedHours(dayOffset),
+  };
+}
+
+export function createDemoState(days = 28) {
+  const state = createInitialState();
+  state.patientName = "Jan Novak";
+  state.birthYear = "1958";
+
+  for (let offset = days - 1; offset >= 0; offset -= 1) {
+    const dateKey = shiftDateKey(state.selectedDate, -offset);
+    state.entries[dateKey] = createSimulatedEntry(offset, dateKey);
+  }
+
+  return state;
 }
 
 export function normalizeHourState(stateKey) {

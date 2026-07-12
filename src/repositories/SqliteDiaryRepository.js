@@ -1,7 +1,7 @@
 import initSqlJs from "sql.js";
 import wasmUrl from "sql.js/dist/sql-wasm.wasm?url";
 import {
-  createDefaultEntry,
+  createDemoState,
   createDefaultHours,
   createInitialState,
   ensureEntry,
@@ -154,6 +154,10 @@ export class SqliteDiaryRepository extends DiaryRepository {
           hours: this.selectHours(entryDate),
         };
       }
+    } else {
+      const demoState = normalizeState(createDemoState());
+      this.saveState(demoState);
+      return demoState;
     }
 
     ensureEntry(state, state.selectedDate);
@@ -226,8 +230,7 @@ export class SqliteDiaryRepository extends DiaryRepository {
     this.enableForeignKeys();
     this.runMigrations();
 
-    const state = createInitialState();
-    state.entries[state.selectedDate] = createDefaultEntry();
+    const state = createDemoState();
     this.saveState(state);
     return state;
   }

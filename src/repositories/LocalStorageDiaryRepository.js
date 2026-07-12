@@ -1,4 +1,4 @@
-import { createDefaultEntry, createInitialState, normalizeState } from "../domain/diary.js";
+import { createDemoState, normalizeState } from "../domain/diary.js";
 import { DiaryRepository } from "./DiaryRepository.js";
 
 const STORAGE_KEY = "neurodiary-vue-poc-v1";
@@ -15,13 +15,17 @@ export class LocalStorageDiaryRepository extends DiaryRepository {
   loadState() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      return normalizeState(createInitialState());
+      const demoState = normalizeState(createDemoState());
+      this.saveState(demoState);
+      return demoState;
     }
 
     try {
       return normalizeState(JSON.parse(raw));
     } catch {
-      return normalizeState(createInitialState());
+      const demoState = normalizeState(createDemoState());
+      this.saveState(demoState);
+      return demoState;
     }
   }
 
@@ -30,8 +34,7 @@ export class LocalStorageDiaryRepository extends DiaryRepository {
   }
 
   resetState() {
-    const state = createInitialState();
-    state.entries[state.selectedDate] = createDefaultEntry();
+    const state = createDemoState();
     this.saveState(state);
     return state;
   }

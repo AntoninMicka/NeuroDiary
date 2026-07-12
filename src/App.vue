@@ -4,6 +4,7 @@ import DailyOverview from "./components/DailyOverview.vue";
 import MedicationPlan from "./components/MedicationPlan.vue";
 import HourMatrix from "./components/HourMatrix.vue";
 import DaySummary from "./components/DaySummary.vue";
+import DailyTimeline from "./components/DailyTimeline.vue";
 import {
   createMedication,
   ensureEntry,
@@ -249,6 +250,11 @@ async function importDatabase(event) {
         />
 
         <DailyOverview :model-value="selectedEntry" @patch-entry="updateEntry" />
+        <DailyTimeline
+          :entries="state.entries"
+          :selected-date="state.selectedDate"
+          @select-date="updateSelectedDate"
+        />
         <DaySummary
           :entry="selectedEntry"
           :entries="state.entries"

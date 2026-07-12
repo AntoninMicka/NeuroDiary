@@ -145,7 +145,7 @@ První implementační vlna pro analytickou vrstvu:
 * počet dávek léků za den a průměr za období
 * souhrn za posledních 7 dní pro reporty a budoucí grafy
 
-### [pending] 3.2 Denní časová osa
+### [done] 3.2 Denní časová osa
 
 ### [pending] 3.3 Rozložení stavů
 
