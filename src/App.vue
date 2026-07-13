@@ -143,15 +143,19 @@ function exportDatabase() {
 }
 
 function exportJson() {
+  downloadJsonBackup();
+  storageMessage.value = "JSON backup exported.";
+}
+
+function downloadJsonBackup(filenamePrefix = "neurodiary", filenameSuffix = state.selectedDate || "backup") {
   const json = serializeJsonBackup(state);
   const blob = new Blob([json], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `neurodiary-${state.selectedDate || "backup"}.json`;
+  link.download = `${filenamePrefix}-${filenameSuffix}.json`;
   link.click();
   URL.revokeObjectURL(url);
-  storageMessage.value = "JSON backup exported.";
 }
 
 function openImportPicker() {
@@ -189,7 +193,7 @@ async function importDatabase(event) {
   }
 
   const confirmed = globalThis.confirm(
-    `Import souboru ${file.name} prepise aktualni lokalni data v aplikaci. Chcete pokracovat?`,
+    `Import souboru ${file.name} prepise aktualni lokalni data v aplikaci. Pred importem bude stazena nouzova JSON zaloha. Chcete pokracovat?`,
   );
   if (!confirmed) {
     event.target.value = "";
@@ -198,6 +202,7 @@ async function importDatabase(event) {
   }
 
   try {
+    downloadJsonBackup("neurodiary-preimport", state.selectedDate || "backup");
     const buffer = await file.arrayBuffer();
     const importedState = diaryRepository.value.importDatabase(buffer);
     applyImportedState(importedState);
@@ -217,7 +222,7 @@ async function importJson(event) {
   }
 
   const confirmed = globalThis.confirm(
-    `Import souboru ${file.name} prepise aktualni lokalni data v aplikaci. Chcete pokracovat?`,
+    `Import souboru ${file.name} prepise aktualni lokalni data v aplikaci. Pred importem bude stazena nouzova JSON zaloha. Chcete pokracovat?`,
   );
   if (!confirmed) {
     event.target.value = "";
@@ -226,6 +231,7 @@ async function importJson(event) {
   }
 
   try {
+    downloadJsonBackup("neurodiary-preimport", state.selectedDate || "backup");
     const raw = await file.text();
     const importedState = parseJsonBackup(raw);
     applyImportedState(importedState);
