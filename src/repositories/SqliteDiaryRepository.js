@@ -5,12 +5,14 @@ import {
   createDefaultHours,
   createInitialState,
   ensureEntry,
+  normalizeEntryHourRecords,
   normalizeState,
+  reconcileEntryHourState,
 } from "../domain/diary.js";
 import { DiaryRepository } from "./DiaryRepository.js";
 
 const STORAGE_KEY = "neurodiary-sqlite-db-v1";
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 const MIGRATIONS = [
   {
@@ -48,6 +50,24 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    version: 2,
+    run(db) {
+      db.run(`
+        ALTER TABLE diary_entries ADD COLUMN is_demo INTEGER NOT NULL DEFAULT 0;
+
+        CREATE TABLE IF NOT EXISTS hourly_state_records (
+          id TEXT PRIMARY KEY,
+          entry_date TEXT NOT NULL,
+          hour_label TEXT NOT NULL,
+          state_key TEXT NOT NULL,
+          recorded_at TEXT NOT NULL,
+          source TEXT NOT NULL,
+          FOREIGN KEY (entry_date) REFERENCES diary_entries(entry_date) ON DELETE CASCADE
+        );
+      `);
+    },
+  },
 ];
 
 function bytesToBase64(bytes) {
@@ -65,6 +85,10 @@ function base64ToBytes(base64) {
     bytes[index] = binary.charCodeAt(index);
   }
   return bytes;
+}
+
+function cloneSerializable(value) {
+  return JSON.parse(JSON.stringify(value));
 }
 
 export class SqliteDiaryRepository extends DiaryRepository {
@@ -128,6 +152,7 @@ export class SqliteDiaryRepository extends DiaryRepository {
     const selectedDate = this.selectSetting("selected_date");
     const patientName = this.selectSetting("patient_name");
     const birthYear = this.selectSetting("birth_year");
+    const accountJson = this.selectSetting("account_json");
     if (selectedDate) {
       state.selectedDate = selectedDate;
     }
@@ -137,21 +162,30 @@ export class SqliteDiaryRepository extends DiaryRepository {
     if (birthYear) {
       state.birthYear = birthYear;
     }
+    if (accountJson) {
+      try {
+        state.account = JSON.parse(accountJson);
+      } catch {
+        state.account = createInitialState().account;
+      }
+    }
 
     const entries = this.db.exec(`
-      SELECT entry_date, sleep_quality, overall_status, notes
+      SELECT entry_date, sleep_quality, overall_status, notes, is_demo
       FROM diary_entries
       ORDER BY entry_date
     `);
 
     if (entries[0]) {
-      for (const [entryDate, sleepQuality, overallStatus, notes] of entries[0].values) {
+      for (const [entryDate, sleepQuality, overallStatus, notes, isDemo] of entries[0].values) {
         state.entries[entryDate] = {
+          isDemo: Boolean(isDemo),
           sleepQuality,
           overallStatus,
           notes,
           medications: this.selectMedications(entryDate),
           hours: this.selectHours(entryDate),
+          hourRecords: this.selectHourRecords(entryDate),
         };
       }
     } else {
@@ -185,17 +219,28 @@ export class SqliteDiaryRepository extends DiaryRepository {
         "birth_year",
         state.birthYear ?? "",
       ]);
+      this.db.run("INSERT INTO app_settings (key, value) VALUES (?, ?)", [
+        "account_json",
+        JSON.stringify(state.account ?? createInitialState().account),
+      ]);
 
       for (const [entryDate, entry] of Object.entries(state.entries)) {
+        const normalizedEntry = reconcileEntryHourState(cloneSerializable(entry));
         this.db.run(
           `
-            INSERT INTO diary_entries (entry_date, sleep_quality, overall_status, notes)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO diary_entries (entry_date, sleep_quality, overall_status, notes, is_demo)
+            VALUES (?, ?, ?, ?, ?)
           `,
-          [entryDate, entry.sleepQuality, entry.overallStatus, entry.notes],
+          [
+            entryDate,
+            normalizedEntry.sleepQuality,
+            normalizedEntry.overallStatus,
+            normalizedEntry.notes,
+            normalizedEntry.isDemo ? 1 : 0,
+          ],
         );
 
-        for (const medication of entry.medications) {
+        for (const medication of normalizedEntry.medications) {
           this.db.run(
             `
               INSERT INTO medications (id, entry_date, name, dose, time)
@@ -205,7 +250,7 @@ export class SqliteDiaryRepository extends DiaryRepository {
           );
         }
 
-        for (const [hourLabel, stateKey] of Object.entries(entry.hours)) {
+        for (const [hourLabel, stateKey] of Object.entries(normalizedEntry.hours)) {
           this.db.run(
             `
               INSERT INTO hourly_states (entry_date, hour_label, state_key)
@@ -213,6 +258,18 @@ export class SqliteDiaryRepository extends DiaryRepository {
             `,
             [entryDate, hourLabel, stateKey],
           );
+        }
+
+        for (const [hourLabel, records] of Object.entries(normalizedEntry.hourRecords)) {
+          for (const record of records) {
+            this.db.run(
+              `
+                INSERT INTO hourly_state_records (id, entry_date, hour_label, state_key, recorded_at, source)
+                VALUES (?, ?, ?, ?, ?, ?)
+              `,
+              [record.id, entryDate, hourLabel, record.stateKey, record.recordedAt, record.source],
+            );
+          }
         }
       }
 
@@ -336,6 +393,40 @@ export class SqliteDiaryRepository extends DiaryRepository {
         results[row.hour_label] = row.state_key;
       }
       return Object.keys(results).length > 0 ? results : createDefaultHours();
+    } finally {
+      statement.free();
+    }
+  }
+
+  selectHourRecords(entryDate) {
+    const statement = this.db.prepare(`
+      SELECT id, hour_label, state_key, recorded_at, source
+      FROM hourly_state_records
+      WHERE entry_date = ?
+      ORDER BY hour_label, recorded_at, id
+    `);
+
+    try {
+      statement.bind([entryDate]);
+      const results = {};
+      while (statement.step()) {
+        const row = statement.getAsObject();
+        if (!results[row.hour_label]) {
+          results[row.hour_label] = [];
+        }
+
+        results[row.hour_label].push({
+          id: row.id,
+          stateKey: row.state_key,
+          recordedAt: row.recorded_at,
+          source: row.source,
+        });
+      }
+
+      return normalizeEntryHourRecords(
+        Object.keys(results).length > 0 ? results : null,
+        this.selectHours(entryDate),
+      );
     } finally {
       statement.free();
     }

@@ -15,17 +15,17 @@ export class LocalStorageDiaryRepository extends DiaryRepository {
   loadState() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      const demoState = normalizeState(createDemoState());
-      this.saveState(demoState);
-      return demoState;
+      const initialState = normalizeState(createDemoState());
+      this.saveState(initialState);
+      return initialState;
     }
 
     try {
       return normalizeState(JSON.parse(raw));
     } catch {
-      const demoState = normalizeState(createDemoState());
-      this.saveState(demoState);
-      return demoState;
+      const initialState = normalizeState(createDemoState());
+      this.saveState(initialState);
+      return initialState;
     }
   }
 

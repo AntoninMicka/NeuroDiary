@@ -13,6 +13,10 @@ const props = defineProps({
     type: Object,
     required: true,
   },
+  hourRecords: {
+    type: Object,
+    required: true,
+  },
   selectedDate: {
     type: String,
     required: true,
@@ -96,7 +100,12 @@ const canGoForward = computed(() => props.selectedDate < todayKey);
             {{ state.shortLabel }} · {{ state.label }}
           </option>
         </select>
-        <span class="hour-state">{{ getStateDefinition(stateKey).shortLabel }}</span>
+        <span class="hour-state">
+          {{ getStateDefinition(stateKey).shortLabel }}
+          <template v-if="(props.hourRecords?.[label]?.length ?? 0) > 1">
+            · {{ props.hourRecords[label].length }}x
+          </template>
+        </span>
       </label>
     </div>
   </section>

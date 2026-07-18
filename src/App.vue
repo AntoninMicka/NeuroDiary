@@ -8,9 +8,11 @@ import DailyTimeline from "./components/DailyTimeline.vue";
 import ManualSection from "./components/ManualSection.vue";
 import {
   HOUR_STATES,
+  appendHourStateRecord,
   createMedication,
   ensureEntry,
   formatLongDate,
+  getHourRecordCount,
   getStateDefinition,
   shiftDateKey,
   getTodayKey,
@@ -90,6 +92,8 @@ const showIosInstallGuide = computed(
 const isSelectedDateEditable = computed(() => state.selectedDate === getTodayKey());
 const showQuickCapture = computed(() => activePanelId.value === "sekce-home");
 const quickCaptureStateLabel = computed(() => getStateDefinition(selectedStateKey.value).label);
+const canUseDemoTools = computed(() => state.account?.isAuthenticated !== true);
+const currentHourRecordCount = computed(() => getHourRecordCount(selectedEntry.value, currentHourLabel.value));
 const activePanelIndex = computed(() =>
   PANEL_ITEMS.findIndex((item) => item.id === activePanelId.value),
 );
@@ -337,15 +341,23 @@ function removeMedication(medicationId) {
 }
 
 function updateHour({ label, stateKey }) {
-  selectedEntry.value.hours[label] = stateKey;
+  appendHourStateRecord(selectedEntry.value, label, stateKey, { source: "manual" });
+  storageMessage.value = `Stav ${getStateDefinition(stateKey).label} pridan pro hodinu ${label}.`;
 }
 
 function writeCurrentState() {
-  selectedEntry.value.hours[currentHourLabel.value] = selectedStateKey.value;
+  appendHourStateRecord(selectedEntry.value, currentHourLabel.value, selectedStateKey.value, {
+    source: "manual",
+  });
   storageMessage.value = `Stav ${getStateDefinition(selectedStateKey.value).label} zapsan pro hodinu ${currentHourLabel.value}.`;
 }
 
 function resetDemo() {
+  if (!canUseDemoTools.value) {
+    storageMessage.value = "Demo data jsou pro prihlaseny ucet zakazana.";
+    return;
+  }
+
   const fresh = diaryRepository.value.resetState();
   applyImportedState(fresh);
   storageMessage.value = "Demo data restored.";
@@ -563,7 +575,13 @@ function syncFloatingMenuHeight() {
                 <button class="utility-menu-item" type="button" role="menuitem" @click="handleUtilityAction(openJsonImportPicker)">
                   Import JSON
                 </button>
-                <button class="utility-menu-item utility-menu-item-danger" type="button" role="menuitem" @click="handleUtilityAction(resetDemo)">
+                <button
+                  v-if="canUseDemoTools"
+                  class="utility-menu-item utility-menu-item-danger"
+                  type="button"
+                  role="menuitem"
+                  @click="handleUtilityAction(resetDemo)"
+                >
                   Reset demo data
                 </button>
               </div>
@@ -624,6 +642,9 @@ function syncFloatingMenuHeight() {
             <h3>Zapsat aktualni stav</h3>
             <p class="panel-tip">
               Vyberte hodinu a stav. Pro detailni upravy pak muzete prejit do hodinove matice.
+            </p>
+            <p v-if="currentHourRecordCount > 1" class="panel-tip">
+              Pro tuto hodinu uz existuje {{ currentHourRecordCount }} zaznamu. Zobrazuje se posledni.
             </p>
           </div>
           <div class="floating-quick-capture-form">
@@ -727,6 +748,7 @@ function syncFloatingMenuHeight() {
           v-else-if="activePanelId === 'sekce-matice'"
           class="layout-matrix"
           :hours="selectedEntry.hours"
+          :hour-records="selectedEntry.hourRecords"
           :selected-date="state.selectedDate"
           @update-hour="updateHour"
           @select-date="updateSelectedDate"

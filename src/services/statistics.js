@@ -19,6 +19,9 @@ function shiftDateKey(dateKey, deltaDays) {
 
 export function summarizeHours(hours = {}) {
   return Object.values(hours).reduce((accumulator, item) => {
+    if (!HOUR_STATES.some((state) => state.key === item)) {
+      return accumulator;
+    }
     accumulator[item] = (accumulator[item] ?? 0) + 1;
     return accumulator;
   }, {});

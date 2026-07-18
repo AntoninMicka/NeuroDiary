@@ -11,6 +11,9 @@ export const TRACKING_HOURS = Array.from({ length: 20 }, (_, index) => {
   return String(hour);
 });
 
+const HOUR_STATE_KEYS = new Set(HOUR_STATES.map((state) => state.key));
+const HOUR_RECORD_DISPLAY_MODES = new Set(["latest", "mostFrequent"]);
+
 const DEMO_NOTES = [
   "Ranni ztuhlost se zlepsila po prvni davce.",
   "Po obede prislo mirne zpomaleni a horsi jistota chuze.",
@@ -23,6 +26,10 @@ const DEMO_NOTES = [
   "Dopoledne dobra kontrola hybnosti, po obede zpomaleni.",
   "Kratka epizoda mimovolnich pohybu v odpolednich hodinach.",
 ];
+
+function cloneSerializable(value) {
+  return JSON.parse(JSON.stringify(value));
+}
 
 export function generateId() {
   if (globalThis.crypto?.randomUUID) {
@@ -63,6 +70,22 @@ export function createDefaultHours() {
   return hours;
 }
 
+export function createHourStateRecord(payload) {
+  return {
+    id: payload.id ?? generateId(),
+    stateKey: normalizeHourState(payload.stateKey),
+    recordedAt: payload.recordedAt ?? new Date().toISOString(),
+    source: payload.source ?? "manual",
+  };
+}
+
+export function createHourRecordsFromHours(hours, source = "seed") {
+  return TRACKING_HOURS.reduce((accumulator, hourLabel) => {
+    accumulator[hourLabel] = [createHourStateRecord({ stateKey: hours[hourLabel], source })];
+    return accumulator;
+  }, {});
+}
+
 export function getStateDefinition(stateKey) {
   return HOUR_STATES.find((item) => item.key === stateKey) ?? HOUR_STATES[0];
 }
@@ -91,7 +114,9 @@ export function createMedication(payload) {
 }
 
 export function createDefaultEntry() {
+  const hours = createDefaultHours();
   return {
+    isDemo: false,
     sleepQuality: "good",
     overallStatus: "stable",
     notes: "Morning stiffness improved after first dose. Energy stable in the afternoon.",
@@ -100,7 +125,8 @@ export function createDefaultEntry() {
       createMedication({ name: "Levodopa", dose: "100 mg", time: "13:00" }),
       createMedication({ name: "Levodopa", dose: "100 mg", time: "18:00" }),
     ],
-    hours: createDefaultHours(),
+    hours,
+    hourRecords: createHourRecordsFromHours(hours),
   };
 }
 
@@ -109,6 +135,11 @@ export function createInitialState() {
     selectedDate: getTodayKey(),
     patientName: "",
     birthYear: "",
+    account: {
+      isAuthenticated: false,
+      provider: "",
+      userId: "",
+    },
     entries: {},
   };
 }
@@ -319,11 +350,13 @@ function createSimulatedEntry(dateKey, previousSignature = null) {
     const note = randomChoice(DEMO_NOTES);
 
     const entry = {
+      isDemo: true,
       sleepQuality: meta.sleepQuality,
       overallStatus: meta.overallStatus,
       notes: note,
       medications: createSimulatedMedications(attempt, dateKey),
       hours,
+      hourRecords: createHourRecordsFromHours(hours, "demo"),
     };
 
     const signature = buildEntrySignature(entry);
@@ -337,11 +370,13 @@ function createSimulatedEntry(dateKey, previousSignature = null) {
   const fallbackHours = createSimulatedHours(buildDayProfile());
   const fallbackMeta = deriveDayMeta(fallbackHours);
   const fallbackEntry = {
+    isDemo: true,
     sleepQuality: fallbackMeta.sleepQuality,
     overallStatus: fallbackMeta.overallStatus,
     notes: randomChoice(DEMO_NOTES),
     medications: createSimulatedMedications(randomInt(0, 999), dateKey),
     hours: fallbackHours,
+    hourRecords: createHourRecordsFromHours(fallbackHours, "demo"),
   };
 
   return { entry: fallbackEntry, signature: buildEntrySignature(fallbackEntry) };
@@ -372,6 +407,57 @@ export function normalizeHourState(stateKey) {
   return HOUR_STATES.some((item) => item.key === normalizedKey) ? normalizedKey : "on";
 }
 
+export function resolveHourStateRecords(records = [], displayMode = "latest") {
+  const safeDisplayMode = HOUR_RECORD_DISPLAY_MODES.has(displayMode) ? displayMode : "latest";
+  const normalizedRecords = records
+    .filter((record) => record && HOUR_STATE_KEYS.has(record.stateKey))
+    .sort((left, right) => {
+      const leftTime = Date.parse(left.recordedAt ?? "") || 0;
+      const rightTime = Date.parse(right.recordedAt ?? "") || 0;
+      return leftTime - rightTime;
+    });
+
+  if (normalizedRecords.length === 0) {
+    return null;
+  }
+
+  if (safeDisplayMode === "mostFrequent") {
+    const counts = new Map();
+    for (const record of normalizedRecords) {
+      counts.set(record.stateKey, (counts.get(record.stateKey) ?? 0) + 1);
+    }
+
+    return [...counts.entries()].sort((left, right) => right[1] - left[1])[0]?.[0] ?? null;
+  }
+
+  return normalizedRecords.at(-1)?.stateKey ?? null;
+}
+
+export function normalizeHourRecords(rawRecords = [], fallbackStateKey = "on") {
+  if (!Array.isArray(rawRecords) || rawRecords.length === 0) {
+    return [createHourStateRecord({ stateKey: fallbackStateKey, source: "legacy" })];
+  }
+
+  const normalizedRecords = rawRecords
+    .map((record) =>
+      createHourStateRecord({
+        id: record?.id,
+        stateKey: record?.stateKey ?? record,
+        recordedAt: record?.recordedAt,
+        source: record?.source ?? "legacy",
+      }),
+    )
+    .sort((left, right) => {
+      const leftTime = Date.parse(left.recordedAt ?? "") || 0;
+      const rightTime = Date.parse(right.recordedAt ?? "") || 0;
+      return leftTime - rightTime;
+    });
+
+  return normalizedRecords.length > 0
+    ? normalizedRecords
+    : [createHourStateRecord({ stateKey: fallbackStateKey, source: "legacy" })];
+}
+
 export function normalizeEntryHours(rawHours) {
   const normalizedHours = createDefaultHours();
 
@@ -392,12 +478,75 @@ export function normalizeEntryHours(rawHours) {
   return normalizedHours;
 }
 
+export function normalizeEntryHourRecords(rawHourRecords, rawHours = null) {
+  const fallbackHours = rawHours ? normalizeEntryHours(rawHours) : createDefaultHours();
+  const normalizedHourRecords = {};
+
+  for (const hourLabel of TRACKING_HOURS) {
+    const rawRecords = rawHourRecords?.[hourLabel];
+    normalizedHourRecords[hourLabel] = normalizeHourRecords(rawRecords, fallbackHours[hourLabel]);
+  }
+
+  return normalizedHourRecords;
+}
+
+export function buildResolvedHoursFromHourRecords(hourRecords, displayMode = "latest") {
+  const resolvedHours = {};
+
+  for (const hourLabel of TRACKING_HOURS) {
+    const resolvedState = resolveHourStateRecords(hourRecords?.[hourLabel], displayMode);
+    resolvedHours[hourLabel] = resolvedState ?? "on";
+  }
+
+  return resolvedHours;
+}
+
+export function reconcileEntryHourState(entry, displayMode = "latest") {
+  entry.hourRecords = normalizeEntryHourRecords(entry.hourRecords, entry.hours);
+  entry.hours = buildResolvedHoursFromHourRecords(entry.hourRecords, displayMode);
+  return entry;
+}
+
+export function appendHourStateRecord(entry, hourLabel, stateKey, options = {}) {
+  const safeHourLabel = String(hourLabel);
+  if (!TRACKING_HOURS.includes(safeHourLabel)) {
+    return entry;
+  }
+
+  entry.hourRecords = normalizeEntryHourRecords(entry.hourRecords, entry.hours);
+  const nextRecord = createHourStateRecord({
+    stateKey,
+    source: options.source ?? "manual",
+    recordedAt: options.recordedAt,
+  });
+
+  entry.hourRecords[safeHourLabel].push(nextRecord);
+  entry.hours[safeHourLabel] = resolveHourStateRecords(entry.hourRecords[safeHourLabel]) ?? "on";
+  return entry;
+}
+
+export function getHourRecordCount(entry, hourLabel) {
+  return entry?.hourRecords?.[hourLabel]?.length ?? 0;
+}
+
+export function entryContainsDemoData(entry) {
+  return entry?.isDemo === true;
+}
+
+export function stateContainsDemoData(state) {
+  return Object.values(state?.entries ?? {}).some((entry) => entryContainsDemoData(entry));
+}
+
 export function ensureEntry(state, dateKey) {
   if (!state.entries[dateKey]) {
     state.entries[dateKey] = createDefaultEntry();
   }
 
-  state.entries[dateKey].hours = normalizeEntryHours(state.entries[dateKey].hours);
+  if (typeof state.entries[dateKey].isDemo !== "boolean") {
+    state.entries[dateKey].isDemo = false;
+  }
+
+  reconcileEntryHourState(state.entries[dateKey]);
 
   return state.entries[dateKey];
 }
@@ -421,8 +570,19 @@ export function normalizeState(parsed) {
     state.birthYear = "";
   }
 
+  if (!state.account || typeof state.account !== "object") {
+    state.account = createInitialState().account;
+  }
+
+  state.account.isAuthenticated = state.account.isAuthenticated === true;
+  state.account.provider = typeof state.account.provider === "string" ? state.account.provider : "";
+  state.account.userId = typeof state.account.userId === "string" ? state.account.userId : "";
+
   for (const entry of Object.values(state.entries)) {
-    entry.hours = normalizeEntryHours(entry.hours);
+    if (typeof entry.isDemo !== "boolean") {
+      entry.isDemo = false;
+    }
+    reconcileEntryHourState(entry);
   }
 
   ensureEntry(state, state.selectedDate);
@@ -432,9 +592,74 @@ export function normalizeState(parsed) {
 
 export function summarizeHours(hours) {
   return Object.values(hours).reduce((accumulator, item) => {
+    if (!HOUR_STATE_KEYS.has(item)) {
+      return accumulator;
+    }
     accumulator[item] = (accumulator[item] ?? 0) + 1;
     return accumulator;
   }, {});
+}
+
+export function mergeDiaryStatesAppendOnly(baseState, incomingState) {
+  const normalizedBaseState = normalizeState(cloneSerializable(baseState));
+  const normalizedIncomingState = normalizeState(cloneSerializable(incomingState));
+  const mergedState = normalizeState(cloneSerializable(baseState));
+
+  mergedState.patientName = normalizedIncomingState.patientName || normalizedBaseState.patientName;
+  mergedState.birthYear = normalizedIncomingState.birthYear || normalizedBaseState.birthYear;
+  mergedState.account = {
+    ...normalizedBaseState.account,
+    ...normalizedIncomingState.account,
+  };
+
+  for (const [dateKey, incomingEntry] of Object.entries(normalizedIncomingState.entries)) {
+    const baseEntry = mergedState.entries[dateKey] ?? createDefaultEntry();
+    ensureEntry(mergedState, dateKey);
+
+    mergedState.entries[dateKey] = {
+      ...baseEntry,
+      ...incomingEntry,
+      isDemo: baseEntry.isDemo || incomingEntry.isDemo,
+      medications: mergeMedicationsAppendOnly(baseEntry.medications, incomingEntry.medications),
+      hourRecords: mergeHourRecordsAppendOnly(baseEntry.hourRecords, incomingEntry.hourRecords),
+    };
+
+    reconcileEntryHourState(mergedState.entries[dateKey]);
+  }
+
+  return normalizeState(mergedState);
+}
+
+function mergeMedicationsAppendOnly(baseMedications = [], incomingMedications = []) {
+  const mergedById = new Map(baseMedications.map((medication) => [medication.id, medication]));
+
+  for (const medication of incomingMedications) {
+    if (!mergedById.has(medication.id)) {
+      mergedById.set(medication.id, medication);
+    }
+  }
+
+  return [...mergedById.values()].sort((left, right) => left.time.localeCompare(right.time));
+}
+
+function mergeHourRecordsAppendOnly(baseHourRecords = {}, incomingHourRecords = {}) {
+  const mergedHourRecords = normalizeEntryHourRecords(baseHourRecords);
+
+  for (const hourLabel of TRACKING_HOURS) {
+    const mergedById = new Map(mergedHourRecords[hourLabel].map((record) => [record.id, record]));
+    for (const record of normalizeHourRecords(incomingHourRecords[hourLabel], mergedHourRecords[hourLabel][0]?.stateKey)) {
+      if (!mergedById.has(record.id)) {
+        mergedById.set(record.id, record);
+      }
+    }
+    mergedHourRecords[hourLabel] = [...mergedById.values()].sort((left, right) => {
+      const leftTime = Date.parse(left.recordedAt ?? "") || 0;
+      const rightTime = Date.parse(right.recordedAt ?? "") || 0;
+      return leftTime - rightTime;
+    });
+  }
+
+  return mergedHourRecords;
 }
 
 export function formatSleepQuality(value) {
