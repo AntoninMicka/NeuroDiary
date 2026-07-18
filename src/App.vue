@@ -27,6 +27,9 @@ const repositoryMode = ref("loading");
 const storageMessage = ref("");
 const currentHourLabel = ref(getTrackableHourLabel());
 const selectedStateKey = ref("on");
+const deferredInstallPrompt = ref(null);
+const canInstallApp = ref(false);
+const isInstalledApp = ref(false);
 const state = reactive({
   selectedDate: getTodayKey(),
   patientName: "",
@@ -41,6 +44,7 @@ const sortedMedications = computed(() =>
 );
 
 let menuResizeObserver = null;
+let mediaQueryList = null;
 
 watch(
   state,
@@ -54,6 +58,10 @@ watch(
 );
 
 onMounted(async () => {
+  initializeInstallState();
+  globalThis.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+  globalThis.addEventListener("appinstalled", handleAppInstalled);
+
   const repository = await createDiaryRepository();
   const initialState = repository.loadState();
   Object.assign(state, initialState);
@@ -74,6 +82,9 @@ onMounted(async () => {
 
 onUnmounted(() => {
   menuResizeObserver?.disconnect();
+  mediaQueryList?.removeEventListener?.("change", syncInstallState);
+  globalThis.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+  globalThis.removeEventListener("appinstalled", handleAppInstalled);
 });
 
 function updateSelectedDate(dateKey) {
@@ -98,6 +109,51 @@ function updateCurrentHourLabel(value) {
 
 function updateSelectedStateKey(value) {
   selectedStateKey.value = value;
+}
+
+function initializeInstallState() {
+  syncInstallState();
+
+  if (globalThis.matchMedia) {
+    mediaQueryList = globalThis.matchMedia("(display-mode: standalone)");
+    mediaQueryList.addEventListener?.("change", syncInstallState);
+  }
+}
+
+function syncInstallState() {
+  const isStandalone = globalThis.matchMedia?.("(display-mode: standalone)")?.matches ?? false;
+  const isIosStandalone = globalThis.navigator?.standalone === true;
+  isInstalledApp.value = isStandalone || isIosStandalone;
+  canInstallApp.value = Boolean(deferredInstallPrompt.value) && !isInstalledApp.value;
+}
+
+function handleBeforeInstallPrompt(event) {
+  event.preventDefault();
+  deferredInstallPrompt.value = event;
+  syncInstallState();
+}
+
+function handleAppInstalled() {
+  deferredInstallPrompt.value = null;
+  isInstalledApp.value = true;
+  canInstallApp.value = false;
+  storageMessage.value = "Aplikace byla nainstalovana do zarizeni.";
+}
+
+async function promptInstall() {
+  if (!deferredInstallPrompt.value) {
+    return;
+  }
+
+  deferredInstallPrompt.value.prompt();
+  const result = await deferredInstallPrompt.value.userChoice;
+
+  if (result.outcome === "accepted") {
+    storageMessage.value = "Instalace aplikace potvrzena.";
+  }
+
+  deferredInstallPrompt.value = null;
+  syncInstallState();
 }
 
 function addMedication(payload) {
@@ -273,6 +329,23 @@ function syncFloatingMenuHeight() {
             A structured offline diary for daily symptom tracking, medication timing, and rapid
             trend review.
           </p>
+          <div class="hero-actions">
+            <button
+              v-if="canInstallApp"
+              class="primary-button"
+              type="button"
+              @click="promptInstall"
+            >
+              Install app
+            </button>
+            <p v-else-if="isInstalledApp" class="hero-install-note">
+              App is installed and ready for offline use from your device.
+            </p>
+            <p v-else class="hero-install-note">
+              PWA support is enabled. Once the browser allows installation, the install action will
+              appear here.
+            </p>
+          </div>
         </div>
       </header>
 

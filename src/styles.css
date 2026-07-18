@@ -117,6 +117,21 @@ textarea {
   margin: 0.9rem 0 0;
 }
 
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+  align-items: center;
+  margin-top: 1.1rem;
+}
+
+.hero-install-note {
+  margin: 0;
+  max-width: 34rem;
+  color: var(--muted);
+  font-size: 0.94rem;
+}
+
 .floating-menu,
 .panel {
   background: var(--surface);

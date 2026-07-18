@@ -23,3 +23,4 @@ It also includes:
 - export of a local `.sqlite` backup
 - import of an existing `.sqlite` backup
 - printable doctor report for the selected diary day
+- installable PWA shell with manifest and service worker caching
