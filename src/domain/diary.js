@@ -623,20 +623,26 @@ export function summarizeHours(hours) {
 }
 
 export function mergeDiaryStatesAppendOnly(baseState, incomingState) {
+  const incomingEntryKeys = Object.keys(incomingState?.entries ?? {});
   const normalizedBaseState = normalizeState(cloneSerializable(baseState));
   const normalizedIncomingState = normalizeState(cloneSerializable(incomingState));
   const mergedState = normalizeState(cloneSerializable(baseState));
 
-  // Patient profile should follow the side that is currently being merged in,
-  // including intentional clears to an empty string.
-  mergedState.patientName = normalizedIncomingState.patientName ?? normalizedBaseState.patientName;
-  mergedState.birthYear = normalizedIncomingState.birthYear ?? normalizedBaseState.birthYear;
+  mergedState.patientName = selectPreferredProfileValue(
+    normalizedBaseState.patientName,
+    normalizedIncomingState.patientName,
+  );
+  mergedState.birthYear = selectPreferredProfileValue(
+    normalizedBaseState.birthYear,
+    normalizedIncomingState.birthYear,
+  );
   mergedState.account = {
     ...normalizedBaseState.account,
     ...normalizedIncomingState.account,
   };
 
-  for (const [dateKey, incomingEntry] of Object.entries(normalizedIncomingState.entries)) {
+  for (const dateKey of incomingEntryKeys) {
+    const incomingEntry = normalizedIncomingState.entries[dateKey];
     const baseEntry = mergedState.entries[dateKey] ?? createDefaultEntry();
     ensureEntry(mergedState, dateKey);
 
@@ -654,8 +660,21 @@ export function mergeDiaryStatesAppendOnly(baseState, incomingState) {
   return normalizeState(mergedState);
 }
 
+function selectPreferredProfileValue(baseValue = "", incomingValue = "") {
+  const normalizedBaseValue = typeof baseValue === "string" ? baseValue : "";
+  const normalizedIncomingValue = typeof incomingValue === "string" ? incomingValue : "";
+  if (normalizedIncomingValue.trim()) {
+    return normalizedIncomingValue;
+  }
+  return normalizedBaseValue;
+}
+
 function replaceMedications(baseMedications = [], incomingMedications = []) {
-  const sourceMedications = Array.isArray(incomingMedications) ? incomingMedications : baseMedications;
+  const hasIncomingMedications = Array.isArray(incomingMedications) && incomingMedications.length > 0;
+  const hasBaseMedications = Array.isArray(baseMedications) && baseMedications.length > 0;
+  const sourceMedications = hasIncomingMedications || !hasBaseMedications
+    ? incomingMedications
+    : baseMedications;
   return sourceMedications
     .map((medication) => ({ ...medication }))
     .sort((left, right) => left.time.localeCompare(right.time));
