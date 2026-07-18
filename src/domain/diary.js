@@ -739,7 +739,6 @@ export function prepareStateForSync(state) {
       delete preparedState.entries[dateKey];
     } else {
       entry.hours = buildResolvedHoursFromHourRecords(entry.hourRecords, "latest");
-      delete preparedState.deletedEntryDates[dateKey];
     }
   }
 
@@ -789,14 +788,18 @@ export function mergeDiaryStatesAppendOnly(baseState, incomingState) {
   };
 
   for (const dateKey of allDateKeys) {
-    const baseEntry = normalizedBaseState.entries[dateKey] ?? null;
-    const incomingEntry = normalizedIncomingState.entries[dateKey];
     const deletionAt = selectLatestIsoDateTime(
       normalizedBaseState.deletedEntryDates?.[dateKey] ?? "",
       normalizedIncomingState.deletedEntryDates?.[dateKey] ?? "",
     );
-    const baseEntryUpdatedAt = baseEntry?.updatedAt ?? "";
-    const incomingEntryUpdatedAt = incomingEntry?.updatedAt ?? "";
+    const rawBaseEntry = normalizedBaseState.entries[dateKey] ?? null;
+    const rawIncomingEntry = normalizedIncomingState.entries[dateKey] ?? null;
+    const baseEntryUpdatedAt = rawBaseEntry?.updatedAt ?? "";
+    const incomingEntryUpdatedAt = rawIncomingEntry?.updatedAt ?? "";
+    const baseEntry =
+      deletionAt && compareIsoDateTimes(deletionAt, baseEntryUpdatedAt) >= 0 ? null : rawBaseEntry;
+    const incomingEntry =
+      deletionAt && compareIsoDateTimes(deletionAt, incomingEntryUpdatedAt) >= 0 ? null : rawIncomingEntry;
     const latestEntryUpdatedAt = selectLatestIsoDateTime(baseEntryUpdatedAt, incomingEntryUpdatedAt);
 
     if (deletionAt && compareIsoDateTimes(deletionAt, latestEntryUpdatedAt) >= 0) {
@@ -820,7 +823,9 @@ export function mergeDiaryStatesAppendOnly(baseState, incomingState) {
     };
 
     reconcileEntryHourState(mergedState.entries[dateKey]);
-    delete mergedState.deletedEntryDates[dateKey];
+    if (deletionAt) {
+      mergedState.deletedEntryDates[dateKey] = deletionAt;
+    }
   }
 
   return normalizeState(mergedState);

@@ -9,7 +9,6 @@ import ManualSection from "./components/ManualSection.vue";
 import {
   HOUR_STATES,
   appendHourStateRecord,
-  clearDeletedEntryDate,
   clearHourStateRecords,
   createInitialState,
   createMedication,
@@ -406,7 +405,6 @@ function updateSelectedDate(dateKey) {
 }
 
 function updateEntry(nextEntry) {
-  clearDeletedEntryDate(state, state.selectedDate);
   state.entries[state.selectedDate] = {
     ...state.entries[state.selectedDate],
     ...nextEntry,
@@ -628,13 +626,11 @@ function goToNextDate() {
 }
 
 function addMedication(payload) {
-  clearDeletedEntryDate(state, state.selectedDate);
   selectedEntry.value.medications.push(createMedication(payload));
   selectedEntry.value.updatedAt = new Date().toISOString();
 }
 
 function removeMedication(medicationId) {
-  clearDeletedEntryDate(state, state.selectedDate);
   selectedEntry.value.medications = selectedEntry.value.medications.filter(
     (item) => item.id !== medicationId,
   );
@@ -677,7 +673,6 @@ function recordMedicationFromPlan() {
 }
 
 function updateHour({ label, stateKey }) {
-  clearDeletedEntryDate(state, state.selectedDate);
   if (!stateKey) {
     clearHourStateRecords(selectedEntry.value, label);
     storageMessage.value = `Zaznam pro hodinu ${label} byl vymazan.`;
@@ -689,7 +684,6 @@ function updateHour({ label, stateKey }) {
 }
 
 function writeCurrentState() {
-  clearDeletedEntryDate(state, state.selectedDate);
   appendHourStateRecord(selectedEntry.value, currentHourLabel.value, selectedStateKey.value, {
     source: "manual",
   });
