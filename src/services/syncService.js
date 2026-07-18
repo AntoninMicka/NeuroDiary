@@ -211,7 +211,9 @@ async function fetchJson(url, options = {}) {
   const payload = await response.json().catch(() => null);
 
   if (!response.ok) {
-    throw new Error(payload?.detail ?? `Sync request failed with HTTP ${response.status}.`);
+    throw new Error(
+      normalizeSyncMessage(payload?.detail ?? payload ?? `Sync request failed with HTTP ${response.status}.`),
+    );
   }
 
   return payload;
