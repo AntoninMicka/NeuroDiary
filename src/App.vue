@@ -7,6 +7,7 @@ import DaySummary from "./components/DaySummary.vue";
 import DailyTimeline from "./components/DailyTimeline.vue";
 import ManualSection from "./components/ManualSection.vue";
 import {
+  HOUR_STATES,
   createMedication,
   ensureEntry,
   formatLongDate,
@@ -35,6 +36,7 @@ const platformInstallMode = ref("browser");
 const isOnline = ref(globalThis.navigator?.onLine ?? true);
 const pwaOfflineReady = ref(false);
 const pwaUpdateRegistration = ref(null);
+const activePanelId = ref(getActivePanelFromLocation());
 const state = reactive({
   selectedDate: getTodayKey(),
   patientName: "",
@@ -65,6 +67,11 @@ const installHelpText = computed(() => {
 const showIosInstallGuide = computed(
   () => !isInstalledApp.value && platformInstallMode.value === "ios-share-sheet",
 );
+const isSelectedDateEditable = computed(() => state.selectedDate === getTodayKey());
+const showQuickCapture = computed(
+  () => !activePanelId.value || activePanelId.value === "sekce-home",
+);
+const quickCaptureStateLabel = computed(() => getStateDefinition(selectedStateKey.value).label);
 
 let menuResizeObserver = null;
 let mediaQueryList = null;
@@ -82,10 +89,12 @@ watch(
 
 onMounted(async () => {
   initializeInstallState();
+  handleHashChange();
   globalThis.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
   globalThis.addEventListener("appinstalled", handleAppInstalled);
   globalThis.addEventListener("online", handleConnectionChange);
   globalThis.addEventListener("offline", handleConnectionChange);
+  globalThis.addEventListener("hashchange", handleHashChange);
   globalThis.addEventListener(OFFLINE_READY_EVENT, handleOfflineReady);
   globalThis.addEventListener(UPDATE_READY_EVENT, handleUpdateReady);
 
@@ -118,6 +127,7 @@ onUnmounted(() => {
   globalThis.removeEventListener("appinstalled", handleAppInstalled);
   globalThis.removeEventListener("online", handleConnectionChange);
   globalThis.removeEventListener("offline", handleConnectionChange);
+  globalThis.removeEventListener("hashchange", handleHashChange);
   globalThis.removeEventListener(OFFLINE_READY_EVENT, handleOfflineReady);
   globalThis.removeEventListener(UPDATE_READY_EVENT, handleUpdateReady);
   navigator.serviceWorker?.removeEventListener?.("controllerchange", handleControllerChange);
@@ -145,6 +155,10 @@ function updateCurrentHourLabel(value) {
 
 function updateSelectedStateKey(value) {
   selectedStateKey.value = value;
+}
+
+function getActivePanelFromLocation() {
+  return globalThis.location?.hash?.replace(/^#/, "") ?? "";
 }
 
 function initializeInstallState() {
@@ -194,6 +208,13 @@ function handleAppInstalled() {
 
 function handleConnectionChange() {
   isOnline.value = globalThis.navigator?.onLine ?? true;
+}
+
+function handleHashChange() {
+  activePanelId.value = getActivePanelFromLocation();
+  void nextTick(() => {
+    syncFloatingMenuHeight();
+  });
 }
 
 function handleOfflineReady() {
@@ -398,6 +419,7 @@ function syncFloatingMenuHeight() {
 
     <template v-else>
       <header class="hero">
+        <a id="sekce-home" class="hero-anchor" aria-hidden="true"></a>
         <div class="hero-copy">
           <p class="eyebrow">Vue prototype</p>
           <h1>NeuroDiary</h1>
@@ -451,6 +473,7 @@ function syncFloatingMenuHeight() {
         </div>
 
         <nav class="section-nav" aria-label="Rychla navigace">
+          <a href="#sekce-home">Rychly zapis</a>
           <a href="#sekce-udaje">Udaje</a>
           <a href="#sekce-matice">Hodinova matice</a>
           <a href="#sekce-osa">Casova osa</a>
@@ -459,6 +482,55 @@ function syncFloatingMenuHeight() {
           <a href="#sekce-souhrn">Souhrn</a>
           <a href="#sekce-manualy">Manualy</a>
         </nav>
+
+        <div v-if="showQuickCapture" class="floating-quick-capture">
+          <div class="floating-quick-capture-copy">
+            <p class="section-kicker">Rychly zapis</p>
+            <h3>Zapsat aktualni stav</h3>
+            <p class="panel-tip">
+              Vyberte hodinu a stav. Pro detailni upravy pak muzete prejit do hodinove matice.
+            </p>
+          </div>
+          <div class="floating-quick-capture-form">
+            <label>
+              <span>Aktualni hodina</span>
+              <select
+                :value="currentHourLabel"
+                :disabled="!isSelectedDateEditable"
+                @input="updateCurrentHourLabel($event.target.value)"
+              >
+                <option v-for="hourLabel in Object.keys(selectedEntry.hours)" :key="hourLabel" :value="hourLabel">
+                  {{ hourLabel }}
+                </option>
+              </select>
+            </label>
+
+            <label>
+              <span>Aktualni stav</span>
+              <select
+                :value="selectedStateKey"
+                :disabled="!isSelectedDateEditable"
+                @input="updateSelectedStateKey($event.target.value)"
+              >
+                <option v-for="item in HOUR_STATES" :key="item.key" :value="item.key">
+                  {{ item.label }}
+                </option>
+              </select>
+            </label>
+
+            <button
+              class="primary-button"
+              type="button"
+              :disabled="!isSelectedDateEditable"
+              @click="writeCurrentState"
+            >
+              Zapsat {{ quickCaptureStateLabel }}
+            </button>
+          </div>
+          <p v-if="!isSelectedDateEditable" class="matrix-readonly-note floating-quick-capture-note">
+            Rychly zapis je dostupny jen pro dnesni datum. Pro historicky den pouzijte jen nahled.
+          </p>
+        </div>
 
         <div v-if="!isOnline" class="status-banner status-banner-offline" role="status">
           <p>Pracujete offline. Zaznamy se ukladaji lokalne a synchronni akce zavisle na siti nejsou potreba.</p>
@@ -520,13 +592,8 @@ function syncFloatingMenuHeight() {
           id="sekce-matice"
           class="layout-matrix"
           :hours="selectedEntry.hours"
-          :current-hour-label="currentHourLabel"
-          :selected-state-key="selectedStateKey"
           :selected-date="state.selectedDate"
           @update-hour="updateHour"
-          @update-current-hour-label="updateCurrentHourLabel"
-          @update-selected-state-key="updateSelectedStateKey"
-          @write-current-state="writeCurrentState"
           @select-date="updateSelectedDate"
         />
 
