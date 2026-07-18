@@ -516,8 +516,9 @@ export function buildResolvedHoursFromHourRecords(hourRecords, displayMode = "la
   return resolvedHours;
 }
 
-export function reconcileEntryHourState(entry, displayMode = "latest") {
-  entry.hourRecords = normalizeEntryHourRecords(entry.hourRecords, entry.hours);
+export function reconcileEntryHourState(entry, displayMode = "latest", options = {}) {
+  const { hydrateFromHours = true } = options;
+  entry.hourRecords = normalizeEntryHourRecords(entry.hourRecords, hydrateFromHours ? entry.hours : null);
   entry.hours = buildResolvedHoursFromHourRecords(entry.hourRecords, displayMode);
   return entry;
 }
@@ -614,7 +615,7 @@ function normalizeDeletedEntryDates(rawDeletedEntryDates) {
   );
 }
 
-function sanitizeStateShape(parsed, { ensureSelectedDate = true } = {}) {
+function sanitizeStateShape(parsed, { ensureSelectedDate = true, hydrateHourRecordsFromHours = true } = {}) {
   const state = parsed && typeof parsed === "object" ? parsed : createInitialState();
 
   if (!state.selectedDate) {
@@ -662,7 +663,7 @@ function sanitizeStateShape(parsed, { ensureSelectedDate = true } = {}) {
         .map((item) => createMedication(item))
         .sort((left, right) => left.time.localeCompare(right.time));
     }
-    reconcileEntryHourState(entry);
+    reconcileEntryHourState(entry, "latest", { hydrateFromHours: hydrateHourRecordsFromHours });
   }
 
   if (ensureSelectedDate) {
@@ -673,11 +674,11 @@ function sanitizeStateShape(parsed, { ensureSelectedDate = true } = {}) {
 }
 
 export function normalizeState(parsed) {
-  return sanitizeStateShape(parsed, { ensureSelectedDate: true });
+  return sanitizeStateShape(parsed, { ensureSelectedDate: true, hydrateHourRecordsFromHours: true });
 }
 
 export function normalizeStateForSync(parsed) {
-  return sanitizeStateShape(parsed, { ensureSelectedDate: false });
+  return sanitizeStateShape(parsed, { ensureSelectedDate: false, hydrateHourRecordsFromHours: false });
 }
 
 export function entryHasMeaningfulData(entry) {
@@ -737,6 +738,7 @@ export function prepareStateForSync(state) {
     if (deletionWins || !entryHasMeaningfulData(entry)) {
       delete preparedState.entries[dateKey];
     } else {
+      entry.hours = buildResolvedHoursFromHourRecords(entry.hourRecords, "latest");
       delete preparedState.deletedEntryDates[dateKey];
     }
   }
