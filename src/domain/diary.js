@@ -382,7 +382,7 @@ function createSimulatedEntry(dateKey, previousSignature = null) {
   return { entry: fallbackEntry, signature: buildEntrySignature(fallbackEntry) };
 }
 
-export function createDemoState(days = 120) {
+export function createDemoState(days = 21) {
   const state = createInitialState();
   state.patientName = "Jan Novak";
   state.birthYear = "1958";

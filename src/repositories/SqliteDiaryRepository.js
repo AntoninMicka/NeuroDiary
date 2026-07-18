@@ -199,11 +199,12 @@ export class SqliteDiaryRepository extends DiaryRepository {
   }
 
   saveState(state) {
-    this.db.run("BEGIN");
+      this.db.run("BEGIN");
 
     try {
       this.db.run("DELETE FROM app_settings");
       this.db.run("DELETE FROM medications");
+      this.db.run("DELETE FROM hourly_state_records");
       this.db.run("DELETE FROM hourly_states");
       this.db.run("DELETE FROM diary_entries");
 
