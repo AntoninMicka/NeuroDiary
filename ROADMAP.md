@@ -7,6 +7,7 @@ Aktuální směr projektu:
 3. První cloud target je `Google Cloud Run`.
 4. Přihlášení má jít směrem `Google ID` a `Sign in with Apple`.
 5. Synchronizace má počítat s `end-to-end šifrováním`.
-6. Nejbližší priorita je návrh E2E šifrování a potom napojení klienta na sync API.
+6. Deploy backendu má jít přes `GitHub Actions -> Artifact Registry -> Cloud Run`.
+7. Sync backend má být provozovaný nad perzistentní cloudovou DB, primárně `Cloud SQL for PostgreSQL`.
 
 Detailní roadmapa je v `development_roadmap_todolist.md`.

@@ -259,6 +259,21 @@ Navazující kroky:
 
 ### [pending] 5.2 Šifrování dat
 
+### [in_progress] 5.3 Cloud deploy a sync infrastruktura
+
+Aktuální stav:
+
+* připraven workflow `GitHub Actions -> Cloud Run`
+* připraven deploy přes `Workload Identity Federation`
+* backend umí `PostgreSQL` přes `NEURODIARY_DATABASE_URL`
+* SQLite zůstává jako lokální vývojový fallback
+
+Navazující kroky:
+
+* připravit konkrétní `Cloud SQL` provisioning a connection string variantu
+* doplnit produkční konfiguraci Cloud Run služby
+* oddělit testovací deploy od ostrého sync prostředí
+
 Rozhodnutí pro cloudovou synchronizaci:
 
 * end-to-end šifrování dat deníku

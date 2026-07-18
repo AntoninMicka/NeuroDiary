@@ -24,8 +24,11 @@ uvicorn backend.app.main:app --reload
 
 - `NEURODIARY_API_TOKEN`
   Pokud je vyplneny, API vyzaduje `Authorization: Bearer <token>`.
+- `NEURODIARY_DATABASE_URL`
+  Preferovana produkcni cesta. Aktalne podporuje `postgresql://...` nebo `postgres://...`.
+  Pokud je nastavena, ma prednost pred lokalnim SQLite souborem.
 - `NEURODIARY_DATABASE_PATH`
-  Cesta k serverove SQLite databazi.
+  Cesta k serverove SQLite databazi pro lokalni vyvoj a fallback.
 - `NEURODIARY_CORS_ORIGINS`
   Seznam frontend originu oddelenych carkou.
 - `NEURODIARY_DEFAULT_USER_ID`
@@ -41,6 +44,13 @@ docker run -p 8080:8080 \
   -v $(pwd)/backend-data:/data \
   neurodiary-sync
 ```
+
+## Produkcni smer
+
+Backend uz umi bezet nad `PostgreSQL` pres `NEURODIARY_DATABASE_URL`, takze je pripraveny
+pro centralni databazi vhodnou pro `Cloud Run`.
+
+Lokalni SQLite varianta zustava zachovana hlavne pro lokalni vyvoj a rychle testovani.
 
 ## Poznamka
 

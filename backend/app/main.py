@@ -7,12 +7,13 @@ from fastapi import Depends, FastAPI, Header, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 
 from .models import SyncPullResponseModel, SyncPushRequestModel, SyncPushResponseModel
-from .store import RevisionConflictError, SyncStore
+from .store import RevisionConflictError, create_sync_store
 
 
 APP_NAME = "NeuroDiary Sync API"
 DEFAULT_USER_ID = os.getenv("NEURODIARY_DEFAULT_USER_ID", "default")
 API_TOKEN = os.getenv("NEURODIARY_API_TOKEN", "")
+DATABASE_URL = os.getenv("NEURODIARY_DATABASE_URL", "").strip()
 DATABASE_PATH = os.getenv("NEURODIARY_DATABASE_PATH", "backend/data/neurodiary-sync.db")
 CORS_ORIGINS = [
     origin.strip()
@@ -20,7 +21,7 @@ CORS_ORIGINS = [
     if origin.strip()
 ]
 
-store = SyncStore(DATABASE_PATH)
+store = create_sync_store(database_url=DATABASE_URL or None, database_path=DATABASE_PATH)
 app = FastAPI(title=APP_NAME, version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
@@ -54,7 +55,8 @@ def verify_bearer_token(
 
 @app.get("/healthz")
 def healthcheck() -> dict[str, str]:
-    return {"status": "ok"}
+    backend = "postgres" if DATABASE_URL else "sqlite"
+    return {"status": "ok", "storage": backend}
 
 
 @app.get("/api/v1/sync/pull", response_model=SyncPullResponseModel)
