@@ -138,6 +138,7 @@ const syncStatusSummary = computed(() => {
 
 let menuResizeObserver = null;
 let mediaQueryList = null;
+const SERVICE_WORKER_RELOAD_GUARD_KEY = "neurodiary-sw-reload-guard-v1";
 
 watch(
   state,
@@ -280,6 +281,12 @@ function handleUpdateReady(event) {
 }
 
 function handleControllerChange() {
+  const guardValue = globalThis.sessionStorage?.getItem?.(SERVICE_WORKER_RELOAD_GUARD_KEY);
+  if (guardValue === "done") {
+    return;
+  }
+
+  globalThis.sessionStorage?.setItem?.(SERVICE_WORKER_RELOAD_GUARD_KEY, "done");
   globalThis.location.reload();
 }
 
