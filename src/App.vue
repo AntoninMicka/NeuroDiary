@@ -14,6 +14,7 @@ import {
   formatLongDate,
   getHourRecordCount,
   getStateDefinition,
+  mergeDiaryStatesAppendOnly,
   shiftDateKey,
   getTodayKey,
   getTrackableHourLabel,
@@ -22,6 +23,16 @@ import { createDiaryRepository } from "./repositories/index.js";
 import { parseJsonBackup, serializeJsonBackup } from "./services/jsonTransfer.js";
 import { openDoctorReportPrint } from "./services/doctorReport.js";
 import { activateServiceWorkerUpdate, OFFLINE_READY_EVENT, UPDATE_READY_EVENT } from "./pwa.js";
+import {
+  hasStoredRecoverySecret,
+  hasStoredSyncMasterKey,
+  initializeCloudSync,
+  loadSyncSettings,
+  pullCloudState,
+  pushCloudState,
+  saveRecoverySecret,
+  saveSyncSettings,
+} from "./services/syncService.js";
 
 const diaryRepository = ref(null);
 const fileInput = ref(null);
@@ -41,6 +52,10 @@ const pwaOfflineReady = ref(false);
 const pwaUpdateRegistration = ref(null);
 const activePanelId = ref("sekce-home");
 const isUtilityMenuOpen = ref(false);
+const syncSettings = reactive(loadSyncSettings());
+const recoverySecretInput = ref("");
+const generatedRecoverySecret = ref("");
+const isSyncBusy = ref(false);
 const state = reactive({
   selectedDate: getTodayKey(),
   patientName: "",
@@ -104,6 +119,22 @@ const canGoToPreviousPanel = computed(() => activePanelIndex.value > 0);
 const canGoToNextPanel = computed(() => activePanelIndex.value < PANEL_ITEMS.length - 1);
 const canGoToNextDate = computed(() => state.selectedDate < getTodayKey());
 const showDateSwitcher = computed(() => DATE_NAV_PANEL_IDS.has(activePanelId.value));
+const hasRecoverySecretStored = computed(() => hasStoredRecoverySecret());
+const hasSyncMasterKeyStored = computed(() => hasStoredSyncMasterKey());
+const syncStatusSummary = computed(() => {
+  if (!syncSettings.endpoint) {
+    return "Cloud sync zatim neni nastaven.";
+  }
+
+  const revision = Number(syncSettings.revision ?? 0);
+  const syncedAt = syncSettings.lastSyncAt
+    ? new Intl.DateTimeFormat("cs-CZ", { dateStyle: "medium", timeStyle: "short" }).format(
+        new Date(syncSettings.lastSyncAt),
+      )
+    : "zatim nikdy";
+
+  return `Revize ${revision} · posledni sync ${syncedAt}`;
+});
 
 let menuResizeObserver = null;
 let mediaQueryList = null;
@@ -176,6 +207,11 @@ function updateEntry(nextEntry) {
 
 function updateProfile(field, value) {
   state[field] = value;
+}
+
+function updateSyncSetting(field, value) {
+  syncSettings[field] = value;
+  Object.assign(syncSettings, saveSyncSettings(syncSettings));
 }
 
 function updateCurrentHourLabel(value) {
@@ -292,6 +328,15 @@ function closeUtilityMenu() {
 function handleUtilityAction(action) {
   closeUtilityMenu();
   action();
+}
+
+function markCloudAuthenticated() {
+  state.account = {
+    ...state.account,
+    isAuthenticated: true,
+    provider: state.account.provider || "cloud-token",
+    userId: state.account.userId || "cloud-user",
+  };
 }
 
 function selectPanel(panelId) {
@@ -422,6 +467,155 @@ function printDoctorReport() {
     console.error("Doctor report print failed", error);
     storageMessage.value = "Unable to open the printable doctor report.";
   }
+}
+
+async function initializeSync() {
+  if (!syncSettings.endpoint.trim()) {
+    storageMessage.value = "Nejprve vyplnte sync endpoint.";
+    return;
+  }
+
+  isSyncBusy.value = true;
+  generatedRecoverySecret.value = "";
+  try {
+    const result = await initializeCloudSync({
+      state,
+      settings: syncSettings,
+      recoverySecret: recoverySecretInput.value,
+    });
+    Object.assign(syncSettings, saveSyncSettings({
+      ...syncSettings,
+      revision: result.revision,
+      lastSyncAt: result.updatedAt,
+      lastSyncStatus: "ok",
+      lastSyncMessage: "Cloud sync initialized.",
+    }));
+    generatedRecoverySecret.value = result.generatedRecoverySecret;
+    markCloudAuthenticated();
+    storageMessage.value = result.generatedRecoverySecret
+      ? "Cloud sync inicializovan. Ulozte si recovery secret."
+      : "Cloud sync inicializovan.";
+  } catch (error) {
+    console.error("Sync initialization failed", error);
+    Object.assign(syncSettings, saveSyncSettings({
+      ...syncSettings,
+      lastSyncStatus: "error",
+      lastSyncMessage: error.message,
+    }));
+    storageMessage.value = `Inicializace syncu selhala: ${error.message}`;
+  } finally {
+    isSyncBusy.value = false;
+  }
+}
+
+async function pullSync() {
+  if (!syncSettings.endpoint.trim()) {
+    storageMessage.value = "Nejprve vyplnte sync endpoint.";
+    return;
+  }
+
+  isSyncBusy.value = true;
+  try {
+    const result = await pullCloudState(syncSettings);
+    if (!result.state) {
+      storageMessage.value = "Na serveru zatim nejsou zadna data.";
+      return;
+    }
+
+    const mergedState = mergeDiaryStatesAppendOnly(state, result.state);
+    applyImportedState(mergedState);
+    Object.assign(syncSettings, saveSyncSettings({
+      ...syncSettings,
+      revision: result.revision,
+      lastSyncAt: result.updatedAt,
+      lastSyncStatus: "ok",
+      lastSyncMessage: "Cloud pull completed.",
+    }));
+    markCloudAuthenticated();
+    storageMessage.value = "Data byla doplnena ze serveru bez mazani lokalnich zaznamu.";
+  } catch (error) {
+    console.error("Sync pull failed", error);
+    Object.assign(syncSettings, saveSyncSettings({
+      ...syncSettings,
+      lastSyncStatus: "error",
+      lastSyncMessage: error.message,
+    }));
+    storageMessage.value = `Synchronizace ze serveru selhala: ${error.message}`;
+  } finally {
+    isSyncBusy.value = false;
+  }
+}
+
+async function pushSync(force = false) {
+  if (!syncSettings.endpoint.trim()) {
+    storageMessage.value = "Nejprve vyplnte sync endpoint.";
+    return;
+  }
+
+  isSyncBusy.value = true;
+  try {
+    const result = await pushCloudState({
+      state,
+      settings: syncSettings,
+      baseRevision: Number(syncSettings.revision ?? 0),
+      force,
+    });
+
+    if (result.status === "conflict" && result.remoteState) {
+      const mergedState = mergeDiaryStatesAppendOnly(result.remoteState, state);
+      applyImportedState(mergedState);
+      const retryResult = await pushCloudState({
+        state: mergedState,
+        settings: {
+          ...syncSettings,
+          revision: result.revision,
+        },
+        baseRevision: result.revision,
+        force: true,
+      });
+
+      Object.assign(syncSettings, saveSyncSettings({
+        ...syncSettings,
+        revision: retryResult.revision,
+        lastSyncAt: retryResult.updatedAt,
+        lastSyncStatus: "ok",
+        lastSyncMessage: "Conflict merged and pushed.",
+      }));
+      markCloudAuthenticated();
+      storageMessage.value = "Konflikt byl sloucen append-only a synchronizace dokoncena.";
+      return;
+    }
+
+    Object.assign(syncSettings, saveSyncSettings({
+      ...syncSettings,
+      revision: result.revision,
+      lastSyncAt: result.updatedAt,
+      lastSyncStatus: "ok",
+      lastSyncMessage: "Cloud push completed.",
+    }));
+    markCloudAuthenticated();
+    storageMessage.value = "Lokalni data byla odeslana do cloud syncu.";
+  } catch (error) {
+    console.error("Sync push failed", error);
+    Object.assign(syncSettings, saveSyncSettings({
+      ...syncSettings,
+      lastSyncStatus: "error",
+      lastSyncMessage: error.message,
+    }));
+    storageMessage.value = `Synchronizace na server selhala: ${error.message}`;
+  } finally {
+    isSyncBusy.value = false;
+  }
+}
+
+function persistRecoverySecret() {
+  if (!recoverySecretInput.value.trim()) {
+    storageMessage.value = "Zadejte recovery secret.";
+    return;
+  }
+
+  saveRecoverySecret(recoverySecretInput.value);
+  storageMessage.value = "Recovery secret byl ulozen lokalne do tohoto zarizeni.";
 }
 
 async function importDatabase(event) {
@@ -742,6 +936,74 @@ function syncFloatingMenuHeight() {
               />
             </label>
           </form>
+
+          <div class="sync-settings-card">
+            <div class="panel-heading sync-settings-heading">
+              <div>
+                <p class="section-kicker">Synchronizace</p>
+                <h2>Cloud sync</h2>
+              </div>
+              <p class="panel-tip">{{ syncStatusSummary }}</p>
+            </div>
+
+            <form class="stack-form">
+              <label>
+                <span>Sync endpoint</span>
+                <input
+                  :value="syncSettings.endpoint"
+                  type="url"
+                  placeholder="https://your-api.run.app"
+                  @input="updateSyncSetting('endpoint', $event.target.value)"
+                />
+              </label>
+
+              <label>
+                <span>API token</span>
+                <input
+                  :value="syncSettings.apiToken"
+                  type="password"
+                  placeholder="Bearer token pro prvni backend"
+                  @input="updateSyncSetting('apiToken', $event.target.value)"
+                />
+              </label>
+
+              <label>
+                <span>Recovery secret</span>
+                <input
+                  v-model="recoverySecretInput"
+                  type="text"
+                  placeholder="vlozte existujici recovery secret nebo nechte vygenerovat"
+                />
+              </label>
+            </form>
+
+            <div class="sync-actions">
+              <button class="primary-button" type="button" :disabled="isSyncBusy" @click="initializeSync">
+                Inicializovat cloud sync
+              </button>
+              <button class="ghost-button" type="button" :disabled="isSyncBusy" @click="pullSync">
+                Pull ze serveru
+              </button>
+              <button class="ghost-button" type="button" :disabled="isSyncBusy" @click="pushSync">
+                Push na server
+              </button>
+              <button class="ghost-button" type="button" :disabled="isSyncBusy" @click="persistRecoverySecret">
+                Ulozit recovery secret
+              </button>
+            </div>
+
+            <div class="sync-meta">
+              <p class="panel-tip">Lokalni klic: {{ hasSyncMasterKeyStored ? "ulozen" : "chybi" }}</p>
+              <p class="panel-tip">Recovery secret: {{ hasRecoverySecretStored ? "ulozen" : "chybi" }}</p>
+              <p v-if="syncSettings.lastSyncMessage" class="panel-tip">{{ syncSettings.lastSyncMessage }}</p>
+            </div>
+
+            <div v-if="generatedRecoverySecret" class="sync-warning-card">
+              <strong>Ulozte si recovery secret</strong>
+              <p>{{ generatedRecoverySecret }}</p>
+              <span>Bez tohoto tajemstvi nepujde na novem zarizeni data desifrovat.</span>
+            </div>
+          </div>
         </section>
 
         <HourMatrix

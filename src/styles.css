@@ -446,6 +446,49 @@ textarea {
   font-size: 0.92rem;
 }
 
+.sync-settings-card {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(31, 41, 51, 0.08);
+}
+
+.sync-settings-heading {
+  margin-bottom: 0.85rem;
+}
+
+.sync-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-top: 1rem;
+}
+
+.sync-meta {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 0.9rem;
+}
+
+.sync-warning-card {
+  display: grid;
+  gap: 0.4rem;
+  margin-top: 1rem;
+  padding: 0.9rem 1rem;
+  border-radius: 18px;
+  background: rgba(201, 123, 52, 0.12);
+  border: 1px solid rgba(201, 123, 52, 0.2);
+}
+
+.sync-warning-card strong {
+  color: #8a5728;
+}
+
+.sync-warning-card p,
+.sync-warning-card span {
+  margin: 0;
+  line-height: 1.45;
+}
+
 .capture-bar {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1083,6 +1126,10 @@ textarea {
     grid-template-columns: 1fr;
   }
 
+  .sync-actions {
+    grid-template-columns: 1fr;
+  }
+
   .floating-menu {
     top: 0.6rem;
     padding: 0.75rem 0.8rem 0.85rem;
@@ -1104,6 +1151,11 @@ textarea {
 
   .floating-menu-actions .ghost-button,
   .utility-menu-trigger {
+    width: 100%;
+  }
+
+  .sync-actions .primary-button,
+  .sync-actions .ghost-button {
     width: 100%;
   }
 
