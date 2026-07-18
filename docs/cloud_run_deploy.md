@@ -77,6 +77,13 @@ V repozitari nastav tyto `Repository variables`:
   napriklad `https://neurodiary.example.com`
 - `NEURODIARY_DEFAULT_USER_ID`
   docasna hodnota pro single-user rezim, napriklad `primary-user`
+- `NEURODIARY_GOOGLE_CLIENT_ID`
+  OAuth Web Client ID pro Google login, napriklad
+  `123456789012-abcdefghi123456789.apps.googleusercontent.com`
+- `NEURODIARY_APPLE_CLIENT_ID`
+  Apple Services ID pro web login, napriklad `com.neurodiary.web`
+- `NEURODIARY_APPLE_REDIRECT_PATH`
+  typicky `/auth/apple/callback`
 - `CLOUD_RUN_DEPLOY_FLAGS`
   volitelne dalsi Cloud Run flagy, napriklad
   `--add-cloudsql-instances=PROJECT_ID:REGION:INSTANCE_ID --min-instances=0 --max-instances=3`
@@ -87,6 +94,14 @@ V repozitari nastav:
 
 - `NEURODIARY_API_TOKEN`
 - `NEURODIARY_DATABASE_URL`
+- `NEURODIARY_SESSION_SECRET`
+
+Poznamka:
+
+- pokud uz prejdes na prihlaseni pres Google / Apple ID, `NEURODIARY_API_TOKEN`
+  muze zustat prazdny a UI se prepne na federated auth flow
+- `NEURODIARY_SESSION_SECRET` musi byt dlouhy nahodny tajny retezec, ktery backend
+  pouzije pro podpis vlastni session JWT
 
 ## Google Cloud Setup
 
@@ -227,6 +242,70 @@ Poznamka k Cloud SQL sizingu:
 - pro levny prvni deploy je jednodussi explicitne zvolit `POSTGRES_EDITION=ENTERPRISE`
 - pokud chces `ENTERPRISE_PLUS`, pouzij vhodny tier jako `db-perf-optimized-N-2`
 
+### 8. Aktivuj Google prihlaseni
+
+Podle oficialnich Google Identity Services docs potrebujes webovy OAuth client a backend musi
+serverove overit `ID token` proti spravnemu `client_id`.
+
+Prakticky postup:
+
+1. v Google Cloud Console otevri `APIs & Services -> Credentials`
+2. vytvor `OAuth 2.0 Client ID` typu `Web application`
+3. do `Authorized JavaScript origins` pridej:
+   - `http://localhost:5173`
+   - produkcni URL Cloud Run aplikace, napriklad `https://neurodiary-sync-748077554661.europe-west1.run.app`
+4. zkopiruj `Client ID`
+5. uloz jej do GitHub `Repository variable` jako `NEURODIARY_GOOGLE_CLIENT_ID`
+
+Poznamka:
+
+- backend umi overit i vice Google client ID, pokud pozdeji pouzijes `NEURODIARY_GOOGLE_CLIENT_IDS`
+  jako CSV seznam
+
+### 9. Aktivuj Sign in with Apple
+
+Podle oficialnich Apple docs pro web potrebujes:
+
+- `Services ID`
+- povoleny domenovy web login
+- redirect URI
+
+Prakticky postup:
+
+1. v Apple Developer otevri `Certificates, Identifiers & Profiles`
+2. vytvor nebo otevri `Services ID` pro web
+3. zapni `Sign in with Apple`
+4. jako domenu pridej produkcni hostname Cloud Run aplikace
+5. jako redirect URL nastav:
+   `https://TVA_CLOUD_RUN_URL/auth/apple/callback`
+6. zkopiruj `Services ID`
+7. uloz jej do GitHub `Repository variable` jako `NEURODIARY_APPLE_CLIENT_ID`
+8. do `NEURODIARY_APPLE_REDIRECT_PATH` nech `/auth/apple/callback`
+
+Poznamka:
+
+- Apple web login je realne aktivni az po produkcnim nasazeni na verejne URL
+- pro lokalni `localhost` typicky otestuj nejprve Google login a Apple az na cloud URL
+
+### 10. Session auth backendu
+
+Federated auth vrstva potrebuje jeste vlastni session podpis.
+
+Vytvor silny tajny retezec a uloz jej do GitHub `Repository secret`:
+
+- `NEURODIARY_SESSION_SECRET`
+
+Priklad lokalniho vygenerovani:
+
+```bash
+openssl rand -base64 48
+```
+
+Bezpecnostni doporuceni:
+
+- nepouzivat kratke heslo ani opakovane pouzity token
+- nemenit secret bez planu, pokud mas aktivni uzivatele, jinak se vsichni odhlasi
+
 ## Co workflow dela
 
 1. overi GitHub job vuci Google Cloud pres OIDC
@@ -234,4 +313,19 @@ Poznamka k Cloud SQL sizingu:
 3. pushne image do Artifact Registry
 4. nasadi novou revizi do Cloud Run
 5. na root URL `/` servíruje frontend NeuroDiary
-6. preda backendu API token, DB URL a Cloud SQL connection konfiguraci
+6. preda backendu DB URL, session auth konfiguraci a pripadny legacy API token
+7. frontend si z backendu nacte auth konfiguraci a podle ni zobrazi Google / Apple prihlaseni
+
+## Aktivace prihlaseni po deployi
+
+Po uspesnem deployi prihlaseni aktivujes takto:
+
+1. v GitHub Actions / Cloud Run musi byt nastavene:
+   - `NEURODIARY_SESSION_SECRET`
+   - `NEURODIARY_GOOGLE_CLIENT_ID`
+   - volitelne `NEURODIARY_APPLE_CLIENT_ID`
+2. spust novy deploy
+3. otevri produkcni aplikaci
+4. v panelu `Udaje -> Cloud sync` se objevi sekce prihlaseni
+5. prihlas se pres Google nebo Apple
+6. po prihlaseni uz neni potreba rucne vyplnovat API token

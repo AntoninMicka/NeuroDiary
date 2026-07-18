@@ -72,6 +72,11 @@ Pokud nechces vsechno klikat rucne, prvni cast tohohle checklistu umi automatizo
 - [ ] nastavit `GCP_DEPLOY_SERVICE_ACCOUNT`
 - [ ] nastavit `NEURODIARY_CORS_ORIGINS`
 - [ ] nastavit `NEURODIARY_DEFAULT_USER_ID`
+- [ ] nastavit `NEURODIARY_GOOGLE_CLIENT_ID`
+- [ ] volitelne nastavit `NEURODIARY_APPLE_CLIENT_ID`
+- [ ] nastavit `NEURODIARY_APPLE_REDIRECT_PATH`
+  doporucena hodnota:
+  `/auth/apple/callback`
 - [ ] nastavit `CLOUD_RUN_DEPLOY_FLAGS`
   doporuceny zaklad:
   `--add-cloudsql-instances=PROJECT_ID:REGION:INSTANCE_ID --min-instances=0 --max-instances=3`
@@ -80,6 +85,7 @@ Pokud nechces vsechno klikat rucne, prvni cast tohohle checklistu umi automatizo
 
 - [ ] nastavit `NEURODIARY_API_TOKEN`
 - [ ] nastavit `NEURODIARY_DATABASE_URL`
+- [ ] nastavit `NEURODIARY_SESSION_SECRET`
 
 Poznamka:
 
@@ -87,14 +93,33 @@ Poznamka:
 - [ ] pokud chci rovnou spustit Actions deploy, zapnout i `TRIGGER_GITHUB_WORKFLOW=true`
 - [ ] `GITHUB_REPOSITORY` muze zustat prazdne, pokud lokalni git `origin` smeruje na GitHub repo
 - [ ] pro zapis repository secrets musim byt pres `gh` prihlaseny jako uzivatel s admin pristupem k repu
+- [ ] po zavedeni federated auth muze `NEURODIARY_API_TOKEN` zustat prazdny jako vypnuty legacy fallback
 
-## 10. Frontend a CORS
+## 10. Google prihlaseni
+
+- [ ] v Google Cloud Console vytvorit `OAuth 2.0 Client ID` typu `Web application`
+- [ ] do `Authorized JavaScript origins` pridat:
+  - `http://localhost:5173`
+  - produkcni Cloud Run URL
+- [ ] zkopirovat `Client ID`
+- [ ] ulozit do GitHub `Repository variable` jako `NEURODIARY_GOOGLE_CLIENT_ID`
+
+## 11. Sign in with Apple
+
+- [ ] v Apple Developer vytvorit nebo otevrit `Services ID`
+- [ ] zapnout `Sign in with Apple`
+- [ ] pridat produkcni domenu aplikace
+- [ ] nastavit redirect URL:
+  `https://TVA_CLOUD_RUN_URL/auth/apple/callback`
+- [ ] ulozit `Services ID` do GitHub `Repository variable` jako `NEURODIARY_APPLE_CLIENT_ID`
+- [ ] nastavit `NEURODIARY_APPLE_REDIRECT_PATH=/auth/apple/callback`
+
+## 12. Frontend a CORS
 
 - [ ] znat produkcni URL frontendu
 - [ ] doplnit frontend URL do `NEURODIARY_CORS_ORIGINS`
-- [ ] po prvnim deployi nastavit ve frontendu produkcni sync endpoint
 
-## 11. Prvni deploy
+## 13. Prvni deploy
 
 - [ ] pripadne pripravit `scripts/cloud_run.env` podle [cloud_run.env.example](/home/antonin/Projects/NeuroDiary/NeuroDiary/scripts/cloud_run.env.example:1)
 - [ ] pokud chci prvni deploy automatizovat z lokalu, spustit `bash scripts/cloud_run_bootstrap.sh`
@@ -105,21 +130,24 @@ Poznamka:
 - [ ] zkontrolovat, ze probehl push do Artifact Registry
 - [ ] zkontrolovat, ze vznikla nebo se aktualizovala Cloud Run sluzba
 
-## 12. Overeni po deployi
+## 14. Overeni po deployi
 
 - [ ] otevrit `/healthz`
 - [ ] overit, ze vraci `status: ok`
 - [ ] overit, ze vraci `storage: postgres`
+- [ ] overit, ze `Cloud sync` panel zobrazi Google a pripadne Apple prihlaseni
+- [ ] prihlasit se pres Google
+- [ ] overit, ze po prihlaseni uz neni potreba API token
 - [ ] otestovat `GET /api/v1/sync/pull`
 - [ ] otestovat `POST /api/v1/sync/push`
 - [ ] otestovat sync mezi dvema zarizenimi
 
-## 13. Bezpecnostni follow-up
+## 15. Bezpecnostni follow-up
 
-- [ ] rozhodnout, jestli ponechat verejny endpoint s bearer tokenem, nebo pozdeji pritvrdit pristup
+- [ ] rozhodnout, jestli legacy bearer token uplne vypnout
 - [ ] oddelit testovaci a produkcni prostredi
 - [ ] zalozit bezpecne ulozeni produkcnich secrets
-- [ ] navazat dalsi krok: prihlaseni pres Google / Apple ID
+- [ ] otestovat recovery secret QR export a import mezi dvema zarizenimi
 
 ## Poznamky
 

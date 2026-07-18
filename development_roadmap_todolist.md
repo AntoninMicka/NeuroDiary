@@ -242,7 +242,7 @@ Výstup:
 
 ## Fáze 5 – Bezpečnost
 
-### [pending] 5.1 Přihlášení
+### [in_progress] 5.1 Přihlášení
 
 Rozhodnutí pro první cloudovou iteraci:
 
@@ -251,6 +251,13 @@ Rozhodnutí pro první cloudovou iteraci:
 * serverové ověření identity tokenu
 * návazné vydání vlastní session / JWT pro NeuroDiary API
 
+Aktualni stav:
+
+* backend i frontend uz maji pripraveny prvni federated auth scaffold
+* Google login ma pripravenou serverovou verifikaci ID tokenu
+* Apple login ma pripravenou integracni kostru a ceka hlavne na produkcni konfiguraci `Services ID`
+* legacy bearer token zatim zustava jako docasny fallback pro plynuly prechod
+
 Navazující kroky:
 
 * návrh account linking při použití více providerů
@@ -258,6 +265,12 @@ Navazující kroky:
 * později zvážit passkeys jako doplňkovou nebo pokročilejší variantu
 
 ### [pending] 5.2 Šifrování dat
+
+Poznamka k recovery flow:
+
+* recovery secret se da vygenerovat v klientovi
+* novy prenosovy flow umi zobrazit secret jako QR a nacist jej z QR obrazku
+* dalsi vhodny krok je live kamera scan a bezpecnejsi multi-device onboarding flow
 
 ### [in_progress] 5.3 Cloud deploy a sync infrastruktura
 

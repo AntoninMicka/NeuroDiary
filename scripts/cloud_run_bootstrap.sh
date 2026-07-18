@@ -30,6 +30,25 @@ ALLOW_UNAUTHENTICATED="${ALLOW_UNAUTHENTICATED:-true}"
 CLOUD_RUN_DEPLOY_FLAGS="${CLOUD_RUN_DEPLOY_FLAGS:-}"
 RUNTIME_SERVICE_ACCOUNT="${RUNTIME_SERVICE_ACCOUNT:-}"
 BILLING_ACCOUNT_ID="${BILLING_ACCOUNT_ID:-}"
+ENABLE_GOOGLE_AUTH="${ENABLE_GOOGLE_AUTH:-true}"
+ENABLE_APPLE_AUTH="${ENABLE_APPLE_AUTH:-false}"
+ENABLE_LEGACY_API_TOKEN="${ENABLE_LEGACY_API_TOKEN:-false}"
+NEURODIARY_SESSION_SECRET="${NEURODIARY_SESSION_SECRET:-}"
+NEURODIARY_GOOGLE_CLIENT_ID="${NEURODIARY_GOOGLE_CLIENT_ID:-}"
+NEURODIARY_APPLE_CLIENT_ID="${NEURODIARY_APPLE_CLIENT_ID:-}"
+NEURODIARY_APPLE_REDIRECT_PATH="${NEURODIARY_APPLE_REDIRECT_PATH:-/auth/apple/callback}"
+
+function generate_random_secret() {
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -base64 48 | tr -d '\n'
+    return
+  fi
+
+  python3 - <<'PY'
+import secrets
+print(secrets.token_urlsafe(48))
+PY
+}
 
 function prompt_value() {
   local var_name="$1"
@@ -157,10 +176,38 @@ function collect_configuration() {
   prompt_value "GAR_REPOSITORY" "Nazev Docker repository v Artifact Registry." "neurodiary"
   prompt_value "CLOUD_RUN_SERVICE" "Nazev Cloud Run sluzby pro sync backend." "neurodiary-sync"
   prompt_value "IMAGE_NAME" "Nazev container image uvnitr Artifact Registry." "neurodiary-sync"
-  prompt_value "NEURODIARY_API_TOKEN" "Dlouhy nahodny bearer token pro pristup k sync API." "vygenerovany-tajny-token" "true"
   prompt_value "NEURODIARY_CORS_ORIGINS" "Frontend URL nebo vice URL oddelenych carkou." "https://app.example.com"
   prompt_value "NEURODIARY_DEFAULT_USER_ID" "Docasny identifikator pro single-user rezim." "primary-user"
   prompt_choice "DATABASE_MODE" "Zvol, jestli chces jen rychly test nebo produkcnejsi PostgreSQL variantu." "sqlite postgres"
+  prompt_choice "ENABLE_GOOGLE_AUTH" "Ma skript pripravit prihlaseni pres Google ID?" "true false"
+  prompt_choice "ENABLE_APPLE_AUTH" "Ma skript pripravit prihlaseni pres Apple ID?" "true false"
+  prompt_choice "ENABLE_LEGACY_API_TOKEN" "Chces ponechat i legacy bearer token fallback?" "true false"
+
+  if [[ "${ENABLE_GOOGLE_AUTH}" == "true" || "${ENABLE_APPLE_AUTH}" == "true" ]]; then
+    if [[ -z "${NEURODIARY_SESSION_SECRET}" ]]; then
+      NEURODIARY_SESSION_SECRET="$(generate_random_secret)"
+      echo
+      echo "Generated NEURODIARY_SESSION_SECRET automatically."
+    fi
+  fi
+
+  if [[ "${ENABLE_GOOGLE_AUTH}" == "true" ]]; then
+    prompt_value "NEURODIARY_GOOGLE_CLIENT_ID" "Google OAuth Web Client ID pro web prihlaseni." "123456789012-abcdefghi123456789.apps.googleusercontent.com"
+  fi
+
+  if [[ "${ENABLE_APPLE_AUTH}" == "true" ]]; then
+    prompt_value "NEURODIARY_APPLE_CLIENT_ID" "Apple Services ID pro web prihlaseni." "com.neurodiary.web"
+    prompt_optional_value "NEURODIARY_APPLE_REDIRECT_PATH" "Apple redirect path vuci domeně aplikace." "/auth/apple/callback"
+    if [[ -z "${NEURODIARY_APPLE_REDIRECT_PATH}" ]]; then
+      NEURODIARY_APPLE_REDIRECT_PATH="/auth/apple/callback"
+    fi
+  fi
+
+  if [[ "${ENABLE_LEGACY_API_TOKEN}" == "true" ]]; then
+    prompt_value "NEURODIARY_API_TOKEN" "Dlouhy nahodny bearer token pro legacy pristup k sync API." "vygenerovany-tajny-token" "true"
+  else
+    NEURODIARY_API_TOKEN=""
+  fi
 
   prompt_choice "ALLOW_UNAUTHENTICATED" "Ma byt Cloud Run endpoint verejne dostupny a chraneny jen bearer tokenem?" "true false"
   prompt_optional_value "CLOUD_RUN_DEPLOY_FLAGS" "Dalsi volitelne Cloud Run flagy." "--min-instances=0 --max-instances=3"
@@ -530,6 +577,9 @@ function configure_github_actions() {
   gh variable set GCP_DEPLOY_SERVICE_ACCOUNT --repo "${GITHUB_REPOSITORY}" --body "${DEPLOY_SA_NAME}@${GCP_PROJECT_ID}.iam.gserviceaccount.com"
   gh variable set NEURODIARY_CORS_ORIGINS --repo "${GITHUB_REPOSITORY}" --body "${NEURODIARY_CORS_ORIGINS}"
   gh variable set NEURODIARY_DEFAULT_USER_ID --repo "${GITHUB_REPOSITORY}" --body "${NEURODIARY_DEFAULT_USER_ID}"
+  gh variable set NEURODIARY_GOOGLE_CLIENT_ID --repo "${GITHUB_REPOSITORY}" --body "${NEURODIARY_GOOGLE_CLIENT_ID}"
+  gh variable set NEURODIARY_APPLE_CLIENT_ID --repo "${GITHUB_REPOSITORY}" --body "${NEURODIARY_APPLE_CLIENT_ID}"
+  gh variable set NEURODIARY_APPLE_REDIRECT_PATH --repo "${GITHUB_REPOSITORY}" --body "${NEURODIARY_APPLE_REDIRECT_PATH}"
 
   if [[ "${DATABASE_MODE}" == "postgres" ]]; then
     gh variable set CLOUD_RUN_DEPLOY_FLAGS --repo "${GITHUB_REPOSITORY}" --body "--add-cloudsql-instances=${CLOUD_SQL_INSTANCE} ${CLOUD_RUN_DEPLOY_FLAGS}"
@@ -543,7 +593,14 @@ function configure_github_actions() {
     echo "Skipping GCP_WORKLOAD_IDENTITY_PROVIDER because no provider value is available."
   fi
 
-  gh secret set NEURODIARY_API_TOKEN --repo "${GITHUB_REPOSITORY}" --app actions --body "${NEURODIARY_API_TOKEN}"
+  if [[ "${ENABLE_LEGACY_API_TOKEN}" == "true" && -n "${NEURODIARY_API_TOKEN}" ]]; then
+    gh secret set NEURODIARY_API_TOKEN --repo "${GITHUB_REPOSITORY}" --app actions --body "${NEURODIARY_API_TOKEN}"
+  else
+    echo "Skipping NEURODIARY_API_TOKEN secret because legacy token fallback is disabled."
+  fi
+  if [[ -n "${NEURODIARY_SESSION_SECRET}" ]]; then
+    gh secret set NEURODIARY_SESSION_SECRET --repo "${GITHUB_REPOSITORY}" --app actions --body "${NEURODIARY_SESSION_SECRET}"
+  fi
   if [[ "${DATABASE_MODE}" == "postgres" ]]; then
     gh secret set NEURODIARY_DATABASE_URL --repo "${GITHUB_REPOSITORY}" --app actions --body "$(build_database_url)"
   fi
@@ -566,10 +623,17 @@ function deploy_cloud_run() {
   local db_url
   db_url="$(build_database_url)"
   local env_vars=(
-    "NEURODIARY_API_TOKEN=${NEURODIARY_API_TOKEN}"
     "NEURODIARY_CORS_ORIGINS=${NEURODIARY_CORS_ORIGINS}"
     "NEURODIARY_DEFAULT_USER_ID=${NEURODIARY_DEFAULT_USER_ID}"
+    "NEURODIARY_SESSION_SECRET=${NEURODIARY_SESSION_SECRET}"
+    "NEURODIARY_GOOGLE_CLIENT_ID=${NEURODIARY_GOOGLE_CLIENT_ID}"
+    "NEURODIARY_APPLE_CLIENT_ID=${NEURODIARY_APPLE_CLIENT_ID}"
+    "NEURODIARY_APPLE_REDIRECT_PATH=${NEURODIARY_APPLE_REDIRECT_PATH}"
   )
+
+  if [[ "${ENABLE_LEGACY_API_TOKEN}" == "true" && -n "${NEURODIARY_API_TOKEN}" ]]; then
+    env_vars+=("NEURODIARY_API_TOKEN=${NEURODIARY_API_TOKEN}")
+  fi
 
   if [[ -n "${db_url}" ]]; then
     env_vars+=("NEURODIARY_DATABASE_URL=${db_url}")
@@ -658,9 +722,17 @@ function print_summary() {
   fi
   echo "  NEURODIARY_CORS_ORIGINS=${NEURODIARY_CORS_ORIGINS}"
   echo "  NEURODIARY_DEFAULT_USER_ID=${NEURODIARY_DEFAULT_USER_ID}"
+  echo "  NEURODIARY_GOOGLE_CLIENT_ID=${NEURODIARY_GOOGLE_CLIENT_ID:-<leave empty if Google login is disabled>}"
+  echo "  NEURODIARY_APPLE_CLIENT_ID=${NEURODIARY_APPLE_CLIENT_ID:-<leave empty if Apple login is disabled>}"
+  echo "  NEURODIARY_APPLE_REDIRECT_PATH=${NEURODIARY_APPLE_REDIRECT_PATH}"
   echo
   echo "GitHub Actions -> Secrets"
-  echo "  NEURODIARY_API_TOKEN=<same value as local config>"
+  if [[ "${ENABLE_LEGACY_API_TOKEN}" == "true" && -n "${NEURODIARY_API_TOKEN}" ]]; then
+    echo "  NEURODIARY_API_TOKEN=<same value as local config>"
+  else
+    echo "  NEURODIARY_API_TOKEN=<optional, disabled in this bootstrap run>"
+  fi
+  echo "  NEURODIARY_SESSION_SECRET=<same generated value as local config>"
   if [[ "${DATABASE_MODE}" == "postgres" ]]; then
     echo "  NEURODIARY_DATABASE_URL=$(build_database_url)"
   else
@@ -671,6 +743,9 @@ function print_summary() {
   echo "  scripts/cloud_run.env contains the same values for your local bootstrap run."
   if [[ -n "${BILLING_ACCOUNT_ID}" ]]; then
     echo "  BILLING_ACCOUNT_ID=${BILLING_ACCOUNT_ID}"
+  fi
+  if [[ -n "${NEURODIARY_SESSION_SECRET}" ]]; then
+    echo "  NEURODIARY_SESSION_SECRET=${NEURODIARY_SESSION_SECRET}"
   fi
   echo "  Keep this file out of git and rotate tokens/passwords if it leaks."
   echo
