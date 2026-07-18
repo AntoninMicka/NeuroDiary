@@ -35,8 +35,10 @@ import {
   startAppleSignIn,
 } from "./services/authService.js";
 import {
+  canScanRecoveryQrFromCamera,
   downloadRecoveryQr,
   importRecoverySecretFromQrImage,
+  readRecoverySecretFromQrSource,
   renderRecoverySecretQr,
   canReadRecoveryQrFromImage,
 } from "./services/recoveryTransfer.js";
@@ -69,6 +71,7 @@ const qrFileInput = ref(null);
 const floatingMenu = ref(null);
 const googleSignInTarget = ref(null);
 const recoveryQrCanvas = ref(null);
+const recoveryQrVideo = ref(null);
 const isReady = ref(false);
 const repositoryMode = ref("loading");
 const storageMessage = ref("");
@@ -86,6 +89,7 @@ const activePanelId = ref("sekce-home");
 const isUtilityMenuOpen = ref(false);
 const isBootstrapLogOpen = ref(false);
 const isRecoveryTransferOpen = ref(false);
+const isRecoveryCameraOpen = ref(false);
 const syncSettings = reactive(loadSyncSettings());
 const authConfig = reactive(createDefaultAuthConfig());
 const authSession = ref(loadStoredAuthSession());
@@ -95,9 +99,11 @@ const generatedRecoverySecret = ref("");
 const storedRecoverySecret = ref(loadSyncKeyMaterial().recoverySecret ?? "");
 const isSyncBusy = ref(false);
 const isAuthBusy = ref(false);
+const isRecoveryCameraBusy = ref(false);
 const isApplyingExternalState = ref(false);
 const bootstrapLogEntries = ref(getBootstrapLogEntries());
 const isCapturingBootstrapProgress = ref(true);
+const recoveryCameraMessage = ref("");
 const state = reactive({
   selectedDate: getTodayKey(),
   patientName: "",
@@ -217,6 +223,10 @@ const effectiveRecoverySecret = computed(
 );
 const canDisplayRecoveryQr = computed(() => effectiveRecoverySecret.value.length > 0);
 const canImportRecoveryQr = computed(() => canReadRecoveryQrFromImage());
+const canScanRecoveryQrLive = computed(() => canScanRecoveryQrFromCamera());
+
+let recoveryCameraStream = null;
+let recoveryCameraScanTimeoutId = 0;
 
 let menuResizeObserver = null;
 let mediaQueryList = null;
@@ -343,6 +353,7 @@ watchEffect(() => {
 });
 
 onUnmounted(() => {
+  closeRecoveryCameraScanner();
   globalThis.removeEventListener(BOOTSTRAP_LOG_EVENT, syncBootstrapLogEntries);
   menuResizeObserver?.disconnect();
   mediaQueryList?.removeEventListener?.("change", syncInstallState);
@@ -773,6 +784,113 @@ function closeRecoveryTransfer() {
   isRecoveryTransferOpen.value = false;
 }
 
+function clearRecoveryCameraScanLoop() {
+  if (recoveryCameraScanTimeoutId) {
+    globalThis.clearTimeout(recoveryCameraScanTimeoutId);
+    recoveryCameraScanTimeoutId = 0;
+  }
+}
+
+function stopRecoveryCameraStream() {
+  clearRecoveryCameraScanLoop();
+
+  if (recoveryQrVideo.value) {
+    recoveryQrVideo.value.pause?.();
+    recoveryQrVideo.value.srcObject = null;
+  }
+
+  if (recoveryCameraStream) {
+    for (const track of recoveryCameraStream.getTracks()) {
+      track.stop();
+    }
+    recoveryCameraStream = null;
+  }
+}
+
+function closeRecoveryCameraScanner() {
+  stopRecoveryCameraStream();
+  isRecoveryCameraOpen.value = false;
+  isRecoveryCameraBusy.value = false;
+  recoveryCameraMessage.value = "";
+}
+
+function scheduleRecoveryCameraScan(delay = 250) {
+  clearRecoveryCameraScanLoop();
+  recoveryCameraScanTimeoutId = globalThis.setTimeout(() => {
+    void scanRecoveryQrFromCamera();
+  }, delay);
+}
+
+async function scanRecoveryQrFromCamera() {
+  if (!isRecoveryCameraOpen.value || isRecoveryCameraBusy.value) {
+    return;
+  }
+
+  const video = recoveryQrVideo.value;
+  if (!video || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+    recoveryCameraMessage.value = "Cekam na snimek z kamery.";
+    scheduleRecoveryCameraScan(200);
+    return;
+  }
+
+  isRecoveryCameraBusy.value = true;
+  try {
+    const secret = await readRecoverySecretFromQrSource(video);
+    if (!secret) {
+      recoveryCameraMessage.value = "QR kod zatim nevidim. Namirte kameru primo na kod.";
+      scheduleRecoveryCameraScan(250);
+      return;
+    }
+
+    recoverySecretInput.value = secret;
+    closeRecoveryCameraScanner();
+    storageMessage.value = "Recovery secret byl nacten z QR kodu z kamery.";
+  } catch (error) {
+    console.error("Recovery camera scan failed", error);
+    closeRecoveryCameraScanner();
+    storageMessage.value = `Skenovani recovery QR kamerou selhalo: ${error.message}`;
+  } finally {
+    isRecoveryCameraBusy.value = false;
+  }
+}
+
+async function openRecoveryCameraScanner() {
+  if (!canScanRecoveryQrLive.value) {
+    openRecoveryQrImageImport();
+    return;
+  }
+
+  stopRecoveryCameraStream();
+  isRecoveryCameraOpen.value = true;
+  recoveryCameraMessage.value = "Spoustim zadni kameru pro QR skener.";
+
+  try {
+    recoveryCameraStream = await globalThis.navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: { ideal: "environment" },
+      },
+      audio: false,
+    });
+
+    await nextTick();
+
+    if (!recoveryQrVideo.value) {
+      throw new Error("Video nahled kamery neni pripraven.");
+    }
+
+    recoveryQrVideo.value.srcObject = recoveryCameraStream;
+    recoveryQrVideo.value.setAttribute("playsinline", "true");
+    recoveryQrVideo.value.muted = true;
+    await recoveryQrVideo.value.play();
+    recoveryCameraMessage.value = "Namirte kameru na recovery QR kod.";
+    scheduleRecoveryCameraScan(200);
+  } catch (error) {
+    console.error("Unable to open recovery camera scanner", error);
+    closeRecoveryCameraScanner();
+    storageMessage.value = `Kameru se nepodarilo otevrit: ${error.message}`;
+  }
+}
+
 function downloadRecoveryQrCode() {
   try {
     downloadRecoveryQr(recoveryQrCanvas.value);
@@ -782,8 +900,21 @@ function downloadRecoveryQrCode() {
   }
 }
 
-function openRecoveryQrImport() {
+function openRecoveryQrImageImport() {
+  if (isRecoveryCameraOpen.value) {
+    closeRecoveryCameraScanner();
+  }
+
   qrFileInput.value?.click();
+}
+
+function openRecoveryQrImport() {
+  if (canScanRecoveryQrLive.value) {
+    void openRecoveryCameraScanner();
+    return;
+  }
+
+  openRecoveryQrImageImport();
 }
 
 async function importRecoveryQr(event) {
@@ -1540,6 +1671,7 @@ function syncFloatingMenuHeight() {
         class="visually-hidden"
         type="file"
         accept="image/*"
+        capture="environment"
         @change="importRecoveryQr"
       />
       <div
@@ -1576,6 +1708,44 @@ function syncFloatingMenuHeight() {
                 <p class="bootstrap-history-message">{{ entry.message }}</p>
               </li>
             </ol>
+          </div>
+        </section>
+      </div>
+      <div
+        v-if="isRecoveryCameraOpen"
+        class="diagnostic-dialog-backdrop"
+        role="presentation"
+        @click.self="closeRecoveryCameraScanner"
+      >
+        <section
+          class="diagnostic-dialog recovery-camera-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="recovery-camera-dialog-title"
+        >
+          <div class="diagnostic-dialog-header">
+            <div>
+              <p class="section-kicker">Recovery</p>
+              <h2 id="recovery-camera-dialog-title">Nacist QR z kamery</h2>
+              <p class="panel-tip">Na mobilu se pokusim otevrit zadni kameru. Pokud to prohlizec nedovoli, muzete vybrat obrazek rucne.</p>
+            </div>
+            <button class="ghost-button" type="button" @click="closeRecoveryCameraScanner">
+              Zavrit
+            </button>
+          </div>
+
+          <div class="recovery-camera-card">
+            <video ref="recoveryQrVideo" class="recovery-camera-video" autoplay muted playsinline></video>
+            <p class="panel-tip">{{ recoveryCameraMessage }}</p>
+          </div>
+
+          <div class="recovery-transfer-actions">
+            <button class="ghost-button" type="button" @click="openRecoveryQrImageImport">
+              Vybrat QR obrazek
+            </button>
+            <button class="ghost-button" type="button" @click="closeRecoveryCameraScanner">
+              Zavrit skener
+            </button>
           </div>
         </section>
       </div>

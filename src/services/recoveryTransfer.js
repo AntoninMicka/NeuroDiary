@@ -2,6 +2,14 @@ import QRCode from "qrcode";
 
 const RECOVERY_QR_PREFIX = "neurodiary-recovery:";
 
+function createRecoveryQrDetector() {
+  if (typeof globalThis.BarcodeDetector !== "function") {
+    throw new Error("Tento prohlizec zatim neumí cist QR kody.");
+  }
+
+  return new globalThis.BarcodeDetector({ formats: ["qr_code"] });
+}
+
 export function buildRecoveryTransferPayload(secret) {
   return `${RECOVERY_QR_PREFIX}${secret.trim()}`;
 }
@@ -43,20 +51,36 @@ export function canReadRecoveryQrFromImage() {
   return typeof globalThis.BarcodeDetector === "function";
 }
 
+export function canScanRecoveryQrFromCamera() {
+  return (
+    canReadRecoveryQrFromImage()
+    && typeof globalThis.navigator?.mediaDevices?.getUserMedia === "function"
+  );
+}
+
+export async function readRecoverySecretFromQrSource(source) {
+  const detector = createRecoveryQrDetector();
+  const codes = await detector.detect(source);
+  const rawValue = codes[0]?.rawValue ?? "";
+  if (!rawValue) {
+    return "";
+  }
+
+  return parseRecoveryTransferPayload(rawValue);
+}
+
 export async function importRecoverySecretFromQrImage(file) {
   if (!canReadRecoveryQrFromImage()) {
     throw new Error("Tento prohlizec zatim neumí cist QR z obrazku.");
   }
 
-  const detector = new globalThis.BarcodeDetector({ formats: ["qr_code"] });
   const bitmap = await createImageBitmap(file);
-  const codes = await detector.detect(bitmap);
-  const rawValue = codes[0]?.rawValue ?? "";
-  if (!rawValue) {
+  const secret = await readRecoverySecretFromQrSource(bitmap);
+  if (!secret) {
     throw new Error("V nahranem obrazku nebyl nalezen QR kod.");
   }
 
-  return parseRecoveryTransferPayload(rawValue);
+  return secret;
 }
 
 export function downloadRecoveryQr(canvas, filename = "neurodiary-recovery-secret.png") {
