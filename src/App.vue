@@ -17,6 +17,7 @@ import {
 import { createDiaryRepository } from "./repositories/index.js";
 import { parseJsonBackup, serializeJsonBackup } from "./services/jsonTransfer.js";
 import { openDoctorReportPrint } from "./services/doctorReport.js";
+import { activateServiceWorkerUpdate, OFFLINE_READY_EVENT, UPDATE_READY_EVENT } from "./pwa.js";
 
 const diaryRepository = ref(null);
 const fileInput = ref(null);
@@ -30,6 +31,10 @@ const selectedStateKey = ref("on");
 const deferredInstallPrompt = ref(null);
 const canInstallApp = ref(false);
 const isInstalledApp = ref(false);
+const platformInstallMode = ref("browser");
+const isOnline = ref(globalThis.navigator?.onLine ?? true);
+const pwaOfflineReady = ref(false);
+const pwaUpdateRegistration = ref(null);
 const state = reactive({
   selectedDate: getTodayKey(),
   patientName: "",
@@ -42,6 +47,21 @@ const selectedDateLabel = computed(() => formatLongDate(state.selectedDate));
 const sortedMedications = computed(() =>
   [...selectedEntry.value.medications].sort((left, right) => left.time.localeCompare(right.time)),
 );
+const installHelpText = computed(() => {
+  if (isInstalledApp.value) {
+    return "App is installed and ready for offline use from your device.";
+  }
+
+  if (platformInstallMode.value === "ios-share-sheet") {
+    return "Na iPhonu nebo iPadu otevřete menu Sdilet a zvolte Pridat na plochu, tim aplikaci nainstalujete.";
+  }
+
+  if (platformInstallMode.value === "install-prompt") {
+    return "Browser uz umi aplikaci nainstalovat. Pouzijte tlacitko Install app.";
+  }
+
+  return "PWA support is enabled. Once the browser allows installation, the install action will appear here.";
+});
 
 let menuResizeObserver = null;
 let mediaQueryList = null;
@@ -61,6 +81,14 @@ onMounted(async () => {
   initializeInstallState();
   globalThis.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
   globalThis.addEventListener("appinstalled", handleAppInstalled);
+  globalThis.addEventListener("online", handleConnectionChange);
+  globalThis.addEventListener("offline", handleConnectionChange);
+  globalThis.addEventListener(OFFLINE_READY_EVENT, handleOfflineReady);
+  globalThis.addEventListener(UPDATE_READY_EVENT, handleUpdateReady);
+
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.addEventListener("controllerchange", handleControllerChange);
+  }
 
   const repository = await createDiaryRepository();
   const initialState = repository.loadState();
@@ -85,6 +113,11 @@ onUnmounted(() => {
   mediaQueryList?.removeEventListener?.("change", syncInstallState);
   globalThis.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
   globalThis.removeEventListener("appinstalled", handleAppInstalled);
+  globalThis.removeEventListener("online", handleConnectionChange);
+  globalThis.removeEventListener("offline", handleConnectionChange);
+  globalThis.removeEventListener(OFFLINE_READY_EVENT, handleOfflineReady);
+  globalThis.removeEventListener(UPDATE_READY_EVENT, handleUpdateReady);
+  navigator.serviceWorker?.removeEventListener?.("controllerchange", handleControllerChange);
 });
 
 function updateSelectedDate(dateKey) {
@@ -123,8 +156,24 @@ function initializeInstallState() {
 function syncInstallState() {
   const isStandalone = globalThis.matchMedia?.("(display-mode: standalone)")?.matches ?? false;
   const isIosStandalone = globalThis.navigator?.standalone === true;
+  const userAgent = globalThis.navigator?.userAgent ?? "";
+  const platform = globalThis.navigator?.platform ?? "";
+  const isTouchMac = platform === "MacIntel" && globalThis.navigator?.maxTouchPoints > 1;
+  const isIosDevice = /iPad|iPhone|iPod/.test(userAgent) || isTouchMac;
   isInstalledApp.value = isStandalone || isIosStandalone;
   canInstallApp.value = Boolean(deferredInstallPrompt.value) && !isInstalledApp.value;
+
+  if (isInstalledApp.value) {
+    platformInstallMode.value = "installed";
+    return;
+  }
+
+  if (canInstallApp.value) {
+    platformInstallMode.value = "install-prompt";
+    return;
+  }
+
+  platformInstallMode.value = isIosDevice ? "ios-share-sheet" : "browser";
 }
 
 function handleBeforeInstallPrompt(event) {
@@ -138,6 +187,22 @@ function handleAppInstalled() {
   isInstalledApp.value = true;
   canInstallApp.value = false;
   storageMessage.value = "Aplikace byla nainstalovana do zarizeni.";
+}
+
+function handleConnectionChange() {
+  isOnline.value = globalThis.navigator?.onLine ?? true;
+}
+
+function handleOfflineReady() {
+  pwaOfflineReady.value = true;
+}
+
+function handleUpdateReady(event) {
+  pwaUpdateRegistration.value = event.detail?.registration ?? null;
+}
+
+function handleControllerChange() {
+  globalThis.location.reload();
 }
 
 async function promptInstall() {
@@ -154,6 +219,14 @@ async function promptInstall() {
 
   deferredInstallPrompt.value = null;
   syncInstallState();
+}
+
+function applyAppUpdate() {
+  activateServiceWorkerUpdate(pwaUpdateRegistration.value);
+}
+
+function dismissOfflineReady() {
+  pwaOfflineReady.value = false;
 }
 
 function addMedication(payload) {
@@ -338,13 +411,7 @@ function syncFloatingMenuHeight() {
             >
               Install app
             </button>
-            <p v-else-if="isInstalledApp" class="hero-install-note">
-              App is installed and ready for offline use from your device.
-            </p>
-            <p v-else class="hero-install-note">
-              PWA support is enabled. Once the browser allows installation, the install action will
-              appear here.
-            </p>
+            <p class="hero-install-note">{{ installHelpText }}</p>
           </div>
         </div>
       </header>
@@ -354,6 +421,13 @@ function syncFloatingMenuHeight() {
           <div class="floating-menu-status">
             <p class="hero-label">Selected day · {{ repositoryMode }}</p>
             <p class="hero-date">{{ selectedDateLabel }}</p>
+            <div class="status-chips" aria-label="Application status">
+              <span :class="['status-chip', isOnline ? 'status-chip-online' : 'status-chip-offline']">
+                {{ isOnline ? "Online" : "Offline" }}
+              </span>
+              <span v-if="pwaOfflineReady" class="status-chip status-chip-ready">Offline cache ready</span>
+              <span v-if="pwaUpdateRegistration" class="status-chip status-chip-update">Update ready</span>
+            </div>
           </div>
 
           <div class="floating-menu-actions">
@@ -375,6 +449,20 @@ function syncFloatingMenuHeight() {
           <a href="#sekce-souhrn">Souhrn</a>
           <a href="#sekce-manualy">Manualy</a>
         </nav>
+
+        <div v-if="!isOnline" class="status-banner status-banner-offline" role="status">
+          <p>Pracujete offline. Zaznamy se ukladaji lokalne a synchronni akce zavisle na siti nejsou potreba.</p>
+        </div>
+
+        <div v-if="pwaOfflineReady" class="status-banner status-banner-ready" role="status">
+          <p>Aplikace je pripravena k offline pouziti i po dalsim otevreni.</p>
+          <button class="ghost-button" type="button" @click="dismissOfflineReady">Rozumim</button>
+        </div>
+
+        <div v-if="pwaUpdateRegistration" class="status-banner status-banner-update" role="status">
+          <p>Je pripravena nova verze aplikace. Pro nacteni aktualizace staci obnovit aplikaci.</p>
+          <button class="primary-button" type="button" @click="applyAppUpdate">Aktualizovat ted</button>
+        </div>
 
         <p v-if="storageMessage" class="storage-message floating-menu-message">{{ storageMessage }}</p>
       </section>

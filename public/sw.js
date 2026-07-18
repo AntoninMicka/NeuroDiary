@@ -38,6 +38,12 @@ self.addEventListener("fetch", (event) => {
   event.respondWith(handleAssetRequest(request));
 });
 
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
+});
+
 async function handleNavigation(request) {
   try {
     const networkResponse = await fetch(request);
