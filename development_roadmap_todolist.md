@@ -244,11 +244,34 @@ Výstup:
 
 ### [pending] 5.1 Přihlášení
 
-* Passkeys
-* WebAuthn
-* JWT
+Rozhodnutí pro první cloudovou iteraci:
+
+* Google ID
+* Sign in with Apple
+* serverové ověření identity tokenu
+* návazné vydání vlastní session / JWT pro NeuroDiary API
+
+Navazující kroky:
+
+* návrh account linking při použití více providerů
+* fallback strategie pro zařízení bez Apple / Google přihlášení
+* později zvážit passkeys jako doplňkovou nebo pokročilejší variantu
 
 ### [pending] 5.2 Šifrování dat
+
+Rozhodnutí pro cloudovou synchronizaci:
+
+* end-to-end šifrování dat deníku
+* server ukládá pouze šifrované payloady a metadata nutná pro synchronizaci
+* dešifrování probíhá pouze na zařízení uživatele
+
+Navazující kroky:
+
+* návrh key managementu pro Google ID / Apple ID účty
+* bezpečné odvození nebo zabalení šifrovacího klíče
+* obnova přístupu při novém zařízení
+* řešení rotace klíčů
+* rozhodnout, která metadata mohou zůstat mimo šifrovaný obsah
 
 ### [pending] 5.3 Audit log
 
@@ -264,32 +287,100 @@ Výstup:
 
 ## Fáze 6 – Cloud
 
-### [pending] 6.1 Backend
+### [in_progress] 6.1 Backend
 
-### [pending] 6.2 REST API v1
+První FastAPI backend scaffold v `backend/`:
 
-### [pending] 6.3 Synchronizace
+* healthcheck
+* snapshot sync storage v serverové SQLite
+* Dockerfile
+* základní konfigurace přes env variables
 
-* upload
-* download
-* konflikty
-* verzování
+Rozhodnutí pro první deployment target:
 
-### [pending] 6.5 Integrace mobilních úložišť
+* Google Cloud Run
+
+### [in_progress] 6.2 REST API v1
+
+První kontrakt zdokumentovaný a implementovaný:
+
+* `GET /healthz`
+* `GET /api/v1/sync/pull`
+* `POST /api/v1/sync/push`
+* bearer token pro dočasný single-user režim
+
+Navazující kroky:
+
+* stabilizovat request/response kontrakty
+* doplnit endpoint pro zjištění verze a capability discovery
+* oddělit interní a veřejné API modely
+
+### [pending] 6.3 Napojení frontendu na synchronizaci
+
+* Sync settings v klientovi
+* ruční `pull` a `push`
+* indikace poslední synchronizace
+* zobrazení konfliktu a chybového stavu
+* bezpečné chování při offline režimu
+* příprava pro sync šifrovaného payloadu místo otevřeného JSON snapshotu
+
+### [pending] 6.4 Automatická synchronizace
+
+* sync při startu aplikace
+* debounce po lokálních změnách
+* manuální vynucení synchronizace
+* strategie retry a backoff
+* ochrana proti paralelním zápisům
+
+### [pending] 6.5 Konflikty a verzování
+
+* snapshot conflict flow
+* rozhodnutí lokalní vs. serverová verze
+* pozdější jemnější merge po dnech nebo entitách
+* audit posledních konfliktů
+* ověřit, jak bude conflict workflow fungovat nad end-to-end šifrovanými daty
+
+### [pending] 6.6 Deploy backendu
+
+* zvolit první cílovou platformu
+  Google Cloud Run
+* produkční env variables a tokeny
+* persistentní serverové úložiště
+* CORS a základní hardening
+* runbook pro nasazení nové verze
+
+Navazující kroky pro Cloud Run:
+
+* Artifact Registry / image build
+* Cloud Run service
+* perzistentní data přes navázané serverové úložiště nebo přechod na managed DB
+* bezpečné uložení secrets
+* vlastní doména pro frontend API komunikaci
+* oddělit metadata synchronizace od šifrovaných uživatelských dat
+
+### [pending] 6.7 Monitoring a provoz
+
+* structured logging
+* základní error reporting
+* healthcheck monitoring
+* zálohy serverové databáze
+* jednoduchý incident / recovery postup
+
+### [pending] 6.8 Integrace mobilních úložišť
 
 * Android sdílení a export do Google Drive
 * Apple sdílení a export do iCloud Drive / Files
 * napojení na nativní systémové dialogy pro výběr umístění zálohy
 
-### [pending] 6.6 Více profilů a role pečující osoby
+### [pending] 6.9 Více profilů a role pečující osoby
 
 * pacient
 * rodinný příslušník / pečující
 * oddělení dat a oprávnění mezi profily
 
-### [pending] 6.4 Sdílení s lékařem
+### [pending] 6.10 Sdílení s lékařem
 
-### [pending] 6.7 Lékařský režim / kartotéka
+### [pending] 6.11 Lékařský režim / kartotéka
 
 * speciální režim pro ambulanci nebo poradnu
 * načítání doručených reportů a jejich evidence
@@ -311,10 +402,65 @@ Data jsou bezpečně synchronizována mezi zařízeními.
 
 Výstup:
 
+* první nasazený backend
+* klient napojený na sync API
 * bezpečné přihlášení
 * šifrování
-* synchronizace
+* synchronizace mezi zařízeními
 * sdílení dat
+
+---
+
+## Doporučené pořadí dalších implementací
+
+### [recommended] R1 Klientský sync základ
+
+Nejbližší praktický krok po backend scaffoldingu:
+
+* uložit sync endpoint a token do nastavení
+* přidat ruční `Synchronizovat nyní`
+* umět `pull` při prvním napojení
+* zobrazit `revision`, čas posledního syncu a conflict stav
+
+Poznámka:
+
+* implementace by už měla počítat s budoucím end-to-end šifrováním, aby se sync kontrakt nemusel znovu zásadně lámat
+
+### [recommended] R2 První nasazení backendu
+
+Po ručním klientském syncu:
+
+* nasadit backend na Google Cloud Run
+* dořešit persistentní serverové úložiště
+* nastavit CORS pro frontend doménu
+* otestovat synchronizaci mezi dvěma zařízeními
+
+### [recommended] R3 Až potom validace a automatizace
+
+Jakmile bude základní sync fungovat:
+
+* validace a kvalita dat
+* automatická synchronizace
+* řešení konfliktů
+* autentizace více uživatelů
+
+### [recommended] R4 Přihlášení přes Apple / Google
+
+Jakmile bude první sync end-to-end funkční:
+
+* Google Sign-In v klientovi
+* Sign in with Apple
+* ověření identity tokenů na backendu
+* mapování uživatele na serverový sync prostor
+
+### [recommended] R0 Návrh E2E šifrování
+
+Ještě před plným napojením klienta na produkční sync:
+
+* vybrat model klíčů
+* určit hranici mezi šifrovanými daty a synchronizačními metadaty
+* rozhodnout recovery flow pro nové zařízení
+* potvrdit, co backend smí a nesmí být schopen přečíst
 
 ---
 
