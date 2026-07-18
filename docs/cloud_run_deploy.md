@@ -22,12 +22,17 @@ bash scripts/cloud_run_bootstrap.sh
 Kdyz nechas nektere hodnoty prazdne, skript se na ne pri behu doptá a prida i kratkou napovedu
 co ma byt za hodnotu a priklad formatu.
 
+Pokud vyplnis i `BILLING_ACCOUNT_ID`, skript umi projekt zkontrolovat a pripadne ho pripojit
+na aktivni billing account. Bez billing propojeni nepouzjes placene sluzby jako `Cloud Run`
+nebo `Cloud SQL`.
+
 Skript umi:
 
 - zapnout potrebna GCP API
 - vytvorit Artifact Registry repository
 - vytvorit deploy service account a IAM role
 - volitelne vytvorit GitHub Workload Identity Federation
+- zkontrolovat billing a volitelne pripojit projekt k billing accountu
 - volitelne vytvorit Cloud SQL PostgreSQL instanci, DB a uzivatele
 - postavit image pres `gcloud builds submit`
 - nasadit prvni revizi do Cloud Run
@@ -74,6 +79,30 @@ V repozitari nastav:
 
 Doporucena cesta je `Workload Identity Federation` z GitHub Actions, bez ukladani service account key do GitHubu.
 To odpovida aktualnimu doporuceni Google Cloud IAM docs a `google-github-actions/auth`.
+
+## Billing
+
+Projekt musi byt propojeny s aktivnim `Cloud Billing` uctem.
+
+Moznosti:
+
+- rucne v Google Cloud Console
+- nebo pres CLI:
+
+```bash
+gcloud billing accounts list
+gcloud billing projects link PROJECT_ID --billing-account=000000-000000-000000
+```
+
+Pokud je billing k projektu uz pripojeny, overis to takto:
+
+```bash
+gcloud billing projects describe PROJECT_ID
+```
+
+Podle aktualni dokumentace Google Cloud je billing na projektu povazovany za aktivni, kdyz je projekt
+propojeny s platnym aktivnim billing accountem. Prikaz `gcloud billing projects link` pripoji nebo zmeni
+billing account projektu. To je inference z oficialnich prikazu `gcloud billing projects` a `link`.
 
 ### 1. Aktivuj potrebne API
 
@@ -177,6 +206,13 @@ Nastav:
 Prakticky pocitej s tim, ze pro Cloud SQL muze byt vhodne pouzit socket path `/cloudsql/...`
 nebo jinou connection strategii podle konkretni instance a site. Presny format connection stringu
 si doladis podle finalniho Cloud SQL network setupu.
+
+Poznamka k Cloud SQL sizingu:
+
+- od cervence 2026 je pro `PostgreSQL 16+` casto vychozi `Cloud SQL Enterprise Plus`
+- `db-f1-micro` tam neplati
+- pro levny prvni deploy je jednodussi explicitne zvolit `POSTGRES_EDITION=ENTERPRISE`
+- pokud chces `ENTERPRISE_PLUS`, pouzij vhodny tier jako `db-perf-optimized-N-2`
 
 ## Co workflow dela
 

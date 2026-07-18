@@ -17,6 +17,8 @@ Pokud nechces vsechno klikat rucne, prvni cast tohohle checklistu umi automatizo
 - [ ] zapsat si `PROJECT_ID`
 - [ ] zapsat si cislo projektu `PROJECT_NUMBER`
 - [ ] zvolit cilovy region, idealne stejny pro Cloud Run i Cloud SQL
+- [ ] pripojit projekt k aktivnimu billing accountu
+- [ ] pokud chci, aby to udelal bootstrap skript, vyplnit `BILLING_ACCOUNT_ID`
 
 ## 3. Zapnuti API
 
@@ -51,6 +53,9 @@ Pokud nechces vsechno klikat rucne, prvni cast tohohle checklistu umi automatizo
 ## 7. Cloud SQL PostgreSQL
 
 - [ ] vytvorit `Cloud SQL for PostgreSQL` instanci
+- [ ] rozhodnout `POSTGRES_EDITION`
+  `ENTERPRISE` pro levnejsi start
+  `ENTERPRISE_PLUS` pro vykonnejsi variantu
 - [ ] vytvorit databazi pro NeuroDiary
 - [ ] vytvorit DB uzivatele
 - [ ] zapsat si `INSTANCE_CONNECTION_NAME` ve formatu `PROJECT_ID:REGION:INSTANCE_ID`

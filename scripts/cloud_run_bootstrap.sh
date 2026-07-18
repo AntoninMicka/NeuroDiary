@@ -26,6 +26,7 @@ CREATE_GITHUB_WIF="${CREATE_GITHUB_WIF:-false}"
 ALLOW_UNAUTHENTICATED="${ALLOW_UNAUTHENTICATED:-true}"
 CLOUD_RUN_DEPLOY_FLAGS="${CLOUD_RUN_DEPLOY_FLAGS:-}"
 RUNTIME_SERVICE_ACCOUNT="${RUNTIME_SERVICE_ACCOUNT:-}"
+BILLING_ACCOUNT_ID="${BILLING_ACCOUNT_ID:-}"
 
 function prompt_value() {
   local var_name="$1"
@@ -123,6 +124,7 @@ function collect_configuration() {
   prompt_choice "ALLOW_UNAUTHENTICATED" "Ma byt Cloud Run endpoint verejne dostupny a chraneny jen bearer tokenem?" "true false"
   prompt_optional_value "CLOUD_RUN_DEPLOY_FLAGS" "Dalsi volitelne Cloud Run flagy." "--min-instances=0 --max-instances=3"
   prompt_optional_value "RUNTIME_SERVICE_ACCOUNT" "Volitelny runtime service account pro Cloud Run." "neurodiary-runtime@my-project.iam.gserviceaccount.com"
+  prompt_optional_value "BILLING_ACCOUNT_ID" "Volitelny billing account pro pripojeni projektu. Pokud ho nezadas, skript billing jen zkontroluje." "000000-000000-000000"
 
   prompt_choice "CREATE_GITHUB_WIF" "Ma skript rovnou vytvorit Workload Identity Federation pro GitHub Actions?" "true false"
   if [[ "${CREATE_GITHUB_WIF}" == "true" ]]; then
@@ -134,12 +136,20 @@ function collect_configuration() {
   prompt_optional_value "DEPLOY_SA_NAME" "Nazev deploy service accountu." "neurodiary-github-deploy"
 
   if [[ "${DATABASE_MODE}" == "postgres" ]]; then
+    prompt_choice "POSTGRES_EDITION" "Cloud SQL edition. ENTERPRISE je levnejsi a vhodna pro prvni deploy, ENTERPRISE_PLUS je vykonnejsi." "ENTERPRISE ENTERPRISE_PLUS"
+    prompt_optional_value "POSTGRES_DATABASE_VERSION" "Verze PostgreSQL pro Cloud SQL." "POSTGRES_16"
     prompt_value "POSTGRES_INSTANCE_NAME" "Nazev Cloud SQL instance." "neurodiary-db"
     prompt_value "POSTGRES_DATABASE_NAME" "Nazev PostgreSQL databaze." "neurodiary"
     prompt_value "POSTGRES_USER" "Jmeno DB uzivatele aplikace." "neurodiary_app"
     prompt_value "POSTGRES_PASSWORD" "Silne heslo pro DB uzivatele." "silne-db-heslo" "true"
     prompt_value "CLOUD_SQL_INSTANCE" "Cloud SQL connection name ve formatu PROJECT_ID:REGION:INSTANCE_ID." "my-neurodiary-prod:europe-west1:neurodiary-db"
-    prompt_optional_value "POSTGRES_TIER" "Velikost Cloud SQL instance." "db-f1-micro"
+
+    if [[ "${POSTGRES_EDITION}" == "ENTERPRISE" ]]; then
+      prompt_optional_value "POSTGRES_TIER" "Velikost Cloud SQL instance pro levnejsi Enterprise variantu." "db-f1-micro"
+    else
+      prompt_optional_value "POSTGRES_TIER" "Velikost Cloud SQL instance pro Enterprise Plus variantu." "db-perf-optimized-N-2"
+    fi
+
     prompt_optional_value "POSTGRES_STORAGE_GB" "Velikost disku v GB." "10"
     prompt_optional_value "POSTGRES_AVAILABILITY_TYPE" "Typ dostupnosti instance." "zonal"
     prompt_optional_value "POSTGRES_INSTANCE_FLAGS" "Dalsi raw flagy pro gcloud sql instances create." "--edition=enterprise"
@@ -156,6 +166,81 @@ function log_step() {
 function ensure_project() {
   log_step "Selecting GCP project ${GCP_PROJECT_ID}"
   gcloud config set project "${GCP_PROJECT_ID}" >/dev/null
+}
+
+function verify_project_access() {
+  log_step "Verifying access to project ${GCP_PROJECT_ID}"
+
+  local active_account
+  active_account="$(gcloud config get-value account 2>/dev/null || true)"
+
+  if ! gcloud projects describe "${GCP_PROJECT_ID}" >/dev/null 2>&1; then
+    echo
+    echo "Cannot access project ${GCP_PROJECT_ID} with account ${active_account}."
+    echo
+    echo "Check these things:"
+    echo "  1. The project ID is correct."
+    echo "  2. The project already exists in Google Cloud."
+    echo "  3. The active gcloud account has access to the project."
+    echo
+    echo "Useful commands:"
+    echo "  gcloud auth list"
+    echo "  gcloud config get-value account"
+    echo "  gcloud projects list"
+    echo "  gcloud config set account YOUR_ACCOUNT@gmail.com"
+    echo "  gcloud auth login"
+    echo
+    echo "If the project does not exist yet, create it first in Google Cloud Console or with:"
+    echo "  gcloud projects create ${GCP_PROJECT_ID}"
+    echo
+    echo "Then run the script again."
+    exit 1
+  fi
+}
+
+function ensure_billing_link() {
+  log_step "Checking Cloud Billing for project ${GCP_PROJECT_ID}"
+
+  local billing_output
+  if ! billing_output="$(gcloud billing projects describe "${GCP_PROJECT_ID}" --format='value(billingAccountName,billingEnabled)' 2>/dev/null)"; then
+    echo
+    echo "Cannot read billing status for project ${GCP_PROJECT_ID}."
+    echo "The active account likely misses billing-related permissions."
+    echo
+    echo "Useful commands:"
+    echo "  gcloud billing accounts list"
+    echo "  gcloud billing projects describe ${GCP_PROJECT_ID}"
+    echo
+    echo "Common requirement:"
+    echo "  access to the billing account and permission to link the project to it"
+    echo
+    exit 1
+  fi
+
+  local billing_enabled="False"
+  billing_enabled="$(awk '{print $2}' <<<"${billing_output}")"
+
+  if [[ "${billing_enabled}" == "True" || "${billing_enabled}" == "true" ]]; then
+    echo "Billing is already enabled for ${GCP_PROJECT_ID}."
+    return
+  fi
+
+  if [[ -z "${BILLING_ACCOUNT_ID}" ]]; then
+    echo
+    echo "Billing is not enabled for project ${GCP_PROJECT_ID}."
+    echo "Provide BILLING_ACCOUNT_ID in scripts/cloud_run.env or when prompted to let the script link billing."
+    echo
+    echo "Useful commands:"
+    echo "  gcloud billing accounts list"
+    echo "  gcloud billing projects link ${GCP_PROJECT_ID} --billing-account=000000-000000-000000"
+    echo
+    echo "Without billing, paid resources like Cloud Run and Cloud SQL cannot be used."
+    exit 1
+  fi
+
+  echo "Linking project ${GCP_PROJECT_ID} to billing account ${BILLING_ACCOUNT_ID}."
+  echo "This can incur charges once resources are created."
+  gcloud billing projects link "${GCP_PROJECT_ID}" --billing-account="${BILLING_ACCOUNT_ID}"
 }
 
 function enable_apis() {
@@ -255,10 +340,21 @@ function ensure_cloud_sql() {
 
   log_step "Ensuring Cloud SQL instance ${POSTGRES_INSTANCE_NAME}"
   if ! gcloud sql instances describe "${POSTGRES_INSTANCE_NAME}" >/dev/null 2>&1; then
+    local postgres_database_version="${POSTGRES_DATABASE_VERSION:-POSTGRES_16}"
+    local postgres_edition="${POSTGRES_EDITION:-ENTERPRISE}"
+    local postgres_tier
+
+    if [[ "${postgres_edition}" == "ENTERPRISE_PLUS" ]]; then
+      postgres_tier="${POSTGRES_TIER:-db-perf-optimized-N-2}"
+    else
+      postgres_tier="${POSTGRES_TIER:-db-f1-micro}"
+    fi
+
     gcloud sql instances create "${POSTGRES_INSTANCE_NAME}" \
-      --database-version="POSTGRES_16" \
+      --database-version="${postgres_database_version}" \
       --region="${GCP_REGION}" \
-      --tier="${POSTGRES_TIER:-db-f1-micro}" \
+      --edition="${postgres_edition}" \
+      --tier="${postgres_tier}" \
       --storage-size="${POSTGRES_STORAGE_GB:-10}" \
       --availability-type="${POSTGRES_AVAILABILITY_TYPE:-zonal}" \
       ${POSTGRES_INSTANCE_FLAGS:-}
@@ -402,6 +498,9 @@ function print_summary() {
   echo
   echo "Local only"
   echo "  scripts/cloud_run.env contains the same values for your local bootstrap run."
+  if [[ -n "${BILLING_ACCOUNT_ID}" ]]; then
+    echo "  BILLING_ACCOUNT_ID=${BILLING_ACCOUNT_ID}"
+  fi
   echo "  Keep this file out of git and rotate tokens/passwords if it leaks."
   echo
   echo "Manual follow-up"
@@ -412,6 +511,8 @@ function print_summary() {
 ensure_required_commands
 collect_configuration
 ensure_project
+verify_project_access
+ensure_billing_link
 enable_apis
 ensure_artifact_registry
 ensure_deploy_service_account
