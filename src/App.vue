@@ -117,6 +117,11 @@ const state = reactive({
   selectedDate: getTodayKey(),
   patientName: "",
   birthYear: "",
+  account: {
+    isAuthenticated: false,
+    provider: "",
+    userId: "",
+  },
   treatmentPlan: [],
   deletedEntryDates: {},
   entries: {},
@@ -401,9 +406,11 @@ function updateSelectedDate(dateKey) {
 }
 
 function updateEntry(nextEntry) {
+  clearDeletedEntryDate(state, state.selectedDate);
   state.entries[state.selectedDate] = {
     ...state.entries[state.selectedDate],
     ...nextEntry,
+    updatedAt: new Date().toISOString(),
   };
 }
 
@@ -621,13 +628,17 @@ function goToNextDate() {
 }
 
 function addMedication(payload) {
+  clearDeletedEntryDate(state, state.selectedDate);
   selectedEntry.value.medications.push(createMedication(payload));
+  selectedEntry.value.updatedAt = new Date().toISOString();
 }
 
 function removeMedication(medicationId) {
+  clearDeletedEntryDate(state, state.selectedDate);
   selectedEntry.value.medications = selectedEntry.value.medications.filter(
     (item) => item.id !== medicationId,
   );
+  selectedEntry.value.updatedAt = new Date().toISOString();
 }
 
 function addTreatmentPlanItem(payload) {
@@ -666,6 +677,7 @@ function recordMedicationFromPlan() {
 }
 
 function updateHour({ label, stateKey }) {
+  clearDeletedEntryDate(state, state.selectedDate);
   if (!stateKey) {
     clearHourStateRecords(selectedEntry.value, label);
     storageMessage.value = `Zaznam pro hodinu ${label} byl vymazan.`;
@@ -677,10 +689,31 @@ function updateHour({ label, stateKey }) {
 }
 
 function writeCurrentState() {
+  clearDeletedEntryDate(state, state.selectedDate);
   appendHourStateRecord(selectedEntry.value, currentHourLabel.value, selectedStateKey.value, {
     source: "manual",
   });
   storageMessage.value = `Stav ${getStateDefinition(selectedStateKey.value).label} zapsan pro hodinu ${currentHourLabel.value}.`;
+}
+
+async function resetSelectedDateEverywhere() {
+  const dateKey = state.selectedDate;
+  const confirmed = globalThis.confirm(
+    `Tato akce vynucene smaze zaznamy pro den ${dateKey} a rozesle smazani do vsech synchronizovanych zarizeni. Pokracovat?`,
+  );
+  if (!confirmed) {
+    storageMessage.value = "Reset vybraneho dne byl zrusen.";
+    return;
+  }
+
+  markEntryDeleted(state, dateKey);
+  ensureEntry(state, dateKey);
+  storageMessage.value = `Den ${dateKey} byl lokalne oznacen ke smazani. Odesilam reset do cloud syncu.`;
+
+  if (ensureSyncIdentity()) {
+    await pushSync(true);
+    storageMessage.value = `Den ${dateKey} byl vynucene smazan a reset byl odeslan do cloud syncu.`;
+  }
 }
 
 function resetDemo() {
@@ -1329,6 +1362,7 @@ function applyImportedState(nextState) {
     state.patientName = nextState.patientName ?? "";
     state.birthYear = nextState.birthYear ?? "";
     state.treatmentPlan = nextState.treatmentPlan ?? [];
+    state.deletedEntryDates = nextState.deletedEntryDates ?? {};
     state.account = nextState.account ?? state.account;
     state.entries = nextState.entries ?? {};
     ensureEntry(state, state.selectedDate);
@@ -1532,6 +1566,9 @@ function syncFloatingMenuHeight() {
             </button>
             <button class="ghost-button" type="button" :disabled="state.selectedDate === getTodayKey()" @click="updateSelectedDate(getTodayKey())">
               Dnes
+            </button>
+            <button class="ghost-button utility-menu-item-danger" type="button" @click="resetSelectedDateEverywhere">
+              Vynucene smazat tento den
             </button>
           </div>
         </div>

@@ -14,7 +14,7 @@ import {
 import { DiaryRepository } from "./DiaryRepository.js";
 
 const STORAGE_KEY = "neurodiary-sqlite-db-v1";
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 const MIGRATIONS = [
   {
@@ -80,6 +80,14 @@ const MIGRATIONS = [
           dose TEXT NOT NULL,
           time TEXT NOT NULL
         );
+      `);
+    },
+  },
+  {
+    version: 4,
+    run(db) {
+      db.run(`
+        ALTER TABLE diary_entries ADD COLUMN updated_at TEXT NOT NULL DEFAULT '';
       `);
     },
   },
@@ -182,6 +190,7 @@ export class SqliteDiaryRepository extends DiaryRepository {
     const patientName = this.selectSetting("patient_name");
     const birthYear = this.selectSetting("birth_year");
     const accountJson = this.selectSetting("account_json");
+    const deletedEntryDatesJson = this.selectSetting("deleted_entry_dates_json");
     state.treatmentPlan = this.selectTreatmentPlan();
     if (selectedDate) {
       state.selectedDate = selectedDate;
@@ -199,21 +208,29 @@ export class SqliteDiaryRepository extends DiaryRepository {
         state.account = createInitialState().account;
       }
     }
+    if (deletedEntryDatesJson) {
+      try {
+        state.deletedEntryDates = JSON.parse(deletedEntryDatesJson);
+      } catch {
+        state.deletedEntryDates = {};
+      }
+    }
 
     const entries = this.db.exec(`
-      SELECT entry_date, sleep_quality, overall_status, notes, is_demo
+      SELECT entry_date, sleep_quality, overall_status, notes, is_demo, updated_at
       FROM diary_entries
       ORDER BY entry_date
     `);
 
     if (entries[0]) {
       this.reportProgress(`Found ${entries[0].values.length} SQLite diary entries.`);
-      for (const [entryDate, sleepQuality, overallStatus, notes, isDemo] of entries[0].values) {
+      for (const [entryDate, sleepQuality, overallStatus, notes, isDemo, updatedAt] of entries[0].values) {
         state.entries[entryDate] = {
           isDemo: Boolean(isDemo),
           sleepQuality: sleepQuality || UNDEFINED_ENTRY_VALUE,
           overallStatus: overallStatus || UNDEFINED_ENTRY_VALUE,
           notes,
+          updatedAt: updatedAt || "",
           medications: this.selectMedications(entryDate),
           hours: this.selectHours(entryDate),
           hourRecords: this.selectHourRecords(entryDate),
@@ -258,6 +275,10 @@ export class SqliteDiaryRepository extends DiaryRepository {
         "account_json",
         JSON.stringify(state.account ?? createInitialState().account),
       ]);
+      this.db.run("INSERT INTO app_settings (key, value) VALUES (?, ?)", [
+        "deleted_entry_dates_json",
+        JSON.stringify(state.deletedEntryDates ?? {}),
+      ]);
 
       for (const item of state.treatmentPlan ?? []) {
         this.db.run(
@@ -273,8 +294,8 @@ export class SqliteDiaryRepository extends DiaryRepository {
         const normalizedEntry = reconcileEntryHourState(cloneSerializable(entry));
         this.db.run(
           `
-            INSERT INTO diary_entries (entry_date, sleep_quality, overall_status, notes, is_demo)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO diary_entries (entry_date, sleep_quality, overall_status, notes, is_demo, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)
           `,
           [
             entryDate,
@@ -282,6 +303,7 @@ export class SqliteDiaryRepository extends DiaryRepository {
             normalizedEntry.overallStatus,
             normalizedEntry.notes,
             normalizedEntry.isDemo ? 1 : 0,
+            normalizedEntry.updatedAt ?? "",
           ],
         );
 

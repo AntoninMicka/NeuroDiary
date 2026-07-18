@@ -606,7 +606,10 @@ function normalizeDeletedEntryDates(rawDeletedEntryDates) {
 
   return Object.fromEntries(
     Object.entries(rawDeletedEntryDates)
-      .filter(([dateKey, deletedAt]) => typeof dateKey === "string" && typeof deletedAt === "string" && deletedAt.trim()),
+      .filter(
+        ([dateKey, deletedAt]) =>
+          typeof dateKey === "string" && typeof deletedAt === "string" && deletedAt.trim().length > 0,
+      )
       .map(([dateKey, deletedAt]) => [dateKey, deletedAt]),
   );
 }
