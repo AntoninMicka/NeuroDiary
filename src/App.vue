@@ -37,6 +37,7 @@ const isOnline = ref(globalThis.navigator?.onLine ?? true);
 const pwaOfflineReady = ref(false);
 const pwaUpdateRegistration = ref(null);
 const activePanelId = ref(getActivePanelFromLocation());
+const isUtilityMenuOpen = ref(false);
 const state = reactive({
   selectedDate: getTodayKey(),
   patientName: "",
@@ -212,6 +213,7 @@ function handleConnectionChange() {
 
 function handleHashChange() {
   activePanelId.value = getActivePanelFromLocation();
+  isUtilityMenuOpen.value = false;
   void nextTick(() => {
     syncFloatingMenuHeight();
   });
@@ -251,6 +253,29 @@ function applyAppUpdate() {
 
 function dismissOfflineReady() {
   pwaOfflineReady.value = false;
+}
+
+function toggleUtilityMenu() {
+  isUtilityMenuOpen.value = !isUtilityMenuOpen.value;
+  void nextTick(() => {
+    syncFloatingMenuHeight();
+  });
+}
+
+function closeUtilityMenu() {
+  if (!isUtilityMenuOpen.value) {
+    return;
+  }
+
+  isUtilityMenuOpen.value = false;
+  void nextTick(() => {
+    syncFloatingMenuHeight();
+  });
+}
+
+function handleUtilityAction(action) {
+  closeUtilityMenu();
+  action();
 }
 
 function addMedication(payload) {
@@ -464,11 +489,36 @@ function syncFloatingMenuHeight() {
 
           <div class="floating-menu-actions">
             <button class="ghost-button" type="button" @click="printDoctorReport">Print report</button>
-            <button class="ghost-button" type="button" @click="exportDatabase">Export .sqlite</button>
-            <button class="ghost-button" type="button" @click="exportJson">Export JSON</button>
-            <button class="ghost-button" type="button" @click="openImportPicker">Import .sqlite</button>
-            <button class="ghost-button" type="button" @click="openJsonImportPicker">Import JSON</button>
-            <button class="ghost-button" type="button" @click="resetDemo">Reset demo data</button>
+            <div class="utility-menu">
+              <button
+                class="ghost-button utility-menu-trigger"
+                type="button"
+                :aria-expanded="isUtilityMenuOpen ? 'true' : 'false'"
+                aria-haspopup="menu"
+                @click="toggleUtilityMenu"
+              >
+                <span class="utility-menu-trigger-icon" aria-hidden="true">☰</span>
+                <span>Vice</span>
+              </button>
+
+              <div v-if="isUtilityMenuOpen" class="utility-menu-panel" role="menu" aria-label="Export a zalohy">
+                <button class="utility-menu-item" type="button" role="menuitem" @click="handleUtilityAction(exportDatabase)">
+                  Export .sqlite
+                </button>
+                <button class="utility-menu-item" type="button" role="menuitem" @click="handleUtilityAction(exportJson)">
+                  Export JSON
+                </button>
+                <button class="utility-menu-item" type="button" role="menuitem" @click="handleUtilityAction(openImportPicker)">
+                  Import .sqlite
+                </button>
+                <button class="utility-menu-item" type="button" role="menuitem" @click="handleUtilityAction(openJsonImportPicker)">
+                  Import JSON
+                </button>
+                <button class="utility-menu-item utility-menu-item-danger" type="button" role="menuitem" @click="handleUtilityAction(resetDemo)">
+                  Reset demo data
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 

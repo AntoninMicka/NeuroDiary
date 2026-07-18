@@ -200,6 +200,55 @@ textarea {
   justify-content: end;
 }
 
+.utility-menu {
+  position: relative;
+}
+
+.utility-menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.utility-menu-trigger-icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.utility-menu-panel {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  display: grid;
+  min-width: 200px;
+  padding: 0.45rem;
+  border-radius: 18px;
+  background: var(--surface-strong);
+  border: 1px solid rgba(31, 41, 51, 0.08);
+  box-shadow: 0 16px 32px rgba(31, 41, 51, 0.14);
+  z-index: 5;
+}
+
+.utility-menu-item {
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  padding: 0.75rem 0.8rem;
+  border-radius: 14px;
+  cursor: pointer;
+}
+
+.utility-menu-item:hover,
+.utility-menu-item:focus-visible {
+  background: rgba(31, 122, 140, 0.08);
+  outline: none;
+}
+
+.utility-menu-item-danger {
+  color: var(--bad);
+}
+
 .hero-date {
   font-size: 1.15rem;
   margin: 0 0 0.8rem;
@@ -1075,8 +1124,15 @@ textarea {
     justify-content: stretch;
   }
 
-  .floating-menu-actions .ghost-button {
+  .floating-menu-actions .ghost-button,
+  .utility-menu-trigger {
     width: 100%;
+  }
+
+  .utility-menu-panel {
+    position: static;
+    margin-top: 0.4rem;
+    min-width: 0;
   }
 
   .status-banner {
