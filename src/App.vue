@@ -41,6 +41,8 @@ import {
   canReadRecoveryQrFromImage,
 } from "./services/recoveryTransfer.js";
 import {
+  clearSyncKeyMaterial,
+  clearSyncState,
   deriveSyncEndpoint,
   getEffectiveSyncEndpoint,
   hasStoredRecoverySecret,
@@ -87,6 +89,7 @@ const isRecoveryTransferOpen = ref(false);
 const syncSettings = reactive(loadSyncSettings());
 const authConfig = reactive(createDefaultAuthConfig());
 const authSession = ref(loadStoredAuthSession());
+const previousAuthUserId = ref(authSession.value?.user?.userId ?? "");
 const recoverySecretInput = ref("");
 const generatedRecoverySecret = ref("");
 const storedRecoverySecret = ref(loadSyncKeyMaterial().recoverySecret ?? "");
@@ -634,7 +637,13 @@ function resetAllData() {
     ...emptyState,
     account: state.account ?? emptyState.account,
   });
-  storageMessage.value = "Vsechna lokalni data deniku byla smazana.";
+  Object.assign(syncSettings, clearSyncState(syncSettings));
+  clearSyncKeyMaterial();
+  storedRecoverySecret.value = "";
+  recoverySecretInput.value = "";
+  generatedRecoverySecret.value = "";
+  storageMessage.value =
+    "Vsechna lokalni data deniku byla smazana. Cloud sync byl na tomto zarizeni odpojen, serverova data zustala zachovana.";
 }
 
 function exportDatabase() {
@@ -810,6 +819,7 @@ async function initializeSync() {
     });
     Object.assign(syncSettings, saveSyncSettings({
       ...syncSettings,
+      userId: authSession.value?.user?.userId ?? syncSettings.userId,
       revision: result.revision,
       lastSyncAt: result.updatedAt,
       lastSyncStatus: "ok",
@@ -857,6 +867,7 @@ async function pullSync() {
     applyImportedState(mergedState);
     Object.assign(syncSettings, saveSyncSettings({
       ...syncSettings,
+      userId: authSession.value?.user?.userId ?? syncSettings.userId,
       revision: result.revision,
       lastSyncAt: result.updatedAt,
       lastSyncStatus: "ok",
@@ -909,6 +920,7 @@ async function pushSync(force = false) {
 
       Object.assign(syncSettings, saveSyncSettings({
         ...syncSettings,
+        userId: authSession.value?.user?.userId ?? syncSettings.userId,
         revision: retryResult.revision,
         lastSyncAt: retryResult.updatedAt,
         lastSyncStatus: "ok",
@@ -921,6 +933,7 @@ async function pushSync(force = false) {
 
     Object.assign(syncSettings, saveSyncSettings({
       ...syncSettings,
+      userId: authSession.value?.user?.userId ?? syncSettings.userId,
       revision: result.revision,
       lastSyncAt: result.updatedAt,
       lastSyncStatus: "ok",
@@ -1026,6 +1039,24 @@ function applyImportedState(nextState) {
     isApplyingExternalState.value = false;
   }
 }
+
+watch(
+  () => authSession.value?.user?.userId ?? "",
+  (nextUserId, previousUserId) => {
+    previousAuthUserId.value = nextUserId;
+    if (!previousUserId || !nextUserId || previousUserId === nextUserId) {
+      return;
+    }
+
+    Object.assign(syncSettings, clearSyncState(syncSettings));
+    clearSyncKeyMaterial();
+    storedRecoverySecret.value = "";
+    recoverySecretInput.value = "";
+    generatedRecoverySecret.value = "";
+    storageMessage.value =
+      "Byl zvolen jiny cloud ucet. Lokalni data zustala zachovana, ale sync tohoto zarizeni byl odpojen. Nejprve provedte Pull nebo znovu inicializujte sync pro novy ucet.";
+  },
+);
 
 function syncFloatingMenuHeight() {
   const height = floatingMenu.value?.offsetHeight ?? 0;

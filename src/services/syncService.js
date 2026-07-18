@@ -45,6 +45,7 @@ export function createDefaultSyncSettings() {
   return {
     endpoint: "",
     apiToken: "",
+    userId: "",
     revision: 0,
     lastSyncAt: "",
     lastSyncStatus: "idle",
@@ -106,6 +107,7 @@ export function loadSyncKeyMaterial() {
 
 export function saveSyncKeyMaterial(keyMaterial) {
   const nextKeyMaterial = {
+    userId: "",
     exportedMasterKey: "",
     recoverySecret: "",
     ...cloneSerializable(keyMaterial),
@@ -127,6 +129,26 @@ export function saveRecoverySecret(recoverySecret) {
   return saveSyncKeyMaterial({
     ...current,
     recoverySecret: recoverySecret.trim(),
+  });
+}
+
+export function clearSyncKeyMaterial() {
+  return saveSyncKeyMaterial({
+    userId: "",
+    exportedMasterKey: "",
+    recoverySecret: "",
+  });
+}
+
+export function clearSyncState(settings = {}) {
+  return saveSyncSettings({
+    endpoint: settings.endpoint ?? "",
+    apiToken: settings.apiToken ?? "",
+    userId: "",
+    revision: 0,
+    lastSyncAt: "",
+    lastSyncStatus: "idle",
+    lastSyncMessage: "",
   });
 }
 
@@ -188,6 +210,7 @@ export async function initializeCloudSync({ state, settings, recoverySecret = ""
   }
 
   saveSyncKeyMaterial({
+    userId: normalizedSettings.userId ?? "",
     exportedMasterKey,
     recoverySecret: nextRecoverySecret,
   });
