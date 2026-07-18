@@ -1,33 +1,6 @@
-const QR_CODE_SCRIPT_URL = "https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js";
+import QRCode from "qrcode";
+
 const RECOVERY_QR_PREFIX = "neurodiary-recovery:";
-
-function loadScript(src, globalKey) {
-  if (globalKey && globalThis[globalKey]) {
-    return Promise.resolve();
-  }
-
-  const existing = document.querySelector(`script[data-src="${src}"]`);
-  if (existing) {
-    return new Promise((resolve, reject) => {
-      existing.addEventListener("load", () => resolve(), { once: true });
-      existing.addEventListener("error", () => reject(new Error(`Unable to load ${src}`)), { once: true });
-      if (globalKey && globalThis[globalKey]) {
-        resolve();
-      }
-    });
-  }
-
-  return new Promise((resolve, reject) => {
-    const script = document.createElement("script");
-    script.src = src;
-    script.async = true;
-    script.defer = true;
-    script.dataset.src = src;
-    script.addEventListener("load", () => resolve(), { once: true });
-    script.addEventListener("error", () => reject(new Error(`Unable to load ${src}`)), { once: true });
-    document.head.append(script);
-  });
-}
 
 export function buildRecoveryTransferPayload(secret) {
   return `${RECOVERY_QR_PREFIX}${secret.trim()}`;
@@ -52,8 +25,11 @@ export async function renderRecoverySecretQr(canvas, secret) {
     return;
   }
 
-  await loadScript(QR_CODE_SCRIPT_URL, "QRCode");
-  await globalThis.QRCode.toCanvas(canvas, buildRecoveryTransferPayload(secret), {
+  if (!String(secret ?? "").trim()) {
+    throw new Error("Recovery secret zatim neni pripraven.");
+  }
+
+  await QRCode.toCanvas(canvas, buildRecoveryTransferPayload(secret), {
     width: 240,
     margin: 1,
     color: {
