@@ -3,6 +3,30 @@ import { SqliteDiaryRepository } from "./SqliteDiaryRepository.js";
 
 const SQLITE_INIT_TIMEOUT_MS = 4000;
 
+function shouldSkipSqlite() {
+  const hostname = globalThis.location?.hostname ?? "";
+  const userAgent = globalThis.navigator?.userAgent ?? "";
+  const isFirefox = /Firefox\/\d+/i.test(userAgent);
+  const isLocalhost =
+    hostname === "localhost" ||
+    hostname === "127.0.0.1" ||
+    hostname === "[::1]" ||
+    hostname.endsWith(".localhost");
+
+  if (!isLocalhost && isFirefox) {
+    return {
+      skip: true,
+      reason:
+        "Hosted Firefox mode detected. sql.js WebAssembly initialization is skipped here for reliability.",
+    };
+  }
+
+  return {
+    skip: false,
+    reason: "",
+  };
+}
+
 function withTimeout(promise, timeoutMs, message) {
   return new Promise((resolve, reject) => {
     const timeoutId = globalThis.setTimeout(() => {
@@ -23,6 +47,16 @@ function withTimeout(promise, timeoutMs, message) {
 
 export async function createDiaryRepository(options = {}) {
   const { onProgress } = options;
+  const sqliteDecision = shouldSkipSqlite();
+
+  if (sqliteDecision.skip) {
+    onProgress?.(sqliteDecision.reason);
+    onProgress?.("Switching directly to localStorage fallback.");
+    const repository = await LocalStorageDiaryRepository.create(onProgress);
+    repository.bootstrapWarning =
+      "SQLite/WASM byl v hostovanem Firefoxu preskocen kvuli spolehlivosti. Aplikace bezi v localStorage rezimu.";
+    return repository;
+  }
 
   try {
     onProgress?.("Trying SQLite repository first.");
