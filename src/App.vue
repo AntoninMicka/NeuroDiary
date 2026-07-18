@@ -54,6 +54,7 @@ import {
   loadSyncSettings,
   pullCloudState,
   pushCloudState,
+  resetCloudState,
   saveRecoverySecret,
   saveSyncSettings,
 } from "./services/syncService.js";
@@ -655,6 +656,42 @@ function resetAllData() {
   generatedRecoverySecret.value = "";
   storageMessage.value =
     "Vsechna lokalni data deniku byla smazana. Cloud sync byl na tomto zarizeni odpojen, serverova data zustala zachovana.";
+}
+
+async function resetCloudData() {
+  if (!ensureSyncIdentity()) {
+    return;
+  }
+
+  const confirmed = globalThis.confirm(
+    "Tato akce smaze sifrovany snapshot pro aktualni cloud ucet na serveru. Lokalni data v tomto zarizeni zustanou zachovana, ale sync se zde odpoji. Pokracovat?",
+  );
+  if (!confirmed) {
+    storageMessage.value = "Reset serverovych dat byl zrusen.";
+    return;
+  }
+
+  isSyncBusy.value = true;
+  try {
+    await resetCloudState(syncSettings);
+    Object.assign(syncSettings, clearSyncState(syncSettings));
+    clearSyncKeyMaterial();
+    storedRecoverySecret.value = "";
+    recoverySecretInput.value = "";
+    generatedRecoverySecret.value = "";
+    storageMessage.value =
+      "Serverova data pro tento cloud ucet byla smazana. Lokalni denik zustal zachovan a sync byl na tomto zarizeni odpojen.";
+  } catch (error) {
+    console.error("Cloud reset failed", error);
+    Object.assign(syncSettings, saveSyncSettings({
+      ...syncSettings,
+      lastSyncStatus: "error",
+      lastSyncMessage: error.message,
+    }));
+    storageMessage.value = `Reset serverovych dat selhal: ${error.message}`;
+  } finally {
+    isSyncBusy.value = false;
+  }
 }
 
 function exportDatabase() {
@@ -1479,6 +1516,16 @@ function syncFloatingMenuHeight() {
             <div class="sync-actions">
               <button class="ghost-button utility-menu-item-danger" type="button" @click="resetAllData">
                 Smazat vsechna lokalni data
+              </button>
+            </div>
+          </div>
+
+          <div class="sync-warning-card">
+            <strong>Reset cloud dat na serveru</strong>
+            <p>Smaze sifrovany cloud snapshot pouze pro aktualne prihlaseny cloud ucet. Lokalni data zustanou zachovana, ale toto zarizeni se od syncu odpoji a bude nutna nova inicializace.</p>
+            <div class="sync-actions">
+              <button class="ghost-button utility-menu-item-danger" type="button" :disabled="isSyncBusy" @click="resetCloudData">
+                Smazat cloud data na serveru
               </button>
             </div>
           </div>

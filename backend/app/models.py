@@ -79,6 +79,12 @@ class SyncPushResponseModel(BaseModel):
     wrappedKey: WrappedKeyEnvelopeModel | None = None
 
 
+class SyncResetResponseModel(BaseModel):
+    status: Literal["ok"]
+    deleted: bool = False
+    updatedAt: datetime
+
+
 class AuthConfigResponseModel(BaseModel):
     googleEnabled: bool = False
     googleClientId: str = ""

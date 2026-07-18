@@ -17,6 +17,7 @@ from .models import (
     SyncPullResponseModel,
     SyncPushRequestModel,
     SyncPushResponseModel,
+    SyncResetResponseModel,
 )
 from .store import RevisionConflictError, create_sync_store
 
@@ -184,6 +185,12 @@ def push_state(
             payload=snapshot.payload,
             wrappedKey=snapshot.wrappedKey,
         )
+
+
+@app.delete("/api/v1/sync/reset", response_model=SyncResetResponseModel)
+def reset_state(user_id: Annotated[str, Depends(verify_bearer_token)]) -> SyncResetResponseModel:
+    deleted_at = store.delete_state(user_id)
+    return SyncResetResponseModel(status="ok", deleted=True, updatedAt=deleted_at)
 
 
 @app.get("/", include_in_schema=False)

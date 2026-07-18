@@ -146,6 +146,21 @@ class SqliteSyncStore:
                 wrapped_key=wrapped_key,
             )
 
+    def delete_state(self, user_id: str) -> datetime:
+        deleted_at = datetime.now(UTC)
+        with self._lock:
+            with self._connect() as connection:
+                connection.execute(
+                    """
+                    DELETE FROM sync_snapshots
+                    WHERE user_id = ?
+                    """,
+                    (user_id,),
+                )
+                connection.commit()
+
+        return deleted_at
+
 
 class PostgresSyncStore:
     def __init__(self, database_url: str) -> None:
@@ -262,6 +277,22 @@ class PostgresSyncStore:
             payload=payload,
             wrapped_key=wrapped_key,
         )
+
+    def delete_state(self, user_id: str) -> datetime:
+        deleted_at = datetime.now(UTC)
+
+        with self._connect() as connection:
+            with connection.transaction():
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        """
+                        DELETE FROM sync_snapshots
+                        WHERE user_id = %s
+                        """,
+                        (user_id,),
+                    )
+
+        return deleted_at
 
 
 def create_sync_store(*, database_url: str | None, database_path: str):

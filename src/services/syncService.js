@@ -284,3 +284,16 @@ export async function pushCloudState({ state, settings, baseRevision, force = fa
     wrappedKey: result.wrappedKey,
   };
 }
+
+export async function resetCloudState(settings) {
+  const normalizedSettings = saveSyncSettings(settings);
+  const result = await fetchJson(buildEndpoint(normalizedSettings, "/api/v1/sync/reset"), {
+    method: "DELETE",
+    headers: buildHeaders(normalizedSettings),
+  });
+
+  return {
+    deleted: Boolean(result.deleted),
+    updatedAt: result.updatedAt ?? "",
+  };
+}
