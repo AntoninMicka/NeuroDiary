@@ -4,6 +4,7 @@ Prvni serverovy zaklad pro synchronizaci mezi vice zarizenimi.
 
 ## Co umi
 
+- servirovat zabaleny frontend na `/`
 - `GET /healthz`
 - `GET /api/v1/sync/pull`
 - `POST /api/v1/sync/push`
@@ -17,6 +18,8 @@ Prvni serverovy zaklad pro synchronizaci mezi vice zarizenimi.
 python -m venv .venv
 source .venv/bin/activate
 pip install -r backend/requirements.txt
+npm install
+npm run build
 uvicorn backend.app.main:app --reload
 ```
 
@@ -33,6 +36,8 @@ uvicorn backend.app.main:app --reload
   Seznam frontend originu oddelenych carkou.
 - `NEURODIARY_DEFAULT_USER_ID`
   Docasny identifikator pro single-user rezim.
+- `NEURODIARY_FRONTEND_DIST`
+  Cesta k zabalenemu frontend `dist/` adresari. V Docker image je nastavena automaticky.
 
 ## Docker
 
@@ -48,7 +53,7 @@ docker run -p 8080:8080 \
 ## Produkcni smer
 
 Backend uz umi bezet nad `PostgreSQL` pres `NEURODIARY_DATABASE_URL`, takze je pripraveny
-pro centralni databazi vhodnou pro `Cloud Run`.
+pro centralni databazi vhodnou pro `Cloud Run`, a zaroven ze stejne sluzby servirovat i Vue frontend.
 
 Lokalni SQLite varianta zustava zachovana hlavne pro lokalni vyvoj a rychle testovani.
 

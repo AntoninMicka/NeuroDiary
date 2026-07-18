@@ -81,6 +81,13 @@ Pokud nechces vsechno klikat rucne, prvni cast tohohle checklistu umi automatizo
 - [ ] nastavit `NEURODIARY_API_TOKEN`
 - [ ] nastavit `NEURODIARY_DATABASE_URL`
 
+Poznamka:
+
+- [ ] pokud chci tohle preskocit rucne, zapnout v bootstrapu `CONFIGURE_GITHUB_ACTIONS=true`
+- [ ] pokud chci rovnou spustit Actions deploy, zapnout i `TRIGGER_GITHUB_WORKFLOW=true`
+- [ ] `GITHUB_REPOSITORY` muze zustat prazdne, pokud lokalni git `origin` smeruje na GitHub repo
+- [ ] pro zapis repository secrets musim byt pres `gh` prihlaseny jako uzivatel s admin pristupem k repu
+
 ## 10. Frontend a CORS
 
 - [ ] znat produkcni URL frontendu

@@ -1,6 +1,7 @@
 # Cloud Run Deploy
 
 Tento projekt ma pripraveny GitHub Actions deploy backendu do `Google Cloud Run`.
+Stejna Cloud Run sluzba nyni servíruje i zabaleny Vue frontend na root URL `/`.
 
 Workflow je v [deploy-cloud-run-backend.yml](/home/antonin/Projects/NeuroDiary/NeuroDiary/.github/workflows/deploy-cloud-run-backend.yml:1)
 a nasazuje `backend/` pri pushi do `main` nebo rucne pres `workflow_dispatch`.
@@ -26,6 +27,16 @@ Pokud vyplnis i `BILLING_ACCOUNT_ID`, skript umi projekt zkontrolovat a pripadne
 na aktivni billing account. Bez billing propojeni nepouzjes placene sluzby jako `Cloud Run`
 nebo `Cloud SQL`.
 
+Pokud zapnes `CONFIGURE_GITHUB_ACTIONS=true`, skript umi pres `gh` rovnou zapsat repository
+`Variables` a `Secrets` pro GitHub Actions. Volitelne umi i spustit workflow, kdyz nastavis
+`TRIGGER_GITHUB_WORKFLOW=true`.
+
+Kdyz je projekt naklonovany z GitHubu a ma nastavene `origin`, skript se pokusi `GITHUB_REPOSITORY`
+odvodit automaticky. Typicky tedy neni nutne ho vyplnovat rucne.
+
+Pro zapis repository `Actions secrets` musi mit prihlaseny GitHub ucet admin pristup k danemu repozitari.
+Skript to nově overuje a po zapisu vypise i kontrolni seznam `gh variable list` a `gh secret list`.
+
 Skript umi:
 
 - zapnout potrebna GCP API
@@ -36,6 +47,8 @@ Skript umi:
 - volitelne vytvorit Cloud SQL PostgreSQL instanci, DB a uzivatele
 - postavit image pres `gcloud builds submit`
 - nasadit prvni revizi do Cloud Run
+- volitelne zapsat GitHub Actions `Variables` a `Secrets` pres `gh`
+- volitelne spustit GitHub workflow pres `gh workflow run`
 - po dokonceni vypsat i kam presne ziskane hodnoty zadat v GitHubu
 
 Poznamka:
@@ -220,4 +233,5 @@ Poznamka k Cloud SQL sizingu:
 2. postavi image z `backend/Dockerfile`
 3. pushne image do Artifact Registry
 4. nasadi novou revizi do Cloud Run
-5. preda backendu API token, DB URL a Cloud SQL connection konfiguraci
+5. na root URL `/` servíruje frontend NeuroDiary
+6. preda backendu API token, DB URL a Cloud SQL connection konfiguraci

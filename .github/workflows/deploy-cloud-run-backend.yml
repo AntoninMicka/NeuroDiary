@@ -7,6 +7,11 @@ on:
     paths:
       - ".github/workflows/deploy-cloud-run-backend.yml"
       - "backend/**"
+      - "src/**"
+      - "public/**"
+      - "package.json"
+      - "package-lock.json"
+      - "vite.config.js"
   workflow_dispatch:
 
 env:
