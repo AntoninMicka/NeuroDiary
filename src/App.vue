@@ -65,6 +65,7 @@ const generatedRecoverySecret = ref("");
 const isSyncBusy = ref(false);
 const isApplyingExternalState = ref(false);
 const bootstrapLogEntries = ref(getBootstrapLogEntries());
+const isCapturingBootstrapProgress = ref(true);
 const state = reactive({
   selectedDate: getTodayKey(),
   patientName: "",
@@ -72,10 +73,10 @@ const state = reactive({
   entries: {},
 });
 
-const selectedEntry = computed(() => ensureEntry(state, state.selectedDate));
+const selectedEntry = computed(() => state.entries[state.selectedDate] ?? null);
 const selectedDateLabel = computed(() => formatLongDate(state.selectedDate));
 const sortedMedications = computed(() =>
-  [...selectedEntry.value.medications].sort((left, right) => left.time.localeCompare(right.time)),
+  [...(selectedEntry.value?.medications ?? [])].sort((left, right) => left.time.localeCompare(right.time)),
 );
 const PANEL_ITEMS = [
   { id: "sekce-home", label: "Rychly zapis" },
@@ -151,6 +152,10 @@ let mediaQueryList = null;
 const SERVICE_WORKER_RELOAD_GUARD_KEY = "neurodiary-sw-reload-guard-v1";
 
 function setBootstrapStatus(message, level = "info") {
+  if (!isCapturingBootstrapProgress.value) {
+    return;
+  }
+
   bootstrapStatus.value = message;
   appendBootstrapLog(message, level);
 }
@@ -214,6 +219,8 @@ onMounted(async () => {
     });
     menuResizeObserver.observe(floatingMenu.value);
   }
+
+  isCapturingBootstrapProgress.value = false;
 });
 
 onUnmounted(() => {

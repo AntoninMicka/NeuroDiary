@@ -13,11 +13,12 @@ function shouldSkipSqlite() {
     hostname === "[::1]" ||
     hostname.endsWith(".localhost");
 
-  if (!isLocalhost && isFirefox) {
+  if (isFirefox) {
     return {
       skip: true,
-      reason:
-        "Hosted Firefox mode detected. sql.js WebAssembly initialization is skipped here for reliability.",
+      reason: isLocalhost
+        ? "Firefox local mode detected. sql.js WebAssembly initialization is skipped here for reliability."
+        : "Hosted Firefox mode detected. sql.js WebAssembly initialization is skipped here for reliability.",
     };
   }
 
