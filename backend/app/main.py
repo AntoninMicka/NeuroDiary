@@ -90,6 +90,11 @@ def serve_frontend(path: str) -> FileResponse:
     if candidate.is_file():
         return FileResponse(candidate)
 
+    # Missing static assets must stay 404. Returning index.html for JS/CSS/WASM files
+    # breaks the app bootstrap because the browser receives HTML instead of the asset.
+    if path and "." in Path(path).name:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not Found")
+
     index_file = FRONTEND_DIST / "index.html"
     if index_file.is_file():
         return FileResponse(index_file)
