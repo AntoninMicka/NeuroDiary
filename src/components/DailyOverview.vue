@@ -1,4 +1,6 @@
 <script setup>
+import { UNDEFINED_ENTRY_VALUE } from "../domain/diary.js";
+
 const props = defineProps({
   modelValue: {
     type: Object,
@@ -31,6 +33,7 @@ function patchEntry(field, value) {
           :value="props.modelValue.sleepQuality"
           @input="patchEntry('sleepQuality', $event.target.value)"
         >
+          <option :value="UNDEFINED_ENTRY_VALUE">Nedefinovano</option>
           <option value="poor">Spatna</option>
           <option value="mixed">Promenliva</option>
           <option value="good">Dobra</option>
@@ -43,6 +46,7 @@ function patchEntry(field, value) {
           :value="props.modelValue.overallStatus"
           @input="patchEntry('overallStatus', $event.target.value)"
         >
+          <option :value="UNDEFINED_ENTRY_VALUE">Nedefinovano</option>
           <option value="hard">Narocny den</option>
           <option value="stable">Stabilni den</option>
           <option value="good">Dobry den</option>

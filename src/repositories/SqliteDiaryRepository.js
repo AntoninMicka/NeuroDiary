@@ -4,7 +4,9 @@ import {
   createDemoState,
   createDefaultHours,
   createInitialState,
+  createTreatmentPlanItem,
   ensureEntry,
+  UNDEFINED_ENTRY_VALUE,
   normalizeEntryHourRecords,
   normalizeState,
   reconcileEntryHourState,
@@ -12,7 +14,7 @@ import {
 import { DiaryRepository } from "./DiaryRepository.js";
 
 const STORAGE_KEY = "neurodiary-sqlite-db-v1";
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 const MIGRATIONS = [
   {
@@ -64,6 +66,19 @@ const MIGRATIONS = [
           recorded_at TEXT NOT NULL,
           source TEXT NOT NULL,
           FOREIGN KEY (entry_date) REFERENCES diary_entries(entry_date) ON DELETE CASCADE
+        );
+      `);
+    },
+  },
+  {
+    version: 3,
+    run(db) {
+      db.run(`
+        CREATE TABLE IF NOT EXISTS treatment_plan (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          dose TEXT NOT NULL,
+          time TEXT NOT NULL
         );
       `);
     },
@@ -167,6 +182,7 @@ export class SqliteDiaryRepository extends DiaryRepository {
     const patientName = this.selectSetting("patient_name");
     const birthYear = this.selectSetting("birth_year");
     const accountJson = this.selectSetting("account_json");
+    state.treatmentPlan = this.selectTreatmentPlan();
     if (selectedDate) {
       state.selectedDate = selectedDate;
     }
@@ -195,8 +211,8 @@ export class SqliteDiaryRepository extends DiaryRepository {
       for (const [entryDate, sleepQuality, overallStatus, notes, isDemo] of entries[0].values) {
         state.entries[entryDate] = {
           isDemo: Boolean(isDemo),
-          sleepQuality,
-          overallStatus,
+          sleepQuality: sleepQuality || UNDEFINED_ENTRY_VALUE,
+          overallStatus: overallStatus || UNDEFINED_ENTRY_VALUE,
           notes,
           medications: this.selectMedications(entryDate),
           hours: this.selectHours(entryDate),
@@ -220,6 +236,7 @@ export class SqliteDiaryRepository extends DiaryRepository {
 
     try {
       this.db.run("DELETE FROM app_settings");
+      this.db.run("DELETE FROM treatment_plan");
       this.db.run("DELETE FROM medications");
       this.db.run("DELETE FROM hourly_state_records");
       this.db.run("DELETE FROM hourly_states");
@@ -241,6 +258,16 @@ export class SqliteDiaryRepository extends DiaryRepository {
         "account_json",
         JSON.stringify(state.account ?? createInitialState().account),
       ]);
+
+      for (const item of state.treatmentPlan ?? []) {
+        this.db.run(
+          `
+            INSERT INTO treatment_plan (id, name, dose, time)
+            VALUES (?, ?, ?, ?)
+          `,
+          [item.id, item.name, item.dose, item.time],
+        );
+      }
 
       for (const [entryDate, entry] of Object.entries(state.entries)) {
         const normalizedEntry = reconcileEntryHourState(cloneSerializable(entry));
@@ -269,6 +296,9 @@ export class SqliteDiaryRepository extends DiaryRepository {
         }
 
         for (const [hourLabel, stateKey] of Object.entries(normalizedEntry.hours)) {
+          if (!stateKey) {
+            continue;
+          }
           this.db.run(
             `
               INSERT INTO hourly_states (entry_date, hour_label, state_key)
@@ -388,6 +418,30 @@ export class SqliteDiaryRepository extends DiaryRepository {
           dose: row.dose,
           time: row.time,
         });
+      }
+      return results;
+    } finally {
+      statement.free();
+    }
+  }
+
+  selectTreatmentPlan() {
+    const statement = this.db.prepare(`
+      SELECT id, name, dose, time
+      FROM treatment_plan
+      ORDER BY time, id
+    `);
+
+    try {
+      const results = [];
+      while (statement.step()) {
+        const row = statement.getAsObject();
+        results.push(createTreatmentPlanItem({
+          id: row.id,
+          name: row.name,
+          dose: row.dose,
+          time: row.time,
+        }));
       }
       return results;
     } finally {

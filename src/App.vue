@@ -12,6 +12,7 @@ import {
   clearHourStateRecords,
   createInitialState,
   createMedication,
+  createTreatmentPlanItem,
   entryContainsDemoData,
   ensureEntry,
   formatLongDate,
@@ -81,6 +82,7 @@ const storageMessage = ref("");
 const bootstrapStatus = ref("Starting application bootstrap.");
 const currentHourLabel = ref(getTrackableHourLabel());
 const selectedStateKey = ref("on");
+const selectedTreatmentPlanId = ref("");
 const deferredInstallPrompt = ref(null);
 const canInstallApp = ref(false);
 const isInstalledApp = ref(false);
@@ -113,6 +115,7 @@ const state = reactive({
   selectedDate: getTodayKey(),
   patientName: "",
   birthYear: "",
+  treatmentPlan: [],
   entries: {},
 });
 
@@ -120,6 +123,12 @@ const selectedEntry = computed(() => state.entries[state.selectedDate] ?? null);
 const selectedDateLabel = computed(() => formatLongDate(state.selectedDate));
 const sortedMedications = computed(() =>
   [...(selectedEntry.value?.medications ?? [])].sort((left, right) => left.time.localeCompare(right.time)),
+);
+const sortedTreatmentPlan = computed(() =>
+  [...(state.treatmentPlan ?? [])].sort((left, right) => left.time.localeCompare(right.time)),
+);
+const selectedTreatmentPlanItem = computed(() =>
+  sortedTreatmentPlan.value.find((item) => item.id === selectedTreatmentPlanId.value) ?? null,
 );
 const PANEL_ITEMS = [
   { id: "sekce-home", label: "Rychly zapis" },
@@ -160,6 +169,10 @@ const showIosInstallGuide = computed(
 const isSelectedDateEditable = computed(() => state.selectedDate === getTodayKey());
 const showQuickCapture = computed(() => activePanelId.value === "sekce-home");
 const quickCaptureStateLabel = computed(() => getStateDefinition(selectedStateKey.value).label);
+const quickCaptureMedicationLabel = computed(() => {
+  const item = selectedTreatmentPlanItem.value;
+  return item ? `${item.name} ${item.dose}` : "Davku z planu";
+});
 const canUseDemoTools = computed(() => state.account?.isAuthenticated !== true);
 const hasDemoEntries = computed(() =>
   Object.values(state.entries ?? {}).some((entry) => entryContainsDemoData(entry)),
@@ -316,6 +329,7 @@ onMounted(async () => {
   const initialState = repository.loadState();
   setBootstrapStatus("Applying loaded state to the application.");
   Object.assign(state, initialState);
+  selectedTreatmentPlanId.value = state.treatmentPlan?.[0]?.id ?? "";
   diaryRepository.value = repository;
   repositoryMode.value = repository.getMode();
   if (authSession.value?.user) {
@@ -406,6 +420,10 @@ function updateCurrentHourLabel(value) {
 function refreshSyncKeyMaterialStatus() {
   syncKeyMaterialRefreshToken.value += 1;
   storedRecoverySecret.value = loadSyncKeyMaterial().recoverySecret ?? "";
+}
+
+function getCurrentTimeLabel() {
+  return new Date().toTimeString().slice(0, 5);
 }
 
 function updateSelectedStateKey(value) {
@@ -607,6 +625,41 @@ function removeMedication(medicationId) {
   selectedEntry.value.medications = selectedEntry.value.medications.filter(
     (item) => item.id !== medicationId,
   );
+}
+
+function addTreatmentPlanItem(payload) {
+  state.treatmentPlan.push(createTreatmentPlanItem(payload));
+  state.treatmentPlan.sort((left, right) => left.time.localeCompare(right.time));
+  if (!selectedTreatmentPlanId.value) {
+    selectedTreatmentPlanId.value = state.treatmentPlan[0]?.id ?? "";
+  }
+}
+
+function removeTreatmentPlanItem(planItemId) {
+  state.treatmentPlan = state.treatmentPlan.filter((item) => item.id !== planItemId);
+  if (selectedTreatmentPlanId.value === planItemId) {
+    selectedTreatmentPlanId.value = state.treatmentPlan[0]?.id ?? "";
+  }
+}
+
+function recordMedicationFromPlan() {
+  if (!isSelectedDateEditable.value) {
+    return;
+  }
+
+  const planItem = selectedTreatmentPlanItem.value;
+  if (!planItem) {
+    storageMessage.value = "Nejprve vyberte nebo vytvorte davku v planu lecby.";
+    return;
+  }
+
+  const currentTime = getCurrentTimeLabel();
+  addMedication({
+    name: planItem.name,
+    dose: planItem.dose,
+    time: currentTime,
+  });
+  storageMessage.value = `Davka ${planItem.name} ${planItem.dose} byla zapsana na ${currentTime}.`;
 }
 
 function updateHour({ label, stateKey }) {
@@ -1272,9 +1325,13 @@ function applyImportedState(nextState) {
     state.selectedDate = nextState.selectedDate;
     state.patientName = nextState.patientName ?? "";
     state.birthYear = nextState.birthYear ?? "";
+    state.treatmentPlan = nextState.treatmentPlan ?? [];
     state.account = nextState.account ?? state.account;
     state.entries = nextState.entries ?? {};
     ensureEntry(state, state.selectedDate);
+    if (!selectedTreatmentPlanId.value || !state.treatmentPlan.some((item) => item.id === selectedTreatmentPlanId.value)) {
+      selectedTreatmentPlanId.value = state.treatmentPlan[0]?.id ?? "";
+    }
     diaryRepository.value?.saveState(state);
   } finally {
     isApplyingExternalState.value = false;
@@ -1481,7 +1538,7 @@ function syncFloatingMenuHeight() {
             <p class="section-kicker">Rychly zapis</p>
             <h3>Zapsat aktualni stav</h3>
             <p class="panel-tip">
-              Vyberte hodinu a stav. Pro detailni upravy pak muzete prejit do hodinove matice.
+              Vyberte hodinu, stav nebo davku z planu lecby. Pro detailni upravy pak muzete prejit do hodinove matice.
             </p>
             <p v-if="currentHourRecordCount > 1" class="panel-tip">
               Pro tuto hodinu uz existuje {{ currentHourRecordCount }} zaznamu. Zobrazuje se posledni.
@@ -1521,6 +1578,29 @@ function syncFloatingMenuHeight() {
               @click="writeCurrentState"
             >
               Zapsat {{ quickCaptureStateLabel }}
+            </button>
+
+            <label>
+              <span>Davka z planu</span>
+              <select
+                :value="selectedTreatmentPlanId"
+                :disabled="!isSelectedDateEditable || sortedTreatmentPlan.length === 0"
+                @input="selectedTreatmentPlanId = $event.target.value"
+              >
+                <option value="">Vyberte planovanou davku</option>
+                <option v-for="item in sortedTreatmentPlan" :key="item.id" :value="item.id">
+                  {{ item.time }} · {{ item.name }} · {{ item.dose }}
+                </option>
+              </select>
+            </label>
+
+            <button
+              class="ghost-button"
+              type="button"
+              :disabled="!isSelectedDateEditable || !selectedTreatmentPlanItem"
+              @click="recordMedicationFromPlan"
+            >
+              Zapsat {{ quickCaptureMedicationLabel }} ted
             </button>
           </div>
           <p v-if="!isSelectedDateEditable" class="matrix-readonly-note floating-quick-capture-note">
@@ -1740,9 +1820,11 @@ function syncFloatingMenuHeight() {
         <MedicationPlan
           v-else-if="activePanelId === 'sekce-leky'"
           class="layout-medication"
-          :medications="sortedMedications"
-          @add-medication="addMedication"
-          @remove-medication="removeMedication"
+          :treatment-plan="sortedTreatmentPlan"
+          :recorded-medications="sortedMedications"
+          @add-plan-item="addTreatmentPlanItem"
+          @remove-plan-item="removeTreatmentPlanItem"
+          @remove-recorded-medication="removeMedication"
         />
 
         <DailyTimeline

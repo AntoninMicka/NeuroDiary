@@ -10,9 +10,11 @@ export const TRACKING_HOURS = Array.from({ length: 20 }, (_, index) => {
   const hour = index + 5;
   return String(hour);
 });
+export const UNDEFINED_ENTRY_VALUE = "undefined";
 
 const HOUR_STATE_KEYS = new Set(HOUR_STATES.map((state) => state.key));
 const HOUR_RECORD_DISPLAY_MODES = new Set(["latest", "mostFrequent"]);
+const ENTRY_STATUS_VALUES = new Set(["poor", "mixed", "good", "hard", "stable", UNDEFINED_ENTRY_VALUE]);
 
 const DEMO_NOTES = [
   "Ranni ztuhlost se zlepsila po prvni davce.",
@@ -112,12 +114,16 @@ export function createMedication(payload) {
   };
 }
 
+export function createTreatmentPlanItem(payload) {
+  return createMedication(payload);
+}
+
 export function createDefaultEntry() {
   const hours = createDefaultHours();
   return {
     isDemo: false,
-    sleepQuality: "good",
-    overallStatus: "stable",
+    sleepQuality: UNDEFINED_ENTRY_VALUE,
+    overallStatus: UNDEFINED_ENTRY_VALUE,
     notes: "",
     medications: [],
     hours,
@@ -135,6 +141,7 @@ export function createInitialState() {
       provider: "",
       userId: "",
     },
+    treatmentPlan: [],
     entries: {},
   };
 }
@@ -573,6 +580,21 @@ export function ensureEntry(state, dateKey) {
   return state.entries[dateKey];
 }
 
+function normalizeEntryStatusValue(value, allowedValues) {
+  return allowedValues.has(value) ? value : UNDEFINED_ENTRY_VALUE;
+}
+
+function normalizeTreatmentPlan(rawPlan) {
+  if (!Array.isArray(rawPlan)) {
+    return [];
+  }
+
+  return rawPlan
+    .filter((item) => item && typeof item.name === "string" && typeof item.dose === "string" && typeof item.time === "string")
+    .map((item) => createTreatmentPlanItem(item))
+    .sort((left, right) => left.time.localeCompare(right.time));
+}
+
 export function normalizeState(parsed) {
   const state = parsed && typeof parsed === "object" ? parsed : createInitialState();
 
@@ -596,6 +618,8 @@ export function normalizeState(parsed) {
     state.account = createInitialState().account;
   }
 
+  state.treatmentPlan = normalizeTreatmentPlan(state.treatmentPlan);
+
   state.account.isAuthenticated = state.account.isAuthenticated === true;
   state.account.provider = typeof state.account.provider === "string" ? state.account.provider : "";
   state.account.userId = typeof state.account.userId === "string" ? state.account.userId : "";
@@ -604,6 +628,8 @@ export function normalizeState(parsed) {
     if (typeof entry.isDemo !== "boolean") {
       entry.isDemo = false;
     }
+    entry.sleepQuality = normalizeEntryStatusValue(entry.sleepQuality, new Set(["poor", "mixed", "good", UNDEFINED_ENTRY_VALUE]));
+    entry.overallStatus = normalizeEntryStatusValue(entry.overallStatus, new Set(["hard", "stable", "good", UNDEFINED_ENTRY_VALUE]));
     reconcileEntryHourState(entry);
   }
 
@@ -640,6 +666,10 @@ export function mergeDiaryStatesAppendOnly(baseState, incomingState) {
     ...normalizedBaseState.account,
     ...normalizedIncomingState.account,
   };
+  mergedState.treatmentPlan = replaceTreatmentPlan(
+    normalizedBaseState.treatmentPlan,
+    normalizedIncomingState.treatmentPlan,
+  );
 
   for (const dateKey of incomingEntryKeys) {
     const incomingEntry = normalizedIncomingState.entries[dateKey];
@@ -650,6 +680,8 @@ export function mergeDiaryStatesAppendOnly(baseState, incomingState) {
       ...baseEntry,
       ...incomingEntry,
       isDemo: baseEntry.isDemo || incomingEntry.isDemo,
+      sleepQuality: selectPreferredEntryValue(baseEntry.sleepQuality, incomingEntry.sleepQuality),
+      overallStatus: selectPreferredEntryValue(baseEntry.overallStatus, incomingEntry.overallStatus),
       medications: replaceMedications(baseEntry.medications, incomingEntry.medications),
       hourRecords: mergeHourRecordsAppendOnly(baseEntry.hourRecords, incomingEntry.hourRecords),
     };
@@ -667,6 +699,24 @@ function selectPreferredProfileValue(baseValue = "", incomingValue = "") {
     return normalizedIncomingValue;
   }
   return normalizedBaseValue;
+}
+
+function selectPreferredEntryValue(baseValue = UNDEFINED_ENTRY_VALUE, incomingValue = UNDEFINED_ENTRY_VALUE) {
+  const normalizedBaseValue = ENTRY_STATUS_VALUES.has(baseValue) ? baseValue : UNDEFINED_ENTRY_VALUE;
+  const normalizedIncomingValue = ENTRY_STATUS_VALUES.has(incomingValue) ? incomingValue : UNDEFINED_ENTRY_VALUE;
+  if (normalizedIncomingValue !== UNDEFINED_ENTRY_VALUE) {
+    return normalizedIncomingValue;
+  }
+  return normalizedBaseValue;
+}
+
+function replaceTreatmentPlan(basePlan = [], incomingPlan = []) {
+  const hasIncomingPlan = Array.isArray(incomingPlan) && incomingPlan.length > 0;
+  const hasBasePlan = Array.isArray(basePlan) && basePlan.length > 0;
+  const sourcePlan = hasIncomingPlan || !hasBasePlan ? incomingPlan : basePlan;
+  return sourcePlan
+    .map((item) => ({ ...item }))
+    .sort((left, right) => left.time.localeCompare(right.time));
 }
 
 function replaceMedications(baseMedications = [], incomingMedications = []) {
@@ -705,6 +755,7 @@ export function formatSleepQuality(value) {
     poor: "Spatna",
     mixed: "Promenliva",
     good: "Dobra",
+    [UNDEFINED_ENTRY_VALUE]: "Nedefinovano",
   };
 
   return mapping[value] ?? value;
@@ -715,6 +766,7 @@ export function formatOverallStatus(value) {
     hard: "Narocny den",
     stable: "Stabilni den",
     good: "Dobry den",
+    [UNDEFINED_ENTRY_VALUE]: "Nedefinovano",
   };
 
   return mapping[value] ?? value;

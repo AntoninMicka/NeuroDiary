@@ -2,13 +2,17 @@
 import { reactive } from "vue";
 
 const props = defineProps({
-  medications: {
+  treatmentPlan: {
+    type: Array,
+    required: true,
+  },
+  recordedMedications: {
     type: Array,
     required: true,
   },
 });
 
-const emit = defineEmits(["add-medication", "remove-medication"]);
+const emit = defineEmits(["add-plan-item", "remove-plan-item", "remove-recorded-medication"]);
 
 const form = reactive({
   name: "",
@@ -21,7 +25,7 @@ function submitForm() {
     return;
   }
 
-  emit("add-medication", { ...form });
+  emit("add-plan-item", { ...form });
   form.name = "";
   form.dose = "";
   form.time = "08:00";
@@ -53,17 +57,37 @@ function submitForm() {
         <input v-model="form.time" type="time" />
       </label>
 
-      <button class="primary-button" type="submit">Pridat lecivo</button>
+      <button class="primary-button" type="submit">Pridat do planu</button>
     </form>
 
+    <p class="panel-tip">Plan slouzi jako sablona. Skutecne uzitou davku zapisete rychlym zapisem s aktualnim casem.</p>
+
     <ul class="list">
-      <li v-for="medication in medications" :key="medication.id">
+      <li v-for="medication in treatmentPlan" :key="medication.id">
         <div class="medication-copy">
           <strong>{{ medication.time }} - {{ medication.name }}</strong>
           <span>{{ medication.dose }}</span>
         </div>
 
-        <button type="button" @click="emit('remove-medication', medication.id)">Odebrat</button>
+        <button type="button" @click="emit('remove-plan-item', medication.id)">Odebrat</button>
+      </li>
+    </ul>
+
+    <div class="panel-heading medication-record-heading">
+      <div>
+        <p class="section-kicker">Aktualni den</p>
+        <h3>Zapsane davky</h3>
+      </div>
+    </div>
+
+    <ul class="list">
+      <li v-for="medication in recordedMedications" :key="medication.id">
+        <div class="medication-copy">
+          <strong>{{ medication.time }} - {{ medication.name }}</strong>
+          <span>{{ medication.dose }}</span>
+        </div>
+
+        <button type="button" @click="emit('remove-recorded-medication', medication.id)">Odebrat</button>
       </li>
     </ul>
   </section>
