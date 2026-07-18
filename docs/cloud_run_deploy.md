@@ -5,6 +5,8 @@ Tento projekt ma pripraveny GitHub Actions deploy backendu do `Google Cloud Run`
 Workflow je v [deploy-cloud-run-backend.yml](/home/antonin/Projects/NeuroDiary/NeuroDiary/.github/workflows/deploy-cloud-run-backend.yml:1)
 a nasazuje `backend/` pri pushi do `main` nebo rucne pres `workflow_dispatch`.
 
+Prakticky odskrtavaci seznam je v [cloud_run_manual_todo.md](/home/antonin/Projects/NeuroDiary/NeuroDiary/docs/cloud_run_manual_todo.md:1).
+
 ## Aktualni stav
 
 Backend uz umi bezet nad `PostgreSQL` pres `NEURODIARY_DATABASE_URL`.
