@@ -68,10 +68,7 @@ jobs:
             NEURODIARY_CORS_ORIGINS=${{ vars.NEURODIARY_CORS_ORIGINS }}
             NEURODIARY_DEFAULT_USER_ID=${{ vars.NEURODIARY_DEFAULT_USER_ID }}
           env_vars_update_strategy: merge
-          flags: >-
-            --port=8080
-            --allow-unauthenticated
-            ${{ vars.CLOUD_RUN_DEPLOY_FLAGS }}
+          flags: "--port=8080 --allow-unauthenticated ${{ vars.CLOUD_RUN_DEPLOY_FLAGS }}"
 
       - name: Show deployed URL
         run: echo "Cloud Run URL: ${{ steps.deploy.outputs.url }}"
