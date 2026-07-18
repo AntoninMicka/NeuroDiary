@@ -77,3 +77,40 @@ class SyncPushResponseModel(BaseModel):
     updatedAt: datetime
     payload: EncryptedPayloadModel
     wrappedKey: WrappedKeyEnvelopeModel | None = None
+
+
+class AuthConfigResponseModel(BaseModel):
+    googleEnabled: bool = False
+    googleClientId: str = ""
+    appleEnabled: bool = False
+    appleClientId: str = ""
+    appleRedirectPath: str = "/auth/apple/callback"
+    legacyApiTokenEnabled: bool = False
+    federatedAuthEnabled: bool = False
+
+
+class IdentityProfileModel(BaseModel):
+    email: str = ""
+    firstName: str = ""
+    lastName: str = ""
+
+
+class IdentityExchangeRequestModel(BaseModel):
+    provider: Literal["google", "apple"]
+    idToken: str = Field(min_length=1)
+    nonce: str = ""
+    profile: IdentityProfileModel | None = None
+
+
+class AuthenticatedUserModel(BaseModel):
+    isAuthenticated: bool = True
+    provider: Literal["google", "apple", "cloud-token"]
+    userId: str = Field(min_length=1)
+    email: str = ""
+    name: str = ""
+
+
+class AuthSessionResponseModel(BaseModel):
+    accessToken: str = Field(min_length=1)
+    expiresAt: datetime
+    user: AuthenticatedUserModel

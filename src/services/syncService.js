@@ -1,4 +1,5 @@
 import { decryptDiaryState, encryptDiaryState, exportAccountMasterKey, generateAccountMasterKey, generateRecoverySecret, importAccountMasterKey, unwrapAccountMasterKey, wrapAccountMasterKey } from "./e2eCrypto.js";
+import { getAuthorizationHeaderValue } from "./authService.js";
 
 const SYNC_SETTINGS_STORAGE_KEY = "neurodiary-sync-settings-v1";
 const SYNC_KEY_MATERIAL_STORAGE_KEY = "neurodiary-sync-key-material-v1";
@@ -11,12 +12,20 @@ function trimTrailingSlash(value) {
   return value.trim().replace(/\/+$/, "");
 }
 
+export function deriveSyncEndpoint() {
+  const origin = globalThis.location?.origin ?? "";
+  return trimTrailingSlash(origin);
+}
+
 function buildHeaders(settings) {
   const headers = {
     "Content-Type": "application/json",
   };
 
-  if (settings.apiToken?.trim()) {
+  const authHeader = getAuthorizationHeaderValue();
+  if (authHeader) {
+    headers.Authorization = authHeader;
+  } else if (settings.apiToken?.trim()) {
     headers.Authorization = `Bearer ${settings.apiToken.trim()}`;
   }
 
@@ -24,7 +33,7 @@ function buildHeaders(settings) {
 }
 
 function buildEndpoint(settings, path) {
-  const baseUrl = trimTrailingSlash(settings.endpoint ?? "");
+  const baseUrl = trimTrailingSlash(settings.endpoint ?? "") || deriveSyncEndpoint();
   if (!baseUrl) {
     throw new Error("Sync endpoint is not configured.");
   }
@@ -57,6 +66,10 @@ export function loadSyncSettings() {
   } catch {
     return createDefaultSyncSettings();
   }
+}
+
+export function getEffectiveSyncEndpoint(settings = {}) {
+  return trimTrailingSlash(settings.endpoint ?? "") || deriveSyncEndpoint();
 }
 
 export function saveSyncSettings(settings) {

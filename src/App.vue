@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch, watchEffect } from "vue";
 import DailyOverview from "./components/DailyOverview.vue";
 import MedicationPlan from "./components/MedicationPlan.vue";
 import HourMatrix from "./components/HourMatrix.vue";
@@ -24,15 +24,34 @@ import { parseJsonBackup, serializeJsonBackup } from "./services/jsonTransfer.js
 import { openDoctorReportPrint } from "./services/doctorReport.js";
 import { activateServiceWorkerUpdate, OFFLINE_READY_EVENT, UPDATE_READY_EVENT } from "./pwa.js";
 import {
+  clearAuthSession,
+  createDefaultAuthConfig,
+  exchangeIdentityToken,
+  fetchAuthConfig,
+  loadStoredAuthSession,
+  renderGoogleSignInButton,
+  startAppleSignIn,
+} from "./services/authService.js";
+import {
+  downloadRecoveryQr,
+  importRecoverySecretFromQrImage,
+  renderRecoverySecretQr,
+  canReadRecoveryQrFromImage,
+} from "./services/recoveryTransfer.js";
+import {
+  deriveSyncEndpoint,
+  getEffectiveSyncEndpoint,
   hasStoredRecoverySecret,
   hasStoredSyncMasterKey,
   initializeCloudSync,
+  loadSyncKeyMaterial,
   loadSyncSettings,
   pullCloudState,
   pushCloudState,
   saveRecoverySecret,
   saveSyncSettings,
 } from "./services/syncService.js";
+import { generateRecoverySecret } from "./services/e2eCrypto.js";
 import {
   appendBootstrapLog,
   BOOTSTRAP_LOG_EVENT,
@@ -42,7 +61,10 @@ import {
 const diaryRepository = ref(null);
 const fileInput = ref(null);
 const jsonFileInput = ref(null);
+const qrFileInput = ref(null);
 const floatingMenu = ref(null);
+const googleSignInTarget = ref(null);
+const recoveryQrCanvas = ref(null);
 const isReady = ref(false);
 const repositoryMode = ref("loading");
 const storageMessage = ref("");
@@ -59,10 +81,15 @@ const pwaUpdateRegistration = ref(null);
 const activePanelId = ref("sekce-home");
 const isUtilityMenuOpen = ref(false);
 const isBootstrapLogOpen = ref(false);
+const isRecoveryTransferOpen = ref(false);
 const syncSettings = reactive(loadSyncSettings());
+const authConfig = reactive(createDefaultAuthConfig());
+const authSession = ref(loadStoredAuthSession());
 const recoverySecretInput = ref("");
 const generatedRecoverySecret = ref("");
+const storedRecoverySecret = ref(loadSyncKeyMaterial().recoverySecret ?? "");
 const isSyncBusy = ref(false);
+const isAuthBusy = ref(false);
 const isApplyingExternalState = ref(false);
 const bootstrapLogEntries = ref(getBootstrapLogEntries());
 const isCapturingBootstrapProgress = ref(true);
@@ -132,10 +159,6 @@ const showDateSwitcher = computed(() => DATE_NAV_PANEL_IDS.has(activePanelId.val
 const hasRecoverySecretStored = computed(() => hasStoredRecoverySecret());
 const hasSyncMasterKeyStored = computed(() => hasStoredSyncMasterKey());
 const syncStatusSummary = computed(() => {
-  if (!syncSettings.endpoint) {
-    return "Cloud sync zatim neni nastaven.";
-  }
-
   const revision = Number(syncSettings.revision ?? 0);
   const syncedAt = syncSettings.lastSyncAt
     ? new Intl.DateTimeFormat("cs-CZ", { dateStyle: "medium", timeStyle: "short" }).format(
@@ -146,6 +169,45 @@ const syncStatusSummary = computed(() => {
   return `Revize ${revision} · posledni sync ${syncedAt}`;
 });
 const bootstrapLogCountLabel = computed(() => `${bootstrapLogEntries.value.length} kroku`);
+const effectiveSyncEndpoint = computed(() => getEffectiveSyncEndpoint(syncSettings));
+const buildInfo = __APP_BUILD_INFO__;
+const buildTimestampLabel = computed(() => {
+  if (!buildInfo?.builtAt) {
+    return "nezname";
+  }
+
+  return new Intl.DateTimeFormat("cs-CZ", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(buildInfo.builtAt));
+});
+const buildVersionLabel = computed(() =>
+  buildInfo?.commit ? `v${buildInfo.version} · ${buildInfo.commit}` : `v${buildInfo?.version ?? "0.0.0"}`,
+);
+const environmentLabel = computed(() => {
+  const derivedEndpoint = deriveSyncEndpoint();
+  if (!derivedEndpoint) {
+    return "nezname prostredi";
+  }
+
+  return derivedEndpoint.includes("localhost") || derivedEndpoint.includes("127.0.0.1")
+    ? "lokalni beh"
+    : "cloud";
+});
+const isFederatedAuthEnabled = computed(() => authConfig.federatedAuthEnabled);
+const showLegacyApiTokenField = computed(() => !isFederatedAuthEnabled.value || authConfig.legacyApiTokenEnabled);
+const authSummary = computed(() => {
+  if (!authSession.value?.user) {
+    return "Neprihlaseno";
+  }
+
+  return authSession.value.user.email || authSession.value.user.name || authSession.value.user.userId;
+});
+const effectiveRecoverySecret = computed(
+  () => recoverySecretInput.value.trim() || generatedRecoverySecret.value.trim() || storedRecoverySecret.value.trim(),
+);
+const canDisplayRecoveryQr = computed(() => effectiveRecoverySecret.value.length > 0);
+const canImportRecoveryQr = computed(() => canReadRecoveryQrFromImage());
 
 let menuResizeObserver = null;
 let mediaQueryList = null;
@@ -164,6 +226,25 @@ function syncBootstrapLogEntries(event = null) {
   bootstrapLogEntries.value = event?.detail?.entries ?? getBootstrapLogEntries();
 }
 
+function applyAuthenticatedAccount(user = null) {
+  if (!user) {
+    state.account = {
+      ...state.account,
+      isAuthenticated: false,
+      provider: "",
+      userId: "",
+    };
+    return;
+  }
+
+  state.account = {
+    ...state.account,
+    isAuthenticated: true,
+    provider: user.provider,
+    userId: user.userId,
+  };
+}
+
 watch(
   state,
   () => {
@@ -178,6 +259,11 @@ watch(
 onMounted(async () => {
   globalThis.addEventListener(BOOTSTRAP_LOG_EVENT, syncBootstrapLogEntries);
   setBootstrapStatus("Initializing install and connectivity state.");
+  try {
+    Object.assign(authConfig, await fetchAuthConfig());
+  } catch (error) {
+    console.error("Unable to load auth config", error);
+  }
   initializeInstallState();
   globalThis.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
   globalThis.addEventListener("appinstalled", handleAppInstalled);
@@ -202,6 +288,9 @@ onMounted(async () => {
   Object.assign(state, initialState);
   diaryRepository.value = repository;
   repositoryMode.value = repository.getMode();
+  if (authSession.value?.user) {
+    applyAuthenticatedAccount(authSession.value.user);
+  }
   if (repository.bootstrapWarning) {
     storageMessage.value = repository.bootstrapWarning;
     appendBootstrapLog(repository.bootstrapWarning, "warning");
@@ -221,6 +310,27 @@ onMounted(async () => {
   }
 
   isCapturingBootstrapProgress.value = false;
+});
+
+watchEffect(() => {
+  if (!googleSignInTarget.value || !authConfig.googleEnabled || !authConfig.googleClientId || authSession.value?.user) {
+    return;
+  }
+
+  void renderGoogleSignInButton(googleSignInTarget.value, authConfig.googleClientId, async (credential) => {
+    await signInWithGoogleCredential(credential);
+  });
+});
+
+watchEffect(() => {
+  if (!isRecoveryTransferOpen.value || !recoveryQrCanvas.value || !canDisplayRecoveryQr.value) {
+    return;
+  }
+
+  void renderRecoverySecretQr(recoveryQrCanvas.value, effectiveRecoverySecret.value).catch((error) => {
+    console.error("Unable to render recovery QR", error);
+    storageMessage.value = `QR kod recovery secretu se nepodarilo pripravit: ${error.message}`;
+  });
 });
 
 onUnmounted(() => {
@@ -388,13 +498,13 @@ function closeBootstrapLogPanel() {
   isBootstrapLogOpen.value = false;
 }
 
-function markCloudAuthenticated() {
-  state.account = {
-    ...state.account,
-    isAuthenticated: true,
-    provider: state.account.provider || "cloud-token",
-    userId: state.account.userId || "cloud-user",
-  };
+function markCloudAuthenticated(user = null) {
+  applyAuthenticatedAccount(
+    user ?? authSession.value?.user ?? {
+      provider: "cloud-token",
+      userId: "cloud-user",
+    },
+  );
 }
 
 function selectPanel(panelId) {
@@ -527,12 +637,104 @@ function printDoctorReport() {
   }
 }
 
-async function initializeSync() {
-  if (!syncSettings.endpoint.trim()) {
-    storageMessage.value = "Nejprve vyplnte sync endpoint.";
+async function signInWithGoogleCredential(credential) {
+  isAuthBusy.value = true;
+  try {
+    const session = await exchangeIdentityToken({
+      provider: "google",
+      idToken: credential,
+    });
+    authSession.value = session;
+    applyAuthenticatedAccount(session.user);
+    storageMessage.value = `Prihlaseni pres Google uspesne: ${session.user.email || session.user.name}.`;
+  } catch (error) {
+    console.error("Google sign-in failed", error);
+    storageMessage.value = `Prihlaseni pres Google selhalo: ${error.message}`;
+  } finally {
+    isAuthBusy.value = false;
+  }
+}
+
+async function signInWithApple() {
+  isAuthBusy.value = true;
+  try {
+    const result = await startAppleSignIn({
+      clientId: authConfig.appleClientId,
+      redirectPath: authConfig.appleRedirectPath,
+    });
+    const session = await exchangeIdentityToken({
+      provider: "apple",
+      idToken: result.idToken,
+      nonce: result.nonce,
+      profile: result.profile,
+    });
+    authSession.value = session;
+    applyAuthenticatedAccount(session.user);
+    storageMessage.value = `Prihlaseni pres Apple uspesne: ${session.user.email || session.user.name}.`;
+  } catch (error) {
+    console.error("Apple sign-in failed", error);
+    storageMessage.value = `Prihlaseni pres Apple selhalo: ${error.message}`;
+  } finally {
+    isAuthBusy.value = false;
+  }
+}
+
+function signOut() {
+  clearAuthSession();
+  authSession.value = null;
+  applyAuthenticatedAccount(null);
+  storageMessage.value = "Prihlaseni bylo odpojeno. Lokalni data zustala zachovana.";
+}
+
+function generateNewRecoverySecret() {
+  recoverySecretInput.value = generateRecoverySecret();
+  storageMessage.value = "Byl vygenerovan novy recovery secret. Ulozte si jej i mimo zarizeni.";
+}
+
+function openRecoveryTransfer() {
+  if (!effectiveRecoverySecret.value) {
+    generateNewRecoverySecret();
+  }
+
+  isRecoveryTransferOpen.value = true;
+}
+
+function closeRecoveryTransfer() {
+  isRecoveryTransferOpen.value = false;
+}
+
+function downloadRecoveryQrCode() {
+  try {
+    downloadRecoveryQr(recoveryQrCanvas.value);
+    storageMessage.value = "QR kod recovery secretu byl ulozen jako PNG.";
+  } catch (error) {
+    storageMessage.value = error.message;
+  }
+}
+
+function openRecoveryQrImport() {
+  qrFileInput.value?.click();
+}
+
+async function importRecoveryQr(event) {
+  const [file] = event.target.files ?? [];
+  if (!file) {
     return;
   }
 
+  try {
+    const secret = await importRecoverySecretFromQrImage(file);
+    recoverySecretInput.value = secret;
+    storageMessage.value = "Recovery secret byl nacten z QR kodu.";
+  } catch (error) {
+    console.error("Recovery QR import failed", error);
+    storageMessage.value = `QR import recovery secretu selhal: ${error.message}`;
+  } finally {
+    event.target.value = "";
+  }
+}
+
+async function initializeSync() {
   isSyncBusy.value = true;
   generatedRecoverySecret.value = "";
   try {
@@ -549,7 +751,11 @@ async function initializeSync() {
       lastSyncMessage: "Cloud sync initialized.",
     }));
     generatedRecoverySecret.value = result.generatedRecoverySecret;
-    markCloudAuthenticated();
+    if (result.generatedRecoverySecret) {
+      recoverySecretInput.value = result.generatedRecoverySecret;
+      storedRecoverySecret.value = result.generatedRecoverySecret;
+    }
+    markCloudAuthenticated(authSession.value?.user ?? null);
     storageMessage.value = result.generatedRecoverySecret
       ? "Cloud sync inicializovan. Ulozte si recovery secret."
       : "Cloud sync inicializovan.";
@@ -567,11 +773,6 @@ async function initializeSync() {
 }
 
 async function pullSync() {
-  if (!syncSettings.endpoint.trim()) {
-    storageMessage.value = "Nejprve vyplnte sync endpoint.";
-    return;
-  }
-
   isSyncBusy.value = true;
   try {
     storageMessage.value = "Nacitam sifrovany stav ze serveru.";
@@ -592,7 +793,7 @@ async function pullSync() {
       lastSyncStatus: "ok",
       lastSyncMessage: "Cloud pull completed.",
     }));
-    markCloudAuthenticated();
+    markCloudAuthenticated(authSession.value?.user ?? null);
     storageMessage.value = "Data byla doplnena ze serveru bez mazani lokalnich zaznamu.";
   } catch (error) {
     console.error("Sync pull failed", error);
@@ -608,11 +809,6 @@ async function pullSync() {
 }
 
 async function pushSync(force = false) {
-  if (!syncSettings.endpoint.trim()) {
-    storageMessage.value = "Nejprve vyplnte sync endpoint.";
-    return;
-  }
-
   isSyncBusy.value = true;
   try {
     storageMessage.value = "Pripravuji lokalni stav pro odeslani do cloud syncu.";
@@ -645,7 +841,7 @@ async function pushSync(force = false) {
         lastSyncStatus: "ok",
         lastSyncMessage: "Conflict merged and pushed.",
       }));
-      markCloudAuthenticated();
+      markCloudAuthenticated(authSession.value?.user ?? null);
       storageMessage.value = "Konflikt byl sloucen append-only a synchronizace dokoncena.";
       return;
     }
@@ -657,7 +853,7 @@ async function pushSync(force = false) {
       lastSyncStatus: "ok",
       lastSyncMessage: "Cloud push completed.",
     }));
-    markCloudAuthenticated();
+    markCloudAuthenticated(authSession.value?.user ?? null);
     storageMessage.value = "Lokalni data byla odeslana do cloud syncu.";
   } catch (error) {
     console.error("Sync push failed", error);
@@ -673,12 +869,15 @@ async function pushSync(force = false) {
 }
 
 function persistRecoverySecret() {
-  if (!recoverySecretInput.value.trim()) {
+  const secret = effectiveRecoverySecret.value;
+  if (!secret) {
     storageMessage.value = "Zadejte recovery secret.";
     return;
   }
 
-  saveRecoverySecret(recoverySecretInput.value);
+  recoverySecretInput.value = secret;
+  saveRecoverySecret(secret);
+  storedRecoverySecret.value = secret;
   storageMessage.value = "Recovery secret byl ulozen lokalne do tohoto zarizeni.";
 }
 
@@ -820,6 +1019,7 @@ function syncFloatingMenuHeight() {
           <div class="floating-menu-status">
             <p class="hero-label">Selected day · {{ repositoryMode }}</p>
             <p class="hero-date">{{ selectedDateLabel }}</p>
+            <p class="panel-tip">Sestaveni {{ buildTimestampLabel }} · {{ buildVersionLabel }} · {{ environmentLabel }}</p>
             <div class="status-chips" aria-label="Application status">
               <span :class="['status-chip', isOnline ? 'status-chip-online' : 'status-chip-offline']">
                 {{ isOnline ? "Online" : "Offline" }}
@@ -1042,14 +1242,13 @@ function syncFloatingMenuHeight() {
               <label>
                 <span>Sync endpoint</span>
                 <input
-                  :value="syncSettings.endpoint"
+                  :value="effectiveSyncEndpoint"
                   type="url"
-                  placeholder="https://your-api.run.app"
-                  @input="updateSyncSetting('endpoint', $event.target.value)"
+                  readonly
                 />
               </label>
 
-              <label>
+              <label v-if="showLegacyApiTokenField">
                 <span>API token</span>
                 <input
                   :value="syncSettings.apiToken"
@@ -1058,6 +1257,36 @@ function syncFloatingMenuHeight() {
                   @input="updateSyncSetting('apiToken', $event.target.value)"
                 />
               </label>
+
+              <div v-if="isFederatedAuthEnabled" class="auth-panel">
+                <div class="auth-panel-copy">
+                  <span>Prihlaseni</span>
+                  <p class="panel-tip">
+                    {{ authSession?.user ? `Prihlaseno jako ${authSummary}.` : "Prihlaste se pres Google nebo Apple a bearer token uz nebude potreba." }}
+                  </p>
+                </div>
+                <div class="auth-panel-actions">
+                  <div v-if="!authSession?.user && authConfig.googleEnabled" ref="googleSignInTarget" class="google-signin-slot"></div>
+                  <button
+                    v-if="!authSession?.user && authConfig.appleEnabled"
+                    class="ghost-button"
+                    type="button"
+                    :disabled="isAuthBusy"
+                    @click="signInWithApple"
+                  >
+                    Prihlasit pres Apple
+                  </button>
+                  <button
+                    v-if="authSession?.user"
+                    class="ghost-button"
+                    type="button"
+                    :disabled="isAuthBusy"
+                    @click="signOut"
+                  >
+                    Odhlasit
+                  </button>
+                </div>
+              </div>
 
               <label>
                 <span>Recovery secret</span>
@@ -1082,9 +1311,28 @@ function syncFloatingMenuHeight() {
               <button class="ghost-button" type="button" :disabled="isSyncBusy" @click="persistRecoverySecret">
                 Ulozit recovery secret
               </button>
+              <button class="ghost-button" type="button" :disabled="isSyncBusy" @click="generateNewRecoverySecret">
+                Vygenerovat secret
+              </button>
+              <button class="ghost-button" type="button" :disabled="!canDisplayRecoveryQr" @click="openRecoveryTransfer">
+                Zobrazit QR
+              </button>
+              <button
+                class="ghost-button"
+                type="button"
+                :disabled="!canImportRecoveryQr"
+                @click="openRecoveryQrImport"
+              >
+                Nacist z QR
+              </button>
             </div>
 
             <div class="sync-meta">
+              <p class="panel-tip">Odvozeno z URL aplikace: {{ effectiveSyncEndpoint }}</p>
+              <p v-if="isFederatedAuthEnabled" class="panel-tip">
+                Federated auth:
+                {{ authConfig.googleEnabled ? "Google " : "" }}{{ authConfig.appleEnabled ? "Apple" : "" }}
+              </p>
               <p class="panel-tip">Lokalni klic: {{ hasSyncMasterKeyStored ? "ulozen" : "chybi" }}</p>
               <p class="panel-tip">Recovery secret: {{ hasRecoverySecretStored ? "ulozen" : "chybi" }}</p>
               <p v-if="syncSettings.lastSyncMessage" class="panel-tip">{{ syncSettings.lastSyncMessage }}</p>
@@ -1164,6 +1412,13 @@ function syncFloatingMenuHeight() {
         accept=".json,application/json"
         @change="importJson"
       />
+      <input
+        ref="qrFileInput"
+        class="visually-hidden"
+        type="file"
+        accept="image/*"
+        @change="importRecoveryQr"
+      />
       <div
         v-if="isBootstrapLogOpen"
         class="diagnostic-dialog-backdrop"
@@ -1198,6 +1453,50 @@ function syncFloatingMenuHeight() {
                 <p class="bootstrap-history-message">{{ entry.message }}</p>
               </li>
             </ol>
+          </div>
+        </section>
+      </div>
+      <div
+        v-if="isRecoveryTransferOpen"
+        class="diagnostic-dialog-backdrop"
+        role="presentation"
+        @click.self="closeRecoveryTransfer"
+      >
+        <section
+          class="diagnostic-dialog recovery-transfer-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="recovery-transfer-dialog-title"
+        >
+          <div class="diagnostic-dialog-header">
+            <div>
+              <p class="section-kicker">Recovery</p>
+              <h2 id="recovery-transfer-dialog-title">Prenos recovery secretu</h2>
+              <p class="panel-tip">Tento secret drzte mimo repozitar a beznych screenshotu. Slouzi k obnove sifrovaciho klice.</p>
+            </div>
+            <button class="ghost-button" type="button" @click="closeRecoveryTransfer">
+              Zavrit
+            </button>
+          </div>
+
+          <div class="recovery-transfer-grid">
+            <div class="recovery-secret-preview">
+              <p class="section-kicker">Aktivni secret</p>
+              <code class="recovery-secret-code">{{ effectiveRecoverySecret }}</code>
+              <div class="recovery-transfer-actions">
+                <button class="ghost-button" type="button" @click="persistRecoverySecret">
+                  Ulozit lokalne
+                </button>
+                <button class="ghost-button" type="button" @click="downloadRecoveryQrCode">
+                  Ulozit QR PNG
+                </button>
+              </div>
+            </div>
+
+            <div class="recovery-qr-card">
+              <canvas ref="recoveryQrCanvas" class="recovery-qr-canvas"></canvas>
+              <p class="panel-tip">Druhe zarizeni muze nahrat QR obrazek a secret nacist bez opisovani.</p>
+            </div>
           </div>
         </section>
       </div>

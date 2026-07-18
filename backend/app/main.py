@@ -8,7 +8,16 @@ from fastapi import Depends, FastAPI, Header, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
-from .models import SyncPullResponseModel, SyncPushRequestModel, SyncPushResponseModel
+from .auth import AuthManager
+from .models import (
+    AuthConfigResponseModel,
+    AuthSessionResponseModel,
+    AuthenticatedUserModel,
+    IdentityExchangeRequestModel,
+    SyncPullResponseModel,
+    SyncPushRequestModel,
+    SyncPushResponseModel,
+)
 from .store import RevisionConflictError, create_sync_store
 
 
@@ -30,6 +39,7 @@ CORS_ORIGINS = [
 ]
 
 store = create_sync_store(database_url=DATABASE_URL or None, database_path=DATABASE_PATH)
+auth_manager = AuthManager()
 app = FastAPI(title=APP_NAME, version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
@@ -48,23 +58,47 @@ def on_startup() -> None:
 def verify_bearer_token(
     authorization: Annotated[str | None, Header()] = None,
 ) -> str:
-    if not API_TOKEN:
-        return DEFAULT_USER_ID
-
-    expected_value = f"Bearer {API_TOKEN}"
-    if authorization != expected_value:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing or invalid bearer token.",
-        )
-
-    return DEFAULT_USER_ID
+    return auth_manager.resolve_authorization(authorization)
 
 
 @app.get("/healthz")
 def healthcheck() -> dict[str, str]:
     backend = "postgres" if DATABASE_URL else "sqlite"
-    return {"status": "ok", "storage": backend}
+    auth_mode = "federated" if auth_manager.federated_auth_enabled else "legacy"
+    return {"status": "ok", "storage": backend, "auth": auth_mode}
+
+
+@app.get("/api/v1/auth/config", response_model=AuthConfigResponseModel)
+def auth_config() -> AuthConfigResponseModel:
+    return AuthConfigResponseModel(
+        googleEnabled=auth_manager.google_enabled,
+        googleClientId=auth_manager.google_client_ids[0] if auth_manager.google_client_ids else "",
+        appleEnabled=auth_manager.apple_enabled,
+        appleClientId=auth_manager.apple_client_ids[0] if auth_manager.apple_client_ids else "",
+        appleRedirectPath=auth_manager.apple_redirect_path,
+        legacyApiTokenEnabled=bool(API_TOKEN),
+        federatedAuthEnabled=auth_manager.federated_auth_enabled,
+    )
+
+
+@app.post("/api/v1/auth/exchange", response_model=AuthSessionResponseModel)
+def exchange_identity_token(payload: IdentityExchangeRequestModel) -> AuthSessionResponseModel:
+    user, access_token, expires_at = auth_manager.exchange_identity_token(
+        provider=payload.provider,
+        id_token_value=payload.idToken,
+        nonce=payload.nonce or None,
+        profile=payload.profile.model_dump() if payload.profile else None,
+    )
+    return AuthSessionResponseModel(
+        accessToken=access_token,
+        expiresAt=expires_at,
+        user=AuthenticatedUserModel(
+            provider=user.provider,
+            userId=user.user_id,
+            email=user.email,
+            name=user.name,
+        ),
+    )
 
 
 def resolve_frontend_path(path: str) -> Path:
