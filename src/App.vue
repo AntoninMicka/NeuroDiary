@@ -169,6 +169,9 @@ onMounted(async () => {
   Object.assign(state, initialState);
   diaryRepository.value = repository;
   repositoryMode.value = repository.getMode();
+  if (repository.bootstrapWarning) {
+    storageMessage.value = repository.bootstrapWarning;
+  }
   isReady.value = true;
 
   await nextTick();
