@@ -15,37 +15,9 @@ fi
 # shellcheck disable=SC1090
 source "${ENV_FILE}"
 
-required_commands=(gcloud)
-for command in "${required_commands[@]}"; do
-  if ! command -v "${command}" >/dev/null 2>&1; then
-    echo "Missing required command: ${command}"
-    exit 1
-  fi
-done
-
-required_vars=(
-  GCP_PROJECT_ID
-  GCP_REGION
-  GAR_REPOSITORY
-  CLOUD_RUN_SERVICE
-  IMAGE_NAME
-  NEURODIARY_API_TOKEN
-  NEURODIARY_CORS_ORIGINS
-  NEURODIARY_DEFAULT_USER_ID
-  DATABASE_MODE
-)
-
-for name in "${required_vars[@]}"; do
-  if [[ -z "${!name:-}" ]]; then
-    echo "Missing required variable: ${name}"
-    exit 1
-  fi
-done
-
 DEPLOY_SA_NAME="${DEPLOY_SA_NAME:-neurodiary-github-deploy}"
 DEPLOY_SA_DISPLAY_NAME="${DEPLOY_SA_DISPLAY_NAME:-NeuroDiary GitHub Deploy}"
 IMAGE_TAG="${IMAGE_TAG:-manual-$(date +%Y%m%d-%H%M%S)}"
-IMAGE_URI="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GAR_REPOSITORY}/${IMAGE_NAME}:${IMAGE_TAG}"
 WORKLOAD_IDENTITY_POOL_ID="${WORKLOAD_IDENTITY_POOL_ID:-github}"
 WORKLOAD_IDENTITY_PROVIDER_ID="${WORKLOAD_IDENTITY_PROVIDER_ID:-neurodiary}"
 WORKLOAD_IDENTITY_PROVIDER_DISPLAY_NAME="${WORKLOAD_IDENTITY_PROVIDER_DISPLAY_NAME:-NeuroDiary GitHub}"
@@ -55,26 +27,126 @@ ALLOW_UNAUTHENTICATED="${ALLOW_UNAUTHENTICATED:-true}"
 CLOUD_RUN_DEPLOY_FLAGS="${CLOUD_RUN_DEPLOY_FLAGS:-}"
 RUNTIME_SERVICE_ACCOUNT="${RUNTIME_SERVICE_ACCOUNT:-}"
 
-if [[ "${DATABASE_MODE}" != "sqlite" && "${DATABASE_MODE}" != "postgres" ]]; then
-  echo "DATABASE_MODE must be either 'sqlite' or 'postgres'."
-  exit 1
-fi
+function prompt_value() {
+  local var_name="$1"
+  local help_text="$2"
+  local example="$3"
+  local secret="${4:-false}"
+  local current_value="${!var_name:-}"
 
-if [[ "${DATABASE_MODE}" == "postgres" ]]; then
-  postgres_required=(
-    CLOUD_SQL_INSTANCE
-    POSTGRES_INSTANCE_NAME
-    POSTGRES_DATABASE_NAME
-    POSTGRES_USER
-    POSTGRES_PASSWORD
-  )
-  for name in "${postgres_required[@]}"; do
-    if [[ -z "${!name:-}" ]]; then
-      echo "Missing required postgres variable: ${name}"
+  if [[ -n "${current_value}" ]]; then
+    return
+  fi
+
+  echo
+  echo "Missing ${var_name}"
+  echo "  ${help_text}"
+  echo "  Example: ${example}"
+
+  local value=""
+  while [[ -z "${value}" ]]; do
+    if [[ "${secret}" == "true" ]]; then
+      read -r -s -p "${var_name}: " value
+      echo
+    else
+      read -r -p "${var_name}: " value
+    fi
+  done
+
+  printf -v "${var_name}" '%s' "${value}"
+}
+
+function prompt_optional_value() {
+  local var_name="$1"
+  local help_text="$2"
+  local example="$3"
+  local current_value="${!var_name:-}"
+
+  if [[ -n "${current_value}" ]]; then
+    return
+  fi
+
+  echo
+  echo "Optional ${var_name}"
+  echo "  ${help_text}"
+  echo "  Example: ${example}"
+  read -r -p "${var_name} (leave empty to skip): " current_value
+  printf -v "${var_name}" '%s' "${current_value}"
+}
+
+function prompt_choice() {
+  local var_name="$1"
+  local help_text="$2"
+  local options="$3"
+  local current_value="${!var_name:-}"
+
+  if [[ -n "${current_value}" ]]; then
+    return
+  fi
+
+  echo
+  echo "Missing ${var_name}"
+  echo "  ${help_text}"
+  echo "  Allowed values: ${options}"
+
+  while true; do
+    read -r -p "${var_name}: " current_value
+    if [[ "${options}" == *"${current_value}"* ]]; then
+      break
+    fi
+  done
+
+  printf -v "${var_name}" '%s' "${current_value}"
+}
+
+function ensure_required_commands() {
+  local required_commands=(gcloud)
+  for command in "${required_commands[@]}"; do
+    if ! command -v "${command}" >/dev/null 2>&1; then
+      echo "Missing required command: ${command}"
       exit 1
     fi
   done
-fi
+}
+
+function collect_configuration() {
+  prompt_value "GCP_PROJECT_ID" "Google Cloud project ID, kam se bude nasazovat." "my-neurodiary-prod"
+  prompt_value "GCP_REGION" "Region pro Cloud Run, Artifact Registry a idealne i Cloud SQL." "europe-west1"
+  prompt_value "GAR_REPOSITORY" "Nazev Docker repository v Artifact Registry." "neurodiary"
+  prompt_value "CLOUD_RUN_SERVICE" "Nazev Cloud Run sluzby pro sync backend." "neurodiary-sync"
+  prompt_value "IMAGE_NAME" "Nazev container image uvnitr Artifact Registry." "neurodiary-sync"
+  prompt_value "NEURODIARY_API_TOKEN" "Dlouhy nahodny bearer token pro pristup k sync API." "vygenerovany-tajny-token" "true"
+  prompt_value "NEURODIARY_CORS_ORIGINS" "Frontend URL nebo vice URL oddelenych carkou." "https://app.example.com"
+  prompt_value "NEURODIARY_DEFAULT_USER_ID" "Docasny identifikator pro single-user rezim." "primary-user"
+  prompt_choice "DATABASE_MODE" "Zvol, jestli chces jen rychly test nebo produkcnejsi PostgreSQL variantu." "sqlite postgres"
+
+  prompt_choice "ALLOW_UNAUTHENTICATED" "Ma byt Cloud Run endpoint verejne dostupny a chraneny jen bearer tokenem?" "true false"
+  prompt_optional_value "CLOUD_RUN_DEPLOY_FLAGS" "Dalsi volitelne Cloud Run flagy." "--min-instances=0 --max-instances=3"
+  prompt_optional_value "RUNTIME_SERVICE_ACCOUNT" "Volitelny runtime service account pro Cloud Run." "neurodiary-runtime@my-project.iam.gserviceaccount.com"
+
+  prompt_choice "CREATE_GITHUB_WIF" "Ma skript rovnou vytvorit Workload Identity Federation pro GitHub Actions?" "true false"
+  if [[ "${CREATE_GITHUB_WIF}" == "true" ]]; then
+    prompt_value "GITHUB_REPOSITORY" "GitHub repozitar ve tvaru owner/repository." "antonin/NeuroDiary"
+    prompt_value "WORKLOAD_IDENTITY_POOL_ID" "ID workload identity poolu." "github"
+    prompt_value "WORKLOAD_IDENTITY_PROVIDER_ID" "ID provideru uvnitr poolu." "neurodiary"
+  fi
+
+  prompt_optional_value "DEPLOY_SA_NAME" "Nazev deploy service accountu." "neurodiary-github-deploy"
+
+  if [[ "${DATABASE_MODE}" == "postgres" ]]; then
+    prompt_value "POSTGRES_INSTANCE_NAME" "Nazev Cloud SQL instance." "neurodiary-db"
+    prompt_value "POSTGRES_DATABASE_NAME" "Nazev PostgreSQL databaze." "neurodiary"
+    prompt_value "POSTGRES_USER" "Jmeno DB uzivatele aplikace." "neurodiary_app"
+    prompt_value "POSTGRES_PASSWORD" "Silne heslo pro DB uzivatele." "silne-db-heslo" "true"
+    prompt_value "CLOUD_SQL_INSTANCE" "Cloud SQL connection name ve formatu PROJECT_ID:REGION:INSTANCE_ID." "my-neurodiary-prod:europe-west1:neurodiary-db"
+    prompt_optional_value "POSTGRES_TIER" "Velikost Cloud SQL instance." "db-f1-micro"
+    prompt_optional_value "POSTGRES_STORAGE_GB" "Velikost disku v GB." "10"
+    prompt_optional_value "POSTGRES_AVAILABILITY_TYPE" "Typ dostupnosti instance." "zonal"
+    prompt_optional_value "POSTGRES_INSTANCE_FLAGS" "Dalsi raw flagy pro gcloud sql instances create." "--edition=enterprise"
+  fi
+
+  IMAGE_URI="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GAR_REPOSITORY}/${IMAGE_NAME}:${IMAGE_TAG}"
+}
 
 function log_step() {
   echo
@@ -337,6 +409,8 @@ function print_summary() {
   echo "  Then verify ${cloud_run_url}/healthz"
 }
 
+ensure_required_commands
+collect_configuration
 ensure_project
 enable_apis
 ensure_artifact_registry

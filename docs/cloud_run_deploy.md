@@ -19,6 +19,9 @@ s ukazkovou konfiguraci v [cloud_run.env.example](/home/antonin/Projects/NeuroDi
 bash scripts/cloud_run_bootstrap.sh
 ```
 
+Kdyz nechas nektere hodnoty prazdne, skript se na ne pri behu doptá a prida i kratkou napovedu
+co ma byt za hodnotu a priklad formatu.
+
 Skript umi:
 
 - zapnout potrebna GCP API

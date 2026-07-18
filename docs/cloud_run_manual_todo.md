@@ -86,6 +86,7 @@ Pokud nechces vsechno klikat rucne, prvni cast tohohle checklistu umi automatizo
 
 - [ ] pripadne pripravit `scripts/cloud_run.env` podle [cloud_run.env.example](/home/antonin/Projects/NeuroDiary/NeuroDiary/scripts/cloud_run.env.example:1)
 - [ ] pokud chci prvni deploy automatizovat z lokalu, spustit `bash scripts/cloud_run_bootstrap.sh`
+- [ ] kdyz nevim presne format nejake hodnoty, nechat ji prazdnou a nechat si ji od skriptu vysvetlit
 - [ ] opsat nebo zkopirovat ze zaveru skriptu hodnoty do `GitHub -> Settings -> Secrets and variables -> Actions`
 - [ ] spustit workflow rucne pres `workflow_dispatch`
 - [ ] zkontrolovat, ze probehl build image
