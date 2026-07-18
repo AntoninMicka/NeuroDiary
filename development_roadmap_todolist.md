@@ -112,11 +112,9 @@ s fallbackem na localStorage, včetně import/export `.sqlite`.
 
 Lokální persistence přes `localStorage` jako PoC vrstva před SQLite.
 
-### [pending] 2.6 PWA
+### [done] 2.6 PWA
 
-* Manifest
-* Service Worker
-* Offline režim
+Manifest, Service Worker, offline režim, instalační prompt a základní update/offline hlášky.
 
 ---
 
@@ -181,9 +179,13 @@ Navazující rozšíření:
 * promítnutí skutečně užitých léčiv do časové osy reportu
 * odlišení plánované medikace a skutečně užité dávky v reportu
 
-### [pending] 4.3 Export JSON
+### [done] 4.3 Export JSON
 
-### [pending] 4.4 Import JSON
+Ruční export JSON zálohy z aplikace.
+
+### [done] 4.4 Import JSON
+
+Import JSON zálohy s potvrzením a nouzovým předimportním exportem.
 
 ### [pending] 4.5 Automatické lokální zálohy
 

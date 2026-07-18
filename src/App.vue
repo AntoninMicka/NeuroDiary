@@ -62,6 +62,9 @@ const installHelpText = computed(() => {
 
   return "PWA support is enabled. Once the browser allows installation, the install action will appear here.";
 });
+const showIosInstallGuide = computed(
+  () => !isInstalledApp.value && platformInstallMode.value === "ios-share-sheet",
+);
 
 let menuResizeObserver = null;
 let mediaQueryList = null;
@@ -412,6 +415,13 @@ function syncFloatingMenuHeight() {
               Install app
             </button>
             <p class="hero-install-note">{{ installHelpText }}</p>
+          </div>
+          <div v-if="showIosInstallGuide" class="ios-install-card" aria-label="iOS install guide">
+            <p class="ios-install-title">Install on iPhone or iPad</p>
+            <ol class="ios-install-steps">
+              <li>Open the browser share menu.</li>
+              <li>Select <strong>Add to Home Screen</strong>.</li>
+            </ol>
           </div>
         </div>
       </header>

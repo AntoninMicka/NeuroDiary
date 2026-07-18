@@ -132,6 +132,32 @@ textarea {
   font-size: 0.94rem;
 }
 
+.ios-install-card {
+  margin-top: 0.95rem;
+  max-width: 28rem;
+  padding: 0.95rem 1rem;
+  border-radius: 18px;
+  background: rgba(31, 122, 140, 0.08);
+  border: 1px solid rgba(31, 122, 140, 0.16);
+}
+
+.ios-install-title {
+  margin: 0 0 0.55rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--accent-strong);
+}
+
+.ios-install-steps {
+  margin: 0;
+  padding-left: 1.2rem;
+  color: var(--text);
+}
+
+.ios-install-steps li + li {
+  margin-top: 0.35rem;
+}
+
 .floating-menu,
 .panel {
   background: var(--surface);
