@@ -1126,6 +1126,8 @@ async function pullSync() {
 }
 
 async function pushSync(force = false) {
+  const shouldForce = force === true;
+
   if (!ensureSyncIdentity()) {
     return;
   }
@@ -1137,7 +1139,7 @@ async function pushSync(force = false) {
       state,
       settings: syncSettings,
       baseRevision: Number(syncSettings.revision ?? 0),
-      force,
+      force: shouldForce,
     });
 
     if (result.status === "conflict" && result.remoteState) {
