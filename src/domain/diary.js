@@ -119,12 +119,8 @@ export function createDefaultEntry() {
     isDemo: false,
     sleepQuality: "good",
     overallStatus: "stable",
-    notes: "Morning stiffness improved after first dose. Energy stable in the afternoon.",
-    medications: [
-      createMedication({ name: "Levodopa", dose: "100 mg", time: "08:00" }),
-      createMedication({ name: "Levodopa", dose: "100 mg", time: "13:00" }),
-      createMedication({ name: "Levodopa", dose: "100 mg", time: "18:00" }),
-    ],
+    notes: "",
+    medications: [],
     hours,
     hourRecords: createHourRecordsFromHours(hours),
   };
@@ -387,13 +383,16 @@ export function createDemoState(days = 21) {
   state.patientName = "Jan Novak";
   state.birthYear = "1958";
   let previousSignature = null;
+  const demoDays = Math.max(days - 1, 0);
 
-  for (let offset = days - 1; offset >= 0; offset -= 1) {
+  for (let offset = demoDays; offset >= 1; offset -= 1) {
     const dateKey = shiftDateKey(state.selectedDate, -offset);
     const { entry, signature } = createSimulatedEntry(dateKey, previousSignature);
     state.entries[dateKey] = entry;
     previousSignature = signature;
   }
+
+  state.entries[state.selectedDate] = createDefaultEntry();
 
   return state;
 }
