@@ -24,3 +24,8 @@ It also includes:
 - import of an existing `.sqlite` backup
 - printable doctor report for the selected diary day
 - installable PWA shell with manifest and service worker caching
+
+## Sync Backend
+
+The repository now also contains a first backend sync scaffold in [backend/README.md](/home/antonin/Projects/NeuroDiary/NeuroDiary/backend/README.md:1)
+with a FastAPI-based `pull/push` snapshot API intended as the first step toward multi-device use.
