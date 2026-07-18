@@ -55,6 +55,7 @@ import {
   loadSyncSettings,
   pullCloudState,
   pushCloudState,
+  recoverLocalSyncKey,
   resetCloudState,
   saveRecoverySecret,
   saveSyncSettings,
@@ -99,8 +100,10 @@ const previousAuthUserId = ref(authSession.value?.user?.userId ?? "");
 const recoverySecretInput = ref("");
 const generatedRecoverySecret = ref("");
 const storedRecoverySecret = ref(loadSyncKeyMaterial().recoverySecret ?? "");
+const syncKeyMaterialRefreshToken = ref(0);
 const isSyncBusy = ref(false);
 const isAuthBusy = ref(false);
+const isAutoRecoveringSyncKey = ref(false);
 const isRecoveryCameraBusy = ref(false);
 const isApplyingExternalState = ref(false);
 const bootstrapLogEntries = ref(getBootstrapLogEntries());
@@ -172,8 +175,14 @@ const canGoToPreviousPanel = computed(() => activePanelIndex.value > 0);
 const canGoToNextPanel = computed(() => activePanelIndex.value < PANEL_ITEMS.length - 1);
 const canGoToNextDate = computed(() => state.selectedDate < getTodayKey());
 const showDateSwitcher = computed(() => DATE_NAV_PANEL_IDS.has(activePanelId.value));
-const hasRecoverySecretStored = computed(() => hasStoredRecoverySecret());
-const hasSyncMasterKeyStored = computed(() => hasStoredSyncMasterKey());
+const hasRecoverySecretStored = computed(() => {
+  syncKeyMaterialRefreshToken.value;
+  return hasStoredRecoverySecret();
+});
+const hasSyncMasterKeyStored = computed(() => {
+  syncKeyMaterialRefreshToken.value;
+  return hasStoredSyncMasterKey();
+});
 const syncStatusSummary = computed(() => {
   const revision = Number(syncSettings.revision ?? 0);
   const syncedAt = syncSettings.lastSyncAt
@@ -318,6 +327,7 @@ onMounted(async () => {
   }
   setBootstrapStatus("Initialization completed.");
   isReady.value = true;
+  await tryAutoRecoverLocalSyncKey();
 
   await nextTick();
   setBootstrapStatus("Synchronizing floating menu layout.");
@@ -391,6 +401,11 @@ function updateSyncSetting(field, value) {
 
 function updateCurrentHourLabel(value) {
   currentHourLabel.value = value;
+}
+
+function refreshSyncKeyMaterialStatus() {
+  syncKeyMaterialRefreshToken.value += 1;
+  storedRecoverySecret.value = loadSyncKeyMaterial().recoverySecret ?? "";
 }
 
 function updateSelectedStateKey(value) {
@@ -658,7 +673,7 @@ function resetAllData() {
   });
   Object.assign(syncSettings, clearSyncState(syncSettings));
   clearSyncKeyMaterial();
-  storedRecoverySecret.value = "";
+  refreshSyncKeyMaterialStatus();
   recoverySecretInput.value = "";
   generatedRecoverySecret.value = "";
   storageMessage.value =
@@ -683,7 +698,7 @@ async function resetCloudData() {
     await resetCloudState(syncSettings);
     Object.assign(syncSettings, clearSyncState(syncSettings));
     clearSyncKeyMaterial();
-    storedRecoverySecret.value = "";
+    refreshSyncKeyMaterialStatus();
     recoverySecretInput.value = "";
     generatedRecoverySecret.value = "";
     storageMessage.value =
@@ -771,6 +786,7 @@ async function signInWithGoogleCredential(credential) {
     });
     authSession.value = session;
     applyAuthenticatedAccount(session.user);
+    await tryAutoRecoverLocalSyncKey();
     storageMessage.value = `Prihlaseni pres Google uspesne: ${session.user.email || session.user.name}.`;
   } catch (error) {
     console.error("Google sign-in failed", error);
@@ -795,6 +811,7 @@ async function signInWithApple() {
     });
     authSession.value = session;
     applyAuthenticatedAccount(session.user);
+    await tryAutoRecoverLocalSyncKey();
     storageMessage.value = `Prihlaseni pres Apple uspesne: ${session.user.email || session.user.name}.`;
   } catch (error) {
     console.error("Apple sign-in failed", error);
@@ -809,6 +826,50 @@ function signOut() {
   authSession.value = null;
   applyAuthenticatedAccount(null);
   storageMessage.value = "Prihlaseni bylo odpojeno. Lokalni data zustala zachovana.";
+}
+
+async function tryAutoRecoverLocalSyncKey() {
+  if (
+    isAutoRecoveringSyncKey.value
+    || !isReady.value
+    || !authSession.value?.user
+    || hasSyncMasterKeyStored.value
+    || !hasRecoverySecretStored.value
+  ) {
+    return;
+  }
+
+  isAutoRecoveringSyncKey.value = true;
+  try {
+    const result = await recoverLocalSyncKey({
+      ...syncSettings,
+      userId: authSession.value.user.userId ?? syncSettings.userId,
+    });
+    refreshSyncKeyMaterialStatus();
+
+    if (!result.recovered) {
+      return;
+    }
+
+    Object.assign(syncSettings, saveSyncSettings({
+      ...syncSettings,
+      userId: authSession.value.user.userId ?? syncSettings.userId,
+      revision: result.revision ?? syncSettings.revision,
+      lastSyncAt: result.updatedAt || syncSettings.lastSyncAt,
+      lastSyncStatus: "ok",
+      lastSyncMessage: "Lokalni sifrovaci klic byl automaticky obnoven z recovery secretu.",
+    }));
+    storageMessage.value = "Lokalni sifrovaci klic byl automaticky obnoven z recovery secretu.";
+  } catch (error) {
+    console.error("Automatic local sync key recovery failed", error);
+    Object.assign(syncSettings, saveSyncSettings({
+      ...syncSettings,
+      lastSyncStatus: "error",
+      lastSyncMessage: error.message,
+    }));
+  } finally {
+    isAutoRecoveringSyncKey.value = false;
+  }
 }
 
 function generateNewRecoverySecret() {
@@ -1003,8 +1064,8 @@ async function initializeSync() {
     generatedRecoverySecret.value = result.generatedRecoverySecret;
     if (result.generatedRecoverySecret) {
       recoverySecretInput.value = result.generatedRecoverySecret;
-      storedRecoverySecret.value = result.generatedRecoverySecret;
     }
+    refreshSyncKeyMaterialStatus();
     markCloudAuthenticated(authSession.value?.user ?? null);
     storageMessage.value = result.generatedRecoverySecret
       ? "Cloud sync inicializovan. Ulozte si recovery secret."
@@ -1031,6 +1092,7 @@ async function pullSync() {
   try {
     storageMessage.value = "Nacitam sifrovany stav ze serveru.";
     const result = await pullCloudState(syncSettings);
+    refreshSyncKeyMaterialStatus();
     if (!result.state) {
       storageMessage.value = "Na serveru zatim nejsou zadna data.";
       return;
@@ -1102,6 +1164,7 @@ async function pushSync(force = false) {
         lastSyncMessage: "Conflict merged and pushed.",
       }));
       markCloudAuthenticated(authSession.value?.user ?? null);
+      refreshSyncKeyMaterialStatus();
       storageMessage.value = "Konflikt byl sloucen append-only a synchronizace dokoncena.";
       return;
     }
@@ -1115,6 +1178,7 @@ async function pushSync(force = false) {
       lastSyncMessage: "Cloud push completed.",
     }));
     markCloudAuthenticated(authSession.value?.user ?? null);
+    refreshSyncKeyMaterialStatus();
     storageMessage.value = "Lokalni data byla odeslana do cloud syncu.";
   } catch (error) {
     console.error("Sync push failed", error);
@@ -1138,7 +1202,7 @@ function persistRecoverySecret() {
 
   recoverySecretInput.value = secret;
   saveRecoverySecret(secret);
-  storedRecoverySecret.value = secret;
+  refreshSyncKeyMaterialStatus();
   storageMessage.value = "Recovery secret byl ulozen lokalne do tohoto zarizeni.";
 }
 
@@ -1225,7 +1289,7 @@ watch(
 
     Object.assign(syncSettings, clearSyncState(syncSettings));
     clearSyncKeyMaterial();
-    storedRecoverySecret.value = "";
+    refreshSyncKeyMaterialStatus();
     recoverySecretInput.value = "";
     generatedRecoverySecret.value = "";
     storageMessage.value =

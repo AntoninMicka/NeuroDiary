@@ -12,6 +12,37 @@ function trimTrailingSlash(value) {
   return value.trim().replace(/\/+$/, "");
 }
 
+function normalizeSyncMessage(value) {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (value instanceof Error) {
+    return value.message;
+  }
+
+  if (value && typeof value === "object") {
+    if (typeof value.detail === "string" && value.detail.trim()) {
+      return value.detail;
+    }
+    if (typeof value.message === "string" && value.message.trim()) {
+      return value.message;
+    }
+
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  }
+
+  if (value === null || value === undefined) {
+    return "";
+  }
+
+  return String(value);
+}
+
 export function deriveSyncEndpoint() {
   const origin = globalThis.location?.origin ?? "";
   return trimTrailingSlash(origin);
@@ -60,10 +91,12 @@ export function loadSyncSettings() {
       return createDefaultSyncSettings();
     }
 
-    return {
+    const nextSettings = {
       ...createDefaultSyncSettings(),
       ...JSON.parse(raw),
     };
+    nextSettings.lastSyncMessage = normalizeSyncMessage(nextSettings.lastSyncMessage);
+    return nextSettings;
   } catch {
     return createDefaultSyncSettings();
   }
@@ -78,6 +111,7 @@ export function saveSyncSettings(settings) {
     ...createDefaultSyncSettings(),
     ...cloneSerializable(settings),
   };
+  nextSettings.lastSyncMessage = normalizeSyncMessage(nextSettings.lastSyncMessage);
   localStorage.setItem(SYNC_SETTINGS_STORAGE_KEY, JSON.stringify(nextSettings));
   return nextSettings;
 }
@@ -247,6 +281,48 @@ export async function pullCloudState(settings) {
     updatedAt: result.updatedAt,
     state,
     wrappedKey: result.wrappedKey,
+  };
+}
+
+export async function recoverLocalSyncKey(settings) {
+  const normalizedSettings = saveSyncSettings(settings);
+  const keyMaterial = loadSyncKeyMaterial();
+
+  if (keyMaterial.exportedMasterKey) {
+    return {
+      recovered: false,
+      reason: "already-present",
+    };
+  }
+
+  if (!keyMaterial.recoverySecret) {
+    return {
+      recovered: false,
+      reason: "missing-recovery-secret",
+    };
+  }
+
+  const result = await fetchJson(buildEndpoint(normalizedSettings, "/api/v1/sync/pull"), {
+    method: "GET",
+    headers: buildHeaders(normalizedSettings),
+  });
+
+  if (!result.payload || !result.wrappedKey) {
+    return {
+      recovered: false,
+      reason: "missing-remote-key",
+      revision: result.revision ?? 0,
+      updatedAt: result.updatedAt ?? "",
+    };
+  }
+
+  await resolveMasterKeyForSync(result.wrappedKey);
+
+  return {
+    recovered: true,
+    reason: "recovered",
+    revision: result.revision ?? 0,
+    updatedAt: result.updatedAt ?? "",
   };
 }
 
