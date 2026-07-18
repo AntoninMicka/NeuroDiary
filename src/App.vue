@@ -41,6 +41,7 @@ const floatingMenu = ref(null);
 const isReady = ref(false);
 const repositoryMode = ref("loading");
 const storageMessage = ref("");
+const bootstrapStatus = ref("Starting application bootstrap.");
 const currentHourLabel = ref(getTrackableHourLabel());
 const selectedStateKey = ref("on");
 const deferredInstallPrompt = ref(null);
@@ -152,6 +153,7 @@ watch(
 );
 
 onMounted(async () => {
+  bootstrapStatus.value = "Initializing install and connectivity state.";
   initializeInstallState();
   globalThis.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
   globalThis.addEventListener("appinstalled", handleAppInstalled);
@@ -164,17 +166,26 @@ onMounted(async () => {
     navigator.serviceWorker.addEventListener("controllerchange", handleControllerChange);
   }
 
-  const repository = await createDiaryRepository();
+  bootstrapStatus.value = "Starting local repository initialization.";
+  const repository = await createDiaryRepository({
+    onProgress(message) {
+      bootstrapStatus.value = message;
+    },
+  });
+  bootstrapStatus.value = "Repository ready. Loading saved diary state.";
   const initialState = repository.loadState();
+  bootstrapStatus.value = "Applying loaded state to the application.";
   Object.assign(state, initialState);
   diaryRepository.value = repository;
   repositoryMode.value = repository.getMode();
   if (repository.bootstrapWarning) {
     storageMessage.value = repository.bootstrapWarning;
   }
+  bootstrapStatus.value = "Initialization completed.";
   isReady.value = true;
 
   await nextTick();
+  bootstrapStatus.value = "Synchronizing floating menu layout.";
   syncFloatingMenuHeight();
 
   if (globalThis.ResizeObserver && floatingMenu.value) {
@@ -704,6 +715,8 @@ function syncFloatingMenuHeight() {
       <p class="section-kicker">Bootstrapping</p>
       <h2>Preparing local diary storage</h2>
       <p class="panel-tip">Initializing the offline repository and loading your local data.</p>
+      <p class="boot-detail">{{ bootstrapStatus }}</p>
+      <p v-if="storageMessage" class="boot-detail boot-detail-warning">{{ storageMessage }}</p>
     </div>
 
     <template v-else>

@@ -21,17 +21,22 @@ function withTimeout(promise, timeoutMs, message) {
   });
 }
 
-export async function createDiaryRepository() {
+export async function createDiaryRepository(options = {}) {
+  const { onProgress } = options;
+
   try {
+    onProgress?.("Trying SQLite repository first.");
     return await withTimeout(
-      SqliteDiaryRepository.create(),
+      SqliteDiaryRepository.create(onProgress),
       SQLITE_INIT_TIMEOUT_MS,
       `SQLite repository initialization timed out after ${SQLITE_INIT_TIMEOUT_MS} ms.`,
     );
   } catch (error) {
     console.warn("SQLite repository initialization failed, falling back to localStorage", error);
-    const repository = await LocalStorageDiaryRepository.create();
     const reason = error instanceof Error ? error.message : String(error);
+    onProgress?.(`SQLite repository failed: ${reason}`);
+    onProgress?.("Switching to localStorage fallback.");
+    const repository = await LocalStorageDiaryRepository.create(onProgress);
     repository.bootstrapWarning =
       `SQLite uloziste se nepodarilo spustit: ${reason}. Aplikace proto bezí v nouzovem localStorage rezimu.`;
     return repository;

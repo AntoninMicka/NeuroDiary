@@ -92,22 +92,28 @@ function cloneSerializable(value) {
 }
 
 export class SqliteDiaryRepository extends DiaryRepository {
-  constructor(SQL, db) {
+  constructor(SQL, db, onProgress = null) {
     super();
+    this.onProgress = onProgress;
     this.SQL = SQL;
     this.db = db;
+    this.reportProgress("SQLite engine ready. Enabling foreign keys.");
     this.enableForeignKeys();
+    this.reportProgress("Running SQLite schema migrations.");
     this.runMigrations();
   }
 
-  static async create() {
+  static async create(onProgress = null) {
+    onProgress?.("Loading sql.js WebAssembly runtime.");
     const SQL = await initSqlJs({
       locateFile: () => wasmUrl,
     });
 
+    onProgress?.("Checking existing local SQLite database.");
     const raw = localStorage.getItem(STORAGE_KEY);
+    onProgress?.(raw ? "Opening persisted SQLite database." : "Creating a new SQLite database.");
     const db = raw ? new SQL.Database(base64ToBytes(raw)) : new SQL.Database();
-    return new SqliteDiaryRepository(SQL, db);
+    return new SqliteDiaryRepository(SQL, db, onProgress);
   }
 
   getMode() {
@@ -122,8 +128,13 @@ export class SqliteDiaryRepository extends DiaryRepository {
     this.db.run("PRAGMA foreign_keys = ON");
   }
 
+  reportProgress(message) {
+    this.onProgress?.(message);
+  }
+
   runMigrations() {
     const currentVersion = this.readUserVersion();
+    this.reportProgress(`Current SQLite schema version is ${currentVersion}.`);
     if (currentVersion > SCHEMA_VERSION) {
       throw new Error(
         `Database schema version ${currentVersion} is newer than supported version ${SCHEMA_VERSION}.`,
@@ -134,12 +145,14 @@ export class SqliteDiaryRepository extends DiaryRepository {
     try {
       for (const migration of MIGRATIONS) {
         if (migration.version > currentVersion) {
+          this.reportProgress(`Applying SQLite migration v${migration.version}.`);
           migration.run(this.db);
           this.db.run(`PRAGMA user_version = ${migration.version}`);
         }
       }
       this.db.run("COMMIT");
       this.enableForeignKeys();
+      this.reportProgress("Persisting migrated SQLite database.");
       this.persistDatabase();
     } catch (error) {
       this.db.run("ROLLBACK");
@@ -148,6 +161,7 @@ export class SqliteDiaryRepository extends DiaryRepository {
   }
 
   loadState() {
+    this.reportProgress("Loading application state from SQLite.");
     const state = createInitialState();
     const selectedDate = this.selectSetting("selected_date");
     const patientName = this.selectSetting("patient_name");
@@ -177,6 +191,7 @@ export class SqliteDiaryRepository extends DiaryRepository {
     `);
 
     if (entries[0]) {
+      this.reportProgress(`Found ${entries[0].values.length} SQLite diary entries.`);
       for (const [entryDate, sleepQuality, overallStatus, notes, isDemo] of entries[0].values) {
         state.entries[entryDate] = {
           isDemo: Boolean(isDemo),
@@ -189,11 +204,13 @@ export class SqliteDiaryRepository extends DiaryRepository {
         };
       }
     } else {
+      this.reportProgress("SQLite database is empty. Generating initial demo data.");
       const demoState = normalizeState(createDemoState());
       this.saveState(demoState);
       return demoState;
     }
 
+    this.reportProgress("SQLite state loaded successfully.");
     ensureEntry(state, state.selectedDate);
     return normalizeState(state);
   }
