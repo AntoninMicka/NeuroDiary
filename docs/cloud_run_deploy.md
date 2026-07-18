@@ -6,6 +6,34 @@ Workflow je v [deploy-cloud-run-backend.yml](/home/antonin/Projects/NeuroDiary/N
 a nasazuje `backend/` pri pushi do `main` nebo rucne pres `workflow_dispatch`.
 
 Prakticky odskrtavaci seznam je v [cloud_run_manual_todo.md](/home/antonin/Projects/NeuroDiary/NeuroDiary/docs/cloud_run_manual_todo.md:1).
+Pro prvni lokalni deploy je pripraven i skript [cloud_run_bootstrap.sh](/home/antonin/Projects/NeuroDiary/NeuroDiary/scripts/cloud_run_bootstrap.sh:1)
+s ukazkovou konfiguraci v [cloud_run.env.example](/home/antonin/Projects/NeuroDiary/NeuroDiary/scripts/cloud_run.env.example:1).
+
+## Rychly start lokalniho bootstrapu
+
+1. zkopiruj `scripts/cloud_run.env.example` na `scripts/cloud_run.env`
+2. vypln hodnoty
+3. spust:
+
+```bash
+bash scripts/cloud_run_bootstrap.sh
+```
+
+Skript umi:
+
+- zapnout potrebna GCP API
+- vytvorit Artifact Registry repository
+- vytvorit deploy service account a IAM role
+- volitelne vytvorit GitHub Workload Identity Federation
+- volitelne vytvorit Cloud SQL PostgreSQL instanci, DB a uzivatele
+- postavit image pres `gcloud builds submit`
+- nasadit prvni revizi do Cloud Run
+- po dokonceni vypsat i kam presne ziskane hodnoty zadat v GitHubu
+
+Poznamka:
+
+- `DATABASE_MODE=sqlite` je jen rychly test
+- `DATABASE_MODE=postgres` je doporucena varianta pro realny sync
 
 ## Aktualni stav
 
