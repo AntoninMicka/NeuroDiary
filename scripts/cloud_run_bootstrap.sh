@@ -177,7 +177,6 @@ function collect_configuration() {
   prompt_value "CLOUD_RUN_SERVICE" "Nazev Cloud Run sluzby pro sync backend." "neurodiary-sync"
   prompt_value "IMAGE_NAME" "Nazev container image uvnitr Artifact Registry." "neurodiary-sync"
   prompt_value "NEURODIARY_CORS_ORIGINS" "Frontend URL nebo vice URL oddelenych carkou." "https://app.example.com"
-  prompt_value "NEURODIARY_DEFAULT_USER_ID" "Docasny identifikator pro single-user rezim." "primary-user"
   prompt_choice "DATABASE_MODE" "Zvol, jestli chces jen rychly test nebo produkcnejsi PostgreSQL variantu." "sqlite postgres"
   prompt_choice "ENABLE_GOOGLE_AUTH" "Ma skript pripravit prihlaseni pres Google ID?" "true false"
   prompt_choice "ENABLE_APPLE_AUTH" "Ma skript pripravit prihlaseni pres Apple ID?" "true false"
@@ -576,7 +575,6 @@ function configure_github_actions() {
   gh variable set CLOUD_RUN_SERVICE --repo "${GITHUB_REPOSITORY}" --body "${CLOUD_RUN_SERVICE}"
   gh variable set GCP_DEPLOY_SERVICE_ACCOUNT --repo "${GITHUB_REPOSITORY}" --body "${DEPLOY_SA_NAME}@${GCP_PROJECT_ID}.iam.gserviceaccount.com"
   gh variable set NEURODIARY_CORS_ORIGINS --repo "${GITHUB_REPOSITORY}" --body "${NEURODIARY_CORS_ORIGINS}"
-  gh variable set NEURODIARY_DEFAULT_USER_ID --repo "${GITHUB_REPOSITORY}" --body "${NEURODIARY_DEFAULT_USER_ID}"
   gh variable set NEURODIARY_GOOGLE_CLIENT_ID --repo "${GITHUB_REPOSITORY}" --body "${NEURODIARY_GOOGLE_CLIENT_ID}"
   gh variable set NEURODIARY_APPLE_CLIENT_ID --repo "${GITHUB_REPOSITORY}" --body "${NEURODIARY_APPLE_CLIENT_ID}"
   gh variable set NEURODIARY_APPLE_REDIRECT_PATH --repo "${GITHUB_REPOSITORY}" --body "${NEURODIARY_APPLE_REDIRECT_PATH}"
@@ -624,7 +622,6 @@ function deploy_cloud_run() {
   db_url="$(build_database_url)"
   local env_vars=(
     "NEURODIARY_CORS_ORIGINS=${NEURODIARY_CORS_ORIGINS}"
-    "NEURODIARY_DEFAULT_USER_ID=${NEURODIARY_DEFAULT_USER_ID}"
     "NEURODIARY_SESSION_SECRET=${NEURODIARY_SESSION_SECRET}"
     "NEURODIARY_GOOGLE_CLIENT_ID=${NEURODIARY_GOOGLE_CLIENT_ID}"
     "NEURODIARY_APPLE_CLIENT_ID=${NEURODIARY_APPLE_CLIENT_ID}"
@@ -721,7 +718,6 @@ function print_summary() {
     echo "  CLOUD_RUN_DEPLOY_FLAGS=${CLOUD_RUN_DEPLOY_FLAGS}"
   fi
   echo "  NEURODIARY_CORS_ORIGINS=${NEURODIARY_CORS_ORIGINS}"
-  echo "  NEURODIARY_DEFAULT_USER_ID=${NEURODIARY_DEFAULT_USER_ID}"
   echo "  NEURODIARY_GOOGLE_CLIENT_ID=${NEURODIARY_GOOGLE_CLIENT_ID:-<leave empty if Google login is disabled>}"
   echo "  NEURODIARY_APPLE_CLIENT_ID=${NEURODIARY_APPLE_CLIENT_ID:-<leave empty if Apple login is disabled>}"
   echo "  NEURODIARY_APPLE_REDIRECT_PATH=${NEURODIARY_APPLE_REDIRECT_PATH}"

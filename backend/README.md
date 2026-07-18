@@ -34,8 +34,6 @@ uvicorn backend.app.main:app --reload
   Cesta k serverove SQLite databazi pro lokalni vyvoj a fallback.
 - `NEURODIARY_CORS_ORIGINS`
   Seznam frontend originu oddelenych carkou.
-- `NEURODIARY_DEFAULT_USER_ID`
-  Docasny identifikator pro single-user rezim.
 - `NEURODIARY_FRONTEND_DIST`
   Cesta k zabalenemu frontend `dist/` adresari. V Docker image je nastavena automaticky.
 

@@ -22,7 +22,6 @@ from .store import RevisionConflictError, create_sync_store
 
 
 APP_NAME = "NeuroDiary Sync API"
-DEFAULT_USER_ID = os.getenv("NEURODIARY_DEFAULT_USER_ID", "default")
 API_TOKEN = os.getenv("NEURODIARY_API_TOKEN", "")
 DATABASE_URL = os.getenv("NEURODIARY_DATABASE_URL", "").strip()
 DATABASE_PATH = os.getenv("NEURODIARY_DATABASE_PATH", "backend/data/neurodiary-sync.db")

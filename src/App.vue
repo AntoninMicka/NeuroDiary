@@ -196,6 +196,7 @@ const environmentLabel = computed(() => {
 });
 const isFederatedAuthEnabled = computed(() => authConfig.federatedAuthEnabled);
 const showLegacyApiTokenField = computed(() => !isFederatedAuthEnabled.value || authConfig.legacyApiTokenEnabled);
+const requiresSignedInUserForSync = computed(() => isFederatedAuthEnabled.value);
 const authSummary = computed(() => {
   if (!authSession.value?.user) {
     return "Neprihlaseno";
@@ -499,12 +500,31 @@ function closeBootstrapLogPanel() {
 }
 
 function markCloudAuthenticated(user = null) {
-  applyAuthenticatedAccount(
-    user ?? authSession.value?.user ?? {
+  if (user ?? authSession.value?.user) {
+    applyAuthenticatedAccount(user ?? authSession.value?.user);
+    return;
+  }
+
+  if (!isFederatedAuthEnabled.value && syncSettings.apiToken?.trim()) {
+    applyAuthenticatedAccount({
       provider: "cloud-token",
-      userId: "cloud-user",
-    },
-  );
+      userId: "legacy-token-user",
+    });
+  }
+}
+
+function ensureSyncIdentity() {
+  if (requiresSignedInUserForSync.value && !authSession.value?.user) {
+    storageMessage.value = "Pro cloud sync se nejprve prihlaste pres Google nebo Apple.";
+    return false;
+  }
+
+  if (!requiresSignedInUserForSync.value && !syncSettings.apiToken?.trim()) {
+    storageMessage.value = "Cloud sync neni overen. Prihlaste se nebo zapnete legacy API token.";
+    return false;
+  }
+
+  return true;
 }
 
 function selectPanel(panelId) {
@@ -735,6 +755,10 @@ async function importRecoveryQr(event) {
 }
 
 async function initializeSync() {
+  if (!ensureSyncIdentity()) {
+    return;
+  }
+
   isSyncBusy.value = true;
   generatedRecoverySecret.value = "";
   try {
@@ -773,6 +797,10 @@ async function initializeSync() {
 }
 
 async function pullSync() {
+  if (!ensureSyncIdentity()) {
+    return;
+  }
+
   isSyncBusy.value = true;
   try {
     storageMessage.value = "Nacitam sifrovany stav ze serveru.";
@@ -809,6 +837,10 @@ async function pullSync() {
 }
 
 async function pushSync(force = false) {
+  if (!ensureSyncIdentity()) {
+    return;
+  }
+
   isSyncBusy.value = true;
   try {
     storageMessage.value = "Pripravuji lokalni stav pro odeslani do cloud syncu.";

@@ -15,6 +15,7 @@ from google.oauth2 import id_token as google_id_token
 
 SESSION_LIFETIME_DAYS = 30
 APPLE_JWKS_URL = "https://appleid.apple.com/auth/keys"
+LEGACY_API_TOKEN_USER_ID = "legacy-token-user"
 
 
 def _split_csv(value: str) -> list[str]:
@@ -31,7 +32,6 @@ class AuthenticatedUser:
 
 class AuthManager:
     def __init__(self) -> None:
-        self.default_user_id = os.getenv("NEURODIARY_DEFAULT_USER_ID", "default")
         self.api_token = os.getenv("NEURODIARY_API_TOKEN", "").strip()
         self.session_secret = (
             os.getenv("NEURODIARY_SESSION_SECRET", "").strip()
@@ -96,15 +96,13 @@ class AuthManager:
 
     def resolve_authorization(self, authorization: str | None) -> str:
         if not authorization:
-            if not self.federated_auth_enabled and not self.api_token:
-                return self.default_user_id
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Missing authentication token.",
             )
 
         if self.api_token and authorization == f"Bearer {self.api_token}":
-            return self.default_user_id
+            return LEGACY_API_TOKEN_USER_ID
 
         if not authorization.startswith("Bearer "):
             raise HTTPException(

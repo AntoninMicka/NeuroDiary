@@ -75,8 +75,6 @@ V repozitari nastav tyto `Repository variables`:
   format: `service-account@project-id.iam.gserviceaccount.com`
 - `NEURODIARY_CORS_ORIGINS`
   napriklad `https://neurodiary.example.com`
-- `NEURODIARY_DEFAULT_USER_ID`
-  docasna hodnota pro single-user rezim, napriklad `primary-user`
 - `NEURODIARY_GOOGLE_CLIENT_ID`
   OAuth Web Client ID pro Google login, napriklad
   `123456789012-abcdefghi123456789.apps.googleusercontent.com`

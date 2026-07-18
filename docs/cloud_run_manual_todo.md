@@ -71,7 +71,6 @@ Pokud nechces vsechno klikat rucne, prvni cast tohohle checklistu umi automatizo
 - [ ] nastavit `GCP_WORKLOAD_IDENTITY_PROVIDER`
 - [ ] nastavit `GCP_DEPLOY_SERVICE_ACCOUNT`
 - [ ] nastavit `NEURODIARY_CORS_ORIGINS`
-- [ ] nastavit `NEURODIARY_DEFAULT_USER_ID`
 - [ ] nastavit `NEURODIARY_GOOGLE_CLIENT_ID`
 - [ ] volitelne nastavit `NEURODIARY_APPLE_CLIENT_ID`
 - [ ] nastavit `NEURODIARY_APPLE_REDIRECT_PATH`
