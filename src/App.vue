@@ -9,6 +9,7 @@ import ManualSection from "./components/ManualSection.vue";
 import {
   HOUR_STATES,
   appendHourStateRecord,
+  createInitialState,
   createMedication,
   entryContainsDemoData,
   ensureEntry,
@@ -617,6 +618,23 @@ function removeDemoData() {
     entries: filteredEntries,
   });
   storageMessage.value = "Demo data byla odebrana z aktualniho uctu.";
+}
+
+function resetAllData() {
+  const confirmed = globalThis.confirm(
+    "Tato akce smaze vsechny zaznamy deniku, lecbu i udaje o pacientovi v tomto zarizeni. Pokracovat?",
+  );
+  if (!confirmed) {
+    storageMessage.value = "Uplny reset dat byl zrusen.";
+    return;
+  }
+
+  const emptyState = createInitialState();
+  applyImportedState({
+    ...emptyState,
+    account: state.account ?? emptyState.account,
+  });
+  storageMessage.value = "Vsechna lokalni data deniku byla smazana.";
 }
 
 function exportDatabase() {
@@ -1292,6 +1310,16 @@ function syncFloatingMenuHeight() {
               />
             </label>
           </form>
+
+          <div class="sync-warning-card">
+            <strong>Uplny reset lokalnich dat</strong>
+            <p>Smaze vsechny denni zaznamy, lecbu i udaje o pacientovi v tomto zarizeni. Prihlaseni a sync nastaveni zustanou zachovane.</p>
+            <div class="sync-actions">
+              <button class="ghost-button utility-menu-item-danger" type="button" @click="resetAllData">
+                Smazat vsechna lokalni data
+              </button>
+            </div>
+          </div>
 
           <div class="sync-settings-card">
             <div class="panel-heading sync-settings-heading">
