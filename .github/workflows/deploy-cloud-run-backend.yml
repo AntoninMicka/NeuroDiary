@@ -71,4 +71,5 @@ jobs:
           flags: "--port=8080 --allow-unauthenticated ${{ vars.CLOUD_RUN_DEPLOY_FLAGS }}"
 
       - name: Show deployed URL
-        run: echo "Cloud Run URL: ${{ steps.deploy.outputs.url }}"
+        run: |
+          echo "Cloud Run URL: ${{ steps.deploy.outputs.url }}"
