@@ -60,14 +60,10 @@ export function formatLongDate(dateKey) {
 }
 
 export function createDefaultHours() {
-  const hours = {};
-
-  for (const label of TRACKING_HOURS) {
-    const hour = Number(label);
-    hours[label] = hour < 8 ? "sleep" : hour < 11 ? "on" : hour < 14 ? "partial" : "on";
-  }
-
-  return hours;
+  return TRACKING_HOURS.reduce((hours, label) => {
+    hours[label] = null;
+    return hours;
+  }, {});
 }
 
 export function createHourStateRecord(payload) {
@@ -81,7 +77,10 @@ export function createHourStateRecord(payload) {
 
 export function createHourRecordsFromHours(hours, source = "seed") {
   return TRACKING_HOURS.reduce((accumulator, hourLabel) => {
-    accumulator[hourLabel] = [createHourStateRecord({ stateKey: hours[hourLabel], source })];
+    const stateKey = hours[hourLabel];
+    accumulator[hourLabel] = HOUR_STATE_KEYS.has(stateKey)
+      ? [createHourStateRecord({ stateKey, source })]
+      : [];
     return accumulator;
   }, {});
 }
@@ -402,8 +401,12 @@ export function normalizeHourState(stateKey) {
     slow: "partial",
   };
 
+  if (stateKey === null || stateKey === undefined || stateKey === "") {
+    return null;
+  }
+
   const normalizedKey = mapping[stateKey] ?? stateKey;
-  return HOUR_STATES.some((item) => item.key === normalizedKey) ? normalizedKey : "on";
+  return HOUR_STATES.some((item) => item.key === normalizedKey) ? normalizedKey : null;
 }
 
 export function resolveHourStateRecords(records = [], displayMode = "latest") {
@@ -434,7 +437,9 @@ export function resolveHourStateRecords(records = [], displayMode = "latest") {
 
 export function normalizeHourRecords(rawRecords = [], fallbackStateKey = "on") {
   if (!Array.isArray(rawRecords) || rawRecords.length === 0) {
-    return [createHourStateRecord({ stateKey: fallbackStateKey, source: "legacy" })];
+    return HOUR_STATE_KEYS.has(fallbackStateKey)
+      ? [createHourStateRecord({ stateKey: fallbackStateKey, source: "legacy" })]
+      : [];
   }
 
   const normalizedRecords = rawRecords
@@ -454,7 +459,9 @@ export function normalizeHourRecords(rawRecords = [], fallbackStateKey = "on") {
 
   return normalizedRecords.length > 0
     ? normalizedRecords
-    : [createHourStateRecord({ stateKey: fallbackStateKey, source: "legacy" })];
+    : HOUR_STATE_KEYS.has(fallbackStateKey)
+      ? [createHourStateRecord({ stateKey: fallbackStateKey, source: "legacy" })]
+      : [];
 }
 
 export function normalizeEntryHours(rawHours) {
@@ -494,7 +501,7 @@ export function buildResolvedHoursFromHourRecords(hourRecords, displayMode = "la
 
   for (const hourLabel of TRACKING_HOURS) {
     const resolvedState = resolveHourStateRecords(hourRecords?.[hourLabel], displayMode);
-    resolvedHours[hourLabel] = resolvedState ?? "on";
+    resolvedHours[hourLabel] = resolvedState ?? null;
   }
 
   return resolvedHours;
@@ -512,6 +519,10 @@ export function appendHourStateRecord(entry, hourLabel, stateKey, options = {}) 
     return entry;
   }
 
+  if (!HOUR_STATE_KEYS.has(stateKey)) {
+    return entry;
+  }
+
   entry.hourRecords = normalizeEntryHourRecords(entry.hourRecords, entry.hours);
   const nextRecord = createHourStateRecord({
     stateKey,
@@ -520,7 +531,19 @@ export function appendHourStateRecord(entry, hourLabel, stateKey, options = {}) 
   });
 
   entry.hourRecords[safeHourLabel].push(nextRecord);
-  entry.hours[safeHourLabel] = resolveHourStateRecords(entry.hourRecords[safeHourLabel]) ?? "on";
+  entry.hours[safeHourLabel] = resolveHourStateRecords(entry.hourRecords[safeHourLabel]) ?? null;
+  return entry;
+}
+
+export function clearHourStateRecords(entry, hourLabel) {
+  const safeHourLabel = String(hourLabel);
+  if (!TRACKING_HOURS.includes(safeHourLabel)) {
+    return entry;
+  }
+
+  entry.hourRecords = normalizeEntryHourRecords(entry.hourRecords, entry.hours);
+  entry.hourRecords[safeHourLabel] = [];
+  entry.hours[safeHourLabel] = null;
   return entry;
 }
 

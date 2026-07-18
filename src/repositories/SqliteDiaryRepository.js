@@ -204,10 +204,10 @@ export class SqliteDiaryRepository extends DiaryRepository {
         };
       }
     } else {
-      this.reportProgress("SQLite database is empty. Generating initial demo data.");
-      const demoState = normalizeState(createDemoState());
-      this.saveState(demoState);
-      return demoState;
+      this.reportProgress("SQLite database is empty. Creating an empty diary.");
+      const initialState = normalizeState(createInitialState());
+      this.saveState(initialState);
+      return initialState;
     }
 
     this.reportProgress("SQLite state loaded successfully.");

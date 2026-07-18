@@ -9,6 +9,7 @@ import ManualSection from "./components/ManualSection.vue";
 import {
   HOUR_STATES,
   appendHourStateRecord,
+  clearHourStateRecords,
   createInitialState,
   createMedication,
   entryContainsDemoData,
@@ -594,6 +595,12 @@ function removeMedication(medicationId) {
 }
 
 function updateHour({ label, stateKey }) {
+  if (!stateKey) {
+    clearHourStateRecords(selectedEntry.value, label);
+    storageMessage.value = `Zaznam pro hodinu ${label} byl vymazan.`;
+    return;
+  }
+
   appendHourStateRecord(selectedEntry.value, label, stateKey, { source: "manual" });
   storageMessage.value = `Stav ${getStateDefinition(stateKey).label} pridan pro hodinu ${label}.`;
 }

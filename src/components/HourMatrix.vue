@@ -87,21 +87,22 @@ const canGoForward = computed(() => props.selectedDate < todayKey);
         v-for="(stateKey, label) in hours"
         :key="label"
         class="hour-card"
-        :class="`state-${stateKey}`"
+        :class="stateKey ? `state-${stateKey}` : 'is-empty'"
       >
         <span class="hour-label">{{ label }}</span>
         <select
           class="hour-select"
-          :value="stateKey"
+          :value="stateKey ?? ''"
           :disabled="!isEditable"
           @input="emit('update-hour', { label, stateKey: $event.target.value })"
         >
+          <option value="">Bez dat</option>
           <option v-for="state in HOUR_STATES" :key="state.key" :value="state.key">
             {{ state.shortLabel }} · {{ state.label }}
           </option>
         </select>
         <span class="hour-state">
-          {{ getStateDefinition(stateKey).shortLabel }}
+          {{ stateKey ? getStateDefinition(stateKey).shortLabel : "—" }}
           <template v-if="(props.hourRecords?.[label]?.length ?? 0) > 1">
             · {{ props.hourRecords[label].length }}x
           </template>

@@ -1,4 +1,4 @@
-import { createDemoState, normalizeState } from "../domain/diary.js";
+import { createDemoState, createInitialState, normalizeState } from "../domain/diary.js";
 import { DiaryRepository } from "./DiaryRepository.js";
 
 const STORAGE_KEY = "neurodiary-vue-poc-v1";
@@ -22,8 +22,8 @@ export class LocalStorageDiaryRepository extends DiaryRepository {
     this.onProgress?.("Loading application state from localStorage.");
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      this.onProgress?.("No localStorage data found. Generating initial demo data.");
-      const initialState = normalizeState(createDemoState());
+      this.onProgress?.("No localStorage data found. Creating an empty local diary.");
+      const initialState = normalizeState(createInitialState());
       this.saveState(initialState);
       return initialState;
     }
@@ -32,8 +32,8 @@ export class LocalStorageDiaryRepository extends DiaryRepository {
       this.onProgress?.("Existing localStorage data found. Parsing persisted state.");
       return normalizeState(JSON.parse(raw));
     } catch {
-      this.onProgress?.("Stored localStorage data is invalid. Replacing it with demo data.");
-      const initialState = normalizeState(createDemoState());
+      this.onProgress?.("Stored localStorage data is invalid. Replacing it with an empty diary.");
+      const initialState = normalizeState(createInitialState());
       this.saveState(initialState);
       return initialState;
     }
