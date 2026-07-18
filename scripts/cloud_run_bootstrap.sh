@@ -5,15 +5,20 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 ENV_FILE="${1:-${SCRIPT_DIR}/cloud_run.env}"
+SECRETS_FILE="${SECRETS_FILE:-${HOME}/.config/neurodiary/cloud_run.secrets.env}"
 
-if [[ ! -f "${ENV_FILE}" ]]; then
-  echo "Missing config file: ${ENV_FILE}"
-  echo "Copy ${SCRIPT_DIR}/cloud_run.env.example to ${SCRIPT_DIR}/cloud_run.env and fill it in."
-  exit 1
+if [[ -f "${ENV_FILE}" ]]; then
+  # shellcheck disable=SC1090
+  source "${ENV_FILE}"
+else
+  echo "Config file not found, continuing with prompts: ${ENV_FILE}"
+  echo "Tip: keep non-sensitive config in a file like ${ENV_FILE}"
 fi
 
-# shellcheck disable=SC1090
-source "${ENV_FILE}"
+if [[ -f "${SECRETS_FILE}" ]]; then
+  # shellcheck disable=SC1090
+  source "${SECRETS_FILE}"
+fi
 
 DEPLOY_SA_NAME="${DEPLOY_SA_NAME:-neurodiary-github-deploy}"
 DEPLOY_SA_DISPLAY_NAME="${DEPLOY_SA_DISPLAY_NAME:-NeuroDiary GitHub Deploy}"
@@ -37,6 +42,7 @@ NEURODIARY_SESSION_SECRET="${NEURODIARY_SESSION_SECRET:-}"
 NEURODIARY_GOOGLE_CLIENT_ID="${NEURODIARY_GOOGLE_CLIENT_ID:-}"
 NEURODIARY_APPLE_CLIENT_ID="${NEURODIARY_APPLE_CLIENT_ID:-}"
 NEURODIARY_APPLE_REDIRECT_PATH="${NEURODIARY_APPLE_REDIRECT_PATH:-/auth/apple/callback}"
+GENERATED_SECRETS=()
 
 function generate_random_secret() {
   if command -v openssl >/dev/null 2>&1; then
@@ -48,6 +54,50 @@ function generate_random_secret() {
 import secrets
 print(secrets.token_urlsafe(48))
 PY
+}
+
+function shell_single_quote() {
+  printf "%s" "$1" | sed "s/'/'\\\\''/g"
+}
+
+function persist_secret_value() {
+  local var_name="$1"
+  local value="${!var_name:-}"
+
+  if [[ -z "${value}" ]]; then
+    return
+  fi
+
+  mkdir -p "$(dirname "${SECRETS_FILE}")"
+  touch "${SECRETS_FILE}"
+  chmod 600 "${SECRETS_FILE}"
+
+  local escaped_value
+  escaped_value="$(shell_single_quote "${value}")"
+  local tmp_file
+  tmp_file="$(mktemp /tmp/neurodiary-secrets.XXXXXX)"
+
+  if [[ -f "${SECRETS_FILE}" ]]; then
+    grep -v "^${var_name}=" "${SECRETS_FILE}" >"${tmp_file}" || true
+  fi
+
+  printf "%s='%s'\n" "${var_name}" "${escaped_value}" >>"${tmp_file}"
+  mv "${tmp_file}" "${SECRETS_FILE}"
+  chmod 600 "${SECRETS_FILE}"
+}
+
+function auto_generate_secret() {
+  local var_name="$1"
+  local label="$2"
+
+  if [[ -n "${!var_name:-}" ]]; then
+    return
+  fi
+
+  printf -v "${var_name}" '%s' "$(generate_random_secret)"
+  GENERATED_SECRETS+=("${var_name}")
+  echo
+  echo "Generated ${var_name} automatically for ${label}."
 }
 
 function prompt_value() {
@@ -183,15 +233,11 @@ function collect_configuration() {
   prompt_choice "ENABLE_LEGACY_API_TOKEN" "Chces ponechat i legacy bearer token fallback?" "true false"
 
   if [[ "${ENABLE_GOOGLE_AUTH}" == "true" || "${ENABLE_APPLE_AUTH}" == "true" ]]; then
-    if [[ -z "${NEURODIARY_SESSION_SECRET}" ]]; then
-      NEURODIARY_SESSION_SECRET="$(generate_random_secret)"
-      echo
-      echo "Generated NEURODIARY_SESSION_SECRET automatically."
-    fi
+    auto_generate_secret "NEURODIARY_SESSION_SECRET" "session auth podpis"
   fi
 
   if [[ "${ENABLE_GOOGLE_AUTH}" == "true" ]]; then
-    prompt_value "NEURODIARY_GOOGLE_CLIENT_ID" "Google OAuth Web Client ID pro web prihlaseni." "123456789012-abcdefghi123456789.apps.googleusercontent.com"
+    prompt_value "NEURODIARY_GOOGLE_CLIENT_ID" "Google OAuth Web Client ID pro web prihlaseni. localhost neni potreba, pokud nechces testovat Google login lokalne." "123456789012-abcdefghi123456789.apps.googleusercontent.com"
   fi
 
   if [[ "${ENABLE_APPLE_AUTH}" == "true" ]]; then
@@ -203,7 +249,7 @@ function collect_configuration() {
   fi
 
   if [[ "${ENABLE_LEGACY_API_TOKEN}" == "true" ]]; then
-    prompt_value "NEURODIARY_API_TOKEN" "Dlouhy nahodny bearer token pro legacy pristup k sync API." "vygenerovany-tajny-token" "true"
+    auto_generate_secret "NEURODIARY_API_TOKEN" "legacy API fallback"
   else
     NEURODIARY_API_TOKEN=""
   fi
@@ -237,7 +283,7 @@ function collect_configuration() {
     prompt_value "POSTGRES_INSTANCE_NAME" "Nazev Cloud SQL instance." "neurodiary-db"
     prompt_value "POSTGRES_DATABASE_NAME" "Nazev PostgreSQL databaze." "neurodiary"
     prompt_value "POSTGRES_USER" "Jmeno DB uzivatele aplikace." "neurodiary_app"
-    prompt_value "POSTGRES_PASSWORD" "Silne heslo pro DB uzivatele." "silne-db-heslo" "true"
+    auto_generate_secret "POSTGRES_PASSWORD" "Cloud SQL databazovy uzivatel"
     prompt_value "CLOUD_SQL_INSTANCE" "Cloud SQL connection name ve formatu PROJECT_ID:REGION:INSTANCE_ID." "my-neurodiary-prod:europe-west1:neurodiary-db"
 
     if [[ "${POSTGRES_EDITION}" == "ENTERPRISE" ]]; then
@@ -250,6 +296,10 @@ function collect_configuration() {
     prompt_optional_value "POSTGRES_AVAILABILITY_TYPE" "Typ dostupnosti instance." "zonal"
     prompt_optional_value "POSTGRES_INSTANCE_FLAGS" "Dalsi raw flagy pro gcloud sql instances create." "--edition=enterprise"
   fi
+
+  persist_secret_value "NEURODIARY_SESSION_SECRET"
+  persist_secret_value "NEURODIARY_API_TOKEN"
+  persist_secret_value "POSTGRES_PASSWORD"
 
   IMAGE_URI="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GAR_REPOSITORY}/${IMAGE_NAME}:${IMAGE_TAG}"
 }
@@ -736,14 +786,18 @@ function print_summary() {
   fi
   echo
   echo "Local only"
-  echo "  scripts/cloud_run.env contains the same values for your local bootstrap run."
+  echo "  Non-sensitive config can stay in: ${ENV_FILE}"
+  echo "  Sensitive values are stored in: ${SECRETS_FILE}"
   if [[ -n "${BILLING_ACCOUNT_ID}" ]]; then
     echo "  BILLING_ACCOUNT_ID=${BILLING_ACCOUNT_ID}"
   fi
-  if [[ -n "${NEURODIARY_SESSION_SECRET}" ]]; then
-    echo "  NEURODIARY_SESSION_SECRET=${NEURODIARY_SESSION_SECRET}"
+  if [[ "${#GENERATED_SECRETS[@]}" -gt 0 ]]; then
+    echo "  Generated secrets this run:"
+    for secret_name in "${GENERATED_SECRETS[@]}"; do
+      echo "    ${secret_name}=<stored in ${SECRETS_FILE}>"
+    done
   fi
-  echo "  Keep this file out of git and rotate tokens/passwords if it leaks."
+  echo "  Keep the secrets file out of git and rotate tokens/passwords if it leaks."
   echo
   echo "Manual follow-up"
   if [[ "${TRIGGER_GITHUB_WORKFLOW}" == "true" ]]; then
