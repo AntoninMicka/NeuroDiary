@@ -1,3 +1,4 @@
+import { prepareStateForSync } from "../domain/diary.js";
 import { decryptDiaryState, encryptDiaryState, exportAccountMasterKey, generateAccountMasterKey, generateRecoverySecret, importAccountMasterKey, unwrapAccountMasterKey, wrapAccountMasterKey } from "./e2eCrypto.js";
 import { getAuthorizationHeaderValue } from "./authService.js";
 
@@ -228,7 +229,7 @@ export async function initializeCloudSync({ state, settings, recoverySecret = ""
     : await generateAccountMasterKey();
   const exportedMasterKey = await exportAccountMasterKey(masterKey);
   const wrappedKey = await wrapAccountMasterKey(masterKey, nextRecoverySecret);
-  const payload = await encryptDiaryState(state, masterKey);
+  const payload = await encryptDiaryState(prepareStateForSync(state), masterKey);
 
   const result = await fetchJson(buildEndpoint(normalizedSettings, "/api/v1/sync/push"), {
     method: "POST",
@@ -332,7 +333,7 @@ export async function pushCloudState({ state, settings, baseRevision, force = fa
   const normalizedSettings = saveSyncSettings(settings);
   const keyMaterial = loadSyncKeyMaterial();
   const masterKey = await resolveMasterKeyForSync();
-  const payload = await encryptDiaryState(state, masterKey);
+  const payload = await encryptDiaryState(prepareStateForSync(state), masterKey);
   const wrappedKey = keyMaterial.recoverySecret
     ? await wrapAccountMasterKey(masterKey, keyMaterial.recoverySecret)
     : null;

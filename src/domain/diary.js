@@ -126,6 +126,7 @@ export function createDefaultEntry() {
     overallStatus: UNDEFINED_ENTRY_VALUE,
     notes: "",
     medications: [],
+    updatedAt: "",
     hours,
     hourRecords: createHourRecordsFromHours(hours),
   };
@@ -142,6 +143,7 @@ export function createInitialState() {
       userId: "",
     },
     treatmentPlan: [],
+    deletedEntryDates: {},
     entries: {},
   };
 }
@@ -539,6 +541,7 @@ export function appendHourStateRecord(entry, hourLabel, stateKey, options = {}) 
 
   entry.hourRecords[safeHourLabel].push(nextRecord);
   entry.hours[safeHourLabel] = resolveHourStateRecords(entry.hourRecords[safeHourLabel]) ?? null;
+  entry.updatedAt = options.updatedAt ?? new Date().toISOString();
   return entry;
 }
 
@@ -551,6 +554,7 @@ export function clearHourStateRecords(entry, hourLabel) {
   entry.hourRecords = normalizeEntryHourRecords(entry.hourRecords, entry.hours);
   entry.hourRecords[safeHourLabel] = [];
   entry.hours[safeHourLabel] = null;
+  entry.updatedAt = new Date().toISOString();
   return entry;
 }
 
@@ -595,7 +599,19 @@ function normalizeTreatmentPlan(rawPlan) {
     .sort((left, right) => left.time.localeCompare(right.time));
 }
 
-export function normalizeState(parsed) {
+function normalizeDeletedEntryDates(rawDeletedEntryDates) {
+  if (!rawDeletedEntryDates || typeof rawDeletedEntryDates !== "object") {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(rawDeletedEntryDates)
+      .filter(([dateKey, deletedAt]) => typeof dateKey === "string" && typeof deletedAt === "string" && deletedAt.trim()),
+      .map(([dateKey, deletedAt]) => [dateKey, deletedAt]),
+  );
+}
+
+function sanitizeStateShape(parsed, { ensureSelectedDate = true } = {}) {
   const state = parsed && typeof parsed === "object" ? parsed : createInitialState();
 
   if (!state.selectedDate) {
@@ -619,6 +635,7 @@ export function normalizeState(parsed) {
   }
 
   state.treatmentPlan = normalizeTreatmentPlan(state.treatmentPlan);
+  state.deletedEntryDates = normalizeDeletedEntryDates(state.deletedEntryDates);
 
   state.account.isAuthenticated = state.account.isAuthenticated === true;
   state.account.provider = typeof state.account.provider === "string" ? state.account.provider : "";
@@ -628,14 +645,100 @@ export function normalizeState(parsed) {
     if (typeof entry.isDemo !== "boolean") {
       entry.isDemo = false;
     }
+    if (typeof entry.notes !== "string") {
+      entry.notes = "";
+    }
+    entry.updatedAt = typeof entry.updatedAt === "string" ? entry.updatedAt : "";
     entry.sleepQuality = normalizeEntryStatusValue(entry.sleepQuality, new Set(["poor", "mixed", "good", UNDEFINED_ENTRY_VALUE]));
     entry.overallStatus = normalizeEntryStatusValue(entry.overallStatus, new Set(["hard", "stable", "good", UNDEFINED_ENTRY_VALUE]));
+    if (!Array.isArray(entry.medications)) {
+      entry.medications = [];
+    } else {
+      entry.medications = entry.medications
+        .filter((item) => item && typeof item.name === "string" && typeof item.dose === "string" && typeof item.time === "string")
+        .map((item) => createMedication(item))
+        .sort((left, right) => left.time.localeCompare(right.time));
+    }
     reconcileEntryHourState(entry);
   }
 
-  ensureEntry(state, state.selectedDate);
+  if (ensureSelectedDate) {
+    ensureEntry(state, state.selectedDate);
+  }
 
   return state;
+}
+
+export function normalizeState(parsed) {
+  return sanitizeStateShape(parsed, { ensureSelectedDate: true });
+}
+
+export function normalizeStateForSync(parsed) {
+  return sanitizeStateShape(parsed, { ensureSelectedDate: false });
+}
+
+export function entryHasMeaningfulData(entry) {
+  if (!entry || typeof entry !== "object") {
+    return false;
+  }
+
+  if (entry.isDemo === true) {
+    return true;
+  }
+
+  if (typeof entry.notes === "string" && entry.notes.trim()) {
+    return true;
+  }
+
+  if ((entry.medications?.length ?? 0) > 0) {
+    return true;
+  }
+
+  if (entry.sleepQuality && entry.sleepQuality !== UNDEFINED_ENTRY_VALUE) {
+    return true;
+  }
+
+  if (entry.overallStatus && entry.overallStatus !== UNDEFINED_ENTRY_VALUE) {
+    return true;
+  }
+
+  return TRACKING_HOURS.some((hourLabel) => (entry.hourRecords?.[hourLabel]?.length ?? 0) > 0);
+}
+
+export function clearDeletedEntryDate(state, dateKey) {
+  if (!state.deletedEntryDates || typeof state.deletedEntryDates !== "object") {
+    state.deletedEntryDates = {};
+  }
+
+  delete state.deletedEntryDates[dateKey];
+}
+
+export function markEntryDeleted(state, dateKey, deletedAt = new Date().toISOString()) {
+  if (!state.deletedEntryDates || typeof state.deletedEntryDates !== "object") {
+    state.deletedEntryDates = {};
+  }
+
+  state.deletedEntryDates[dateKey] = deletedAt;
+  delete state.entries[dateKey];
+}
+
+export function prepareStateForSync(state) {
+  const preparedState = normalizeStateForSync(cloneSerializable(state));
+
+  for (const dateKey of Object.keys(preparedState.entries)) {
+    const entry = preparedState.entries[dateKey];
+    const deletedAt = preparedState.deletedEntryDates[dateKey] ?? "";
+    const entryUpdatedAt = typeof entry.updatedAt === "string" ? entry.updatedAt : "";
+    const deletionWins = deletedAt && compareIsoDateTimes(deletedAt, entryUpdatedAt || "") >= 0;
+
+    if (deletionWins || !entryHasMeaningfulData(entry)) {
+      delete preparedState.entries[dateKey];
+    } else {
+      delete preparedState.deletedEntryDates[dateKey];
+    }
+  }
+
+  return preparedState;
 }
 
 export function summarizeHours(hours) {
@@ -649,10 +752,15 @@ export function summarizeHours(hours) {
 }
 
 export function mergeDiaryStatesAppendOnly(baseState, incomingState) {
-  const incomingEntryKeys = Object.keys(incomingState?.entries ?? {});
-  const normalizedBaseState = normalizeState(cloneSerializable(baseState));
-  const normalizedIncomingState = normalizeState(cloneSerializable(incomingState));
-  const mergedState = normalizeState(cloneSerializable(baseState));
+  const normalizedBaseState = normalizeStateForSync(cloneSerializable(baseState));
+  const normalizedIncomingState = normalizeStateForSync(cloneSerializable(incomingState));
+  const mergedState = normalizeStateForSync(cloneSerializable(baseState));
+  const allDateKeys = new Set([
+    ...Object.keys(normalizedBaseState.entries ?? {}),
+    ...Object.keys(normalizedIncomingState.entries ?? {}),
+    ...Object.keys(normalizedBaseState.deletedEntryDates ?? {}),
+    ...Object.keys(normalizedIncomingState.deletedEntryDates ?? {}),
+  ]);
 
   mergedState.patientName = selectPreferredProfileValue(
     normalizedBaseState.patientName,
@@ -670,26 +778,60 @@ export function mergeDiaryStatesAppendOnly(baseState, incomingState) {
     normalizedBaseState.treatmentPlan,
     normalizedIncomingState.treatmentPlan,
   );
+  mergedState.deletedEntryDates = {
+    ...normalizedBaseState.deletedEntryDates,
+    ...normalizedIncomingState.deletedEntryDates,
+  };
 
-  for (const dateKey of incomingEntryKeys) {
+  for (const dateKey of allDateKeys) {
+    const baseEntry = normalizedBaseState.entries[dateKey] ?? null;
     const incomingEntry = normalizedIncomingState.entries[dateKey];
-    const baseEntry = mergedState.entries[dateKey] ?? createDefaultEntry();
+    const deletionAt = selectLatestIsoDateTime(
+      normalizedBaseState.deletedEntryDates?.[dateKey] ?? "",
+      normalizedIncomingState.deletedEntryDates?.[dateKey] ?? "",
+    );
+    const baseEntryUpdatedAt = baseEntry?.updatedAt ?? "";
+    const incomingEntryUpdatedAt = incomingEntry?.updatedAt ?? "";
+    const latestEntryUpdatedAt = selectLatestIsoDateTime(baseEntryUpdatedAt, incomingEntryUpdatedAt);
+
+    if (deletionAt && compareIsoDateTimes(deletionAt, latestEntryUpdatedAt) >= 0) {
+      delete mergedState.entries[dateKey];
+      mergedState.deletedEntryDates[dateKey] = deletionAt;
+      continue;
+    }
+
+    const mergedEntryBase = mergedState.entries[dateKey] ?? baseEntry ?? createDefaultEntry();
     ensureEntry(mergedState, dateKey);
 
     mergedState.entries[dateKey] = {
-      ...baseEntry,
+      ...mergedEntryBase,
       ...incomingEntry,
-      isDemo: baseEntry.isDemo || incomingEntry.isDemo,
-      sleepQuality: selectPreferredEntryValue(baseEntry.sleepQuality, incomingEntry.sleepQuality),
-      overallStatus: selectPreferredEntryValue(baseEntry.overallStatus, incomingEntry.overallStatus),
-      medications: replaceMedications(baseEntry.medications, incomingEntry.medications),
-      hourRecords: mergeHourRecordsAppendOnly(baseEntry.hourRecords, incomingEntry.hourRecords),
+      isDemo: (mergedEntryBase?.isDemo ?? false) || (incomingEntry?.isDemo ?? false),
+      sleepQuality: selectPreferredEntryValue(mergedEntryBase.sleepQuality, incomingEntry?.sleepQuality),
+      overallStatus: selectPreferredEntryValue(mergedEntryBase.overallStatus, incomingEntry?.overallStatus),
+      medications: replaceMedications(mergedEntryBase.medications, incomingEntry?.medications),
+      hourRecords: mergeHourRecordsAppendOnly(mergedEntryBase.hourRecords, incomingEntry?.hourRecords),
+      updatedAt: selectLatestIsoDateTime(mergedEntryBase.updatedAt ?? "", incomingEntry?.updatedAt ?? ""),
     };
 
     reconcileEntryHourState(mergedState.entries[dateKey]);
+    delete mergedState.deletedEntryDates[dateKey];
   }
 
   return normalizeState(mergedState);
+}
+
+function compareIsoDateTimes(leftValue = "", rightValue = "") {
+  const leftTime = Date.parse(leftValue || "") || 0;
+  const rightTime = Date.parse(rightValue || "") || 0;
+  if (leftTime === rightTime) {
+    return 0;
+  }
+  return leftTime > rightTime ? 1 : -1;
+}
+
+function selectLatestIsoDateTime(leftValue = "", rightValue = "") {
+  return compareIsoDateTimes(leftValue, rightValue) >= 0 ? leftValue : rightValue;
 }
 
 function selectPreferredProfileValue(baseValue = "", incomingValue = "") {

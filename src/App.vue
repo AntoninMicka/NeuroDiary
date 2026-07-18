@@ -9,6 +9,7 @@ import ManualSection from "./components/ManualSection.vue";
 import {
   HOUR_STATES,
   appendHourStateRecord,
+  clearDeletedEntryDate,
   clearHourStateRecords,
   createInitialState,
   createMedication,
@@ -18,6 +19,7 @@ import {
   formatLongDate,
   getHourRecordCount,
   getStateDefinition,
+  markEntryDeleted,
   mergeDiaryStatesAppendOnly,
   shiftDateKey,
   getTodayKey,
@@ -116,6 +118,7 @@ const state = reactive({
   patientName: "",
   birthYear: "",
   treatmentPlan: [],
+  deletedEntryDates: {},
   entries: {},
 });
 
