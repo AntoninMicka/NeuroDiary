@@ -84,16 +84,10 @@ textarea {
 
 .hero {
   margin-bottom: 1rem;
-  position: relative;
 }
 
 .hero-copy {
   max-width: 42rem;
-}
-
-.hero-anchor {
-  position: absolute;
-  inset: 0 auto auto 0;
 }
 
 .eyebrow,
@@ -362,62 +356,72 @@ textarea {
   background: rgba(184, 74, 74, 0.1);
 }
 
-.grid {
+.single-panel-shell {
   display: grid;
-  grid-template-columns: 1.25fr 0.75fr;
   gap: 1.25rem;
 }
 
-.dashboard-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  grid-template-areas:
-    "profile profile"
-    "matrix matrix"
-    "timeline timeline"
-    "overview medication"
-    "summary summary"
-    "manuals manuals";
-  align-items: start;
+.panel-switcher {
+  display: grid;
+  gap: 0.8rem;
+  margin-top: 0.15rem;
 }
 
-.section-nav {
+.panel-switcher-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.panel-switcher-current {
+  text-align: center;
+}
+
+.panel-switcher-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.panel-switcher-pills {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.65rem;
-  margin: 0;
+  gap: 0.55rem;
 }
 
-.section-nav a {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 2.4rem;
-  padding: 0.55rem 0.9rem;
+.panel-pill {
+  border: 0;
   border-radius: 999px;
+  min-height: 2.3rem;
+  padding: 0.5rem 0.85rem;
   background: rgba(31, 122, 140, 0.09);
   color: var(--accent-strong);
-  text-decoration: none;
-  font-size: 0.92rem;
+  cursor: pointer;
   font-weight: 600;
 }
 
-.section-nav a:hover,
-.section-nav a:focus-visible {
-  background: rgba(31, 122, 140, 0.16);
-  outline: none;
+.panel-pill-active {
+  background: var(--accent);
+  color: #fff;
 }
 
-html {
-  scroll-behavior: smooth;
+.date-switcher {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, auto));
+  gap: 0.65rem;
+  align-items: end;
 }
 
-.panel[id],
-.layout-matrix,
-.layout-timeline,
-.layout-overview,
-.layout-medication,
-.layout-summary {
-  scroll-margin-top: calc(var(--floating-menu-height) + var(--sticky-offset) + 1rem);
+.date-switcher-picker {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 180px;
+}
+
+.date-switcher-picker span {
+  font-size: 0.9rem;
+  color: var(--muted);
 }
 
 .panel {
@@ -426,35 +430,6 @@ html {
 
 .panel-wide {
   grid-column: span 1;
-}
-
-.layout-profile {
-  grid-area: profile;
-}
-
-.layout-matrix {
-  grid-area: matrix;
-}
-
-.layout-timeline {
-  grid-area: timeline;
-  align-self: start;
-}
-
-.layout-overview {
-  grid-area: overview;
-}
-
-.layout-medication {
-  grid-area: medication;
-}
-
-.layout-summary {
-  grid-area: summary;
-}
-
-.layout-manuals {
-  grid-area: manuals;
 }
 
 .panel-heading {
@@ -1091,24 +1066,13 @@ textarea {
     align-items: stretch;
   }
 
-  .grid,
-  .dashboard-grid {
+  .panel-switcher-row,
+  .date-switcher {
     grid-template-columns: 1fr;
-    grid-template-areas:
-      "profile"
-      "matrix"
-      "timeline"
-      "overview"
-      "medication"
-      "summary";
   }
 
-  .section-nav {
-    padding: 0.75rem;
-  }
-
-  .section-nav a {
-    flex: 1 1 140px;
+  .panel-switcher-current {
+    text-align: left;
   }
 
   .day-form {
@@ -1118,6 +1082,16 @@ textarea {
   .floating-menu {
     top: 0.6rem;
     padding: 0.75rem 0.8rem 0.85rem;
+  }
+
+  .panel-switcher-pills {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding-bottom: 0.2rem;
+  }
+
+  .panel-pill {
+    flex: 0 0 auto;
   }
 
   .floating-menu-actions {

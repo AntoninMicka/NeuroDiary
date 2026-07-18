@@ -12,6 +12,7 @@ import {
   ensureEntry,
   formatLongDate,
   getStateDefinition,
+  shiftDateKey,
   getTodayKey,
   getTrackableHourLabel,
 } from "./domain/diary.js";
@@ -36,7 +37,7 @@ const platformInstallMode = ref("browser");
 const isOnline = ref(globalThis.navigator?.onLine ?? true);
 const pwaOfflineReady = ref(false);
 const pwaUpdateRegistration = ref(null);
-const activePanelId = ref(getActivePanelFromLocation());
+const activePanelId = ref("sekce-home");
 const isUtilityMenuOpen = ref(false);
 const state = reactive({
   selectedDate: getTodayKey(),
@@ -50,6 +51,16 @@ const selectedDateLabel = computed(() => formatLongDate(state.selectedDate));
 const sortedMedications = computed(() =>
   [...selectedEntry.value.medications].sort((left, right) => left.time.localeCompare(right.time)),
 );
+const PANEL_ITEMS = [
+  { id: "sekce-home", label: "Rychly zapis" },
+  { id: "sekce-udaje", label: "Udaje" },
+  { id: "sekce-matice", label: "Hodinova matice" },
+  { id: "sekce-osa", label: "Casova osa" },
+  { id: "sekce-prehled", label: "Denni zapis" },
+  { id: "sekce-leky", label: "Lecba" },
+  { id: "sekce-souhrn", label: "Souhrn" },
+  { id: "sekce-manualy", label: "Manualy" },
+];
 const installHelpText = computed(() => {
   if (isInstalledApp.value) {
     return "App is installed and ready for offline use from your device.";
@@ -69,10 +80,17 @@ const showIosInstallGuide = computed(
   () => !isInstalledApp.value && platformInstallMode.value === "ios-share-sheet",
 );
 const isSelectedDateEditable = computed(() => state.selectedDate === getTodayKey());
-const showQuickCapture = computed(
-  () => !activePanelId.value || activePanelId.value === "sekce-home",
-);
+const showQuickCapture = computed(() => activePanelId.value === "sekce-home");
 const quickCaptureStateLabel = computed(() => getStateDefinition(selectedStateKey.value).label);
+const activePanelIndex = computed(() =>
+  PANEL_ITEMS.findIndex((item) => item.id === activePanelId.value),
+);
+const activePanelLabel = computed(
+  () => PANEL_ITEMS[activePanelIndex.value]?.label ?? "Rychly zapis",
+);
+const canGoToPreviousPanel = computed(() => activePanelIndex.value > 0);
+const canGoToNextPanel = computed(() => activePanelIndex.value < PANEL_ITEMS.length - 1);
+const canGoToNextDate = computed(() => state.selectedDate < getTodayKey());
 
 let menuResizeObserver = null;
 let mediaQueryList = null;
@@ -90,12 +108,10 @@ watch(
 
 onMounted(async () => {
   initializeInstallState();
-  handleHashChange();
   globalThis.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
   globalThis.addEventListener("appinstalled", handleAppInstalled);
   globalThis.addEventListener("online", handleConnectionChange);
   globalThis.addEventListener("offline", handleConnectionChange);
-  globalThis.addEventListener("hashchange", handleHashChange);
   globalThis.addEventListener(OFFLINE_READY_EVENT, handleOfflineReady);
   globalThis.addEventListener(UPDATE_READY_EVENT, handleUpdateReady);
 
@@ -128,7 +144,6 @@ onUnmounted(() => {
   globalThis.removeEventListener("appinstalled", handleAppInstalled);
   globalThis.removeEventListener("online", handleConnectionChange);
   globalThis.removeEventListener("offline", handleConnectionChange);
-  globalThis.removeEventListener("hashchange", handleHashChange);
   globalThis.removeEventListener(OFFLINE_READY_EVENT, handleOfflineReady);
   globalThis.removeEventListener(UPDATE_READY_EVENT, handleUpdateReady);
   navigator.serviceWorker?.removeEventListener?.("controllerchange", handleControllerChange);
@@ -156,10 +171,6 @@ function updateCurrentHourLabel(value) {
 
 function updateSelectedStateKey(value) {
   selectedStateKey.value = value;
-}
-
-function getActivePanelFromLocation() {
-  return globalThis.location?.hash?.replace(/^#/, "") ?? "";
 }
 
 function initializeInstallState() {
@@ -209,14 +220,6 @@ function handleAppInstalled() {
 
 function handleConnectionChange() {
   isOnline.value = globalThis.navigator?.onLine ?? true;
-}
-
-function handleHashChange() {
-  activePanelId.value = getActivePanelFromLocation();
-  isUtilityMenuOpen.value = false;
-  void nextTick(() => {
-    syncFloatingMenuHeight();
-  });
 }
 
 function handleOfflineReady() {
@@ -276,6 +279,42 @@ function closeUtilityMenu() {
 function handleUtilityAction(action) {
   closeUtilityMenu();
   action();
+}
+
+function selectPanel(panelId) {
+  activePanelId.value = panelId;
+  closeUtilityMenu();
+  void nextTick(() => {
+    syncFloatingMenuHeight();
+  });
+}
+
+function goToPreviousPanel() {
+  if (!canGoToPreviousPanel.value) {
+    return;
+  }
+
+  selectPanel(PANEL_ITEMS[activePanelIndex.value - 1].id);
+}
+
+function goToNextPanel() {
+  if (!canGoToNextPanel.value) {
+    return;
+  }
+
+  selectPanel(PANEL_ITEMS[activePanelIndex.value + 1].id);
+}
+
+function goToPreviousDate() {
+  updateSelectedDate(shiftDateKey(state.selectedDate, -1));
+}
+
+function goToNextDate() {
+  if (!canGoToNextDate.value) {
+    return;
+  }
+
+  updateSelectedDate(shiftDateKey(state.selectedDate, 1));
 }
 
 function addMedication(payload) {
@@ -444,7 +483,6 @@ function syncFloatingMenuHeight() {
 
     <template v-else>
       <header class="hero">
-        <a id="sekce-home" class="hero-anchor" aria-hidden="true"></a>
         <div class="hero-copy">
           <p class="eyebrow">Vue prototype</p>
           <h1>NeuroDiary</h1>
@@ -488,7 +526,6 @@ function syncFloatingMenuHeight() {
           </div>
 
           <div class="floating-menu-actions">
-            <button class="ghost-button" type="button" @click="printDoctorReport">Print report</button>
             <div class="utility-menu">
               <button
                 class="ghost-button utility-menu-trigger"
@@ -502,6 +539,9 @@ function syncFloatingMenuHeight() {
               </button>
 
               <div v-if="isUtilityMenuOpen" class="utility-menu-panel" role="menu" aria-label="Export a zalohy">
+                <button class="utility-menu-item" type="button" role="menuitem" @click="handleUtilityAction(printDoctorReport)">
+                  Print report
+                </button>
                 <button class="utility-menu-item" type="button" role="menuitem" @click="handleUtilityAction(exportDatabase)">
                   Export .sqlite
                 </button>
@@ -522,16 +562,52 @@ function syncFloatingMenuHeight() {
           </div>
         </div>
 
-        <nav class="section-nav" aria-label="Rychla navigace">
-          <a href="#sekce-home">Rychly zapis</a>
-          <a href="#sekce-udaje">Udaje</a>
-          <a href="#sekce-matice">Hodinova matice</a>
-          <a href="#sekce-osa">Casova osa</a>
-          <a href="#sekce-prehled">Denni zapis</a>
-          <a href="#sekce-leky">Lecba</a>
-          <a href="#sekce-souhrn">Souhrn</a>
-          <a href="#sekce-manualy">Manualy</a>
-        </nav>
+        <div class="panel-switcher" aria-label="Prepinani panelu a data">
+          <div class="panel-switcher-row">
+            <button class="ghost-button" type="button" :disabled="!canGoToPreviousPanel" @click="goToPreviousPanel">
+              Predchozi panel
+            </button>
+            <div class="panel-switcher-current">
+              <p class="hero-label">Aktivni panel</p>
+              <p class="panel-switcher-title">{{ activePanelLabel }}</p>
+            </div>
+            <button class="ghost-button" type="button" :disabled="!canGoToNextPanel" @click="goToNextPanel">
+              Dalsi panel
+            </button>
+          </div>
+
+          <div class="panel-switcher-pills" aria-label="Vyber panelu">
+            <button
+              v-for="item in PANEL_ITEMS"
+              :key="item.id"
+              class="panel-pill"
+              :class="{ 'panel-pill-active': item.id === activePanelId }"
+              type="button"
+              @click="selectPanel(item.id)"
+            >
+              {{ item.label }}
+            </button>
+          </div>
+
+          <div class="date-switcher">
+            <button class="ghost-button" type="button" @click="goToPreviousDate">Predchozi den</button>
+            <label class="date-switcher-picker">
+              <span>Datum</span>
+              <input
+                :value="state.selectedDate"
+                type="date"
+                :max="getTodayKey()"
+                @input="updateSelectedDate($event.target.value)"
+              />
+            </label>
+            <button class="ghost-button" type="button" :disabled="!canGoToNextDate" @click="goToNextDate">
+              Dalsi den
+            </button>
+            <button class="ghost-button" type="button" :disabled="state.selectedDate === getTodayKey()" @click="updateSelectedDate(getTodayKey())">
+              Dnes
+            </button>
+          </div>
+        </div>
 
         <div v-if="showQuickCapture" class="floating-quick-capture">
           <div class="floating-quick-capture-copy">
@@ -599,8 +675,8 @@ function syncFloatingMenuHeight() {
         <p v-if="storageMessage" class="storage-message floating-menu-message">{{ storageMessage }}</p>
       </section>
 
-      <main class="grid dashboard-grid">
-        <section id="sekce-udaje" class="panel panel-wide layout-profile">
+      <main class="single-panel-shell">
+        <section v-if="activePanelId === 'sekce-udaje'" class="panel panel-wide layout-profile">
           <div class="panel-heading">
             <div>
               <p class="section-kicker">Udaje</p>
@@ -639,7 +715,7 @@ function syncFloatingMenuHeight() {
         </section>
 
         <HourMatrix
-          id="sekce-matice"
+          v-else-if="activePanelId === 'sekce-matice'"
           class="layout-matrix"
           :hours="selectedEntry.hours"
           :selected-date="state.selectedDate"
@@ -648,14 +724,14 @@ function syncFloatingMenuHeight() {
         />
 
         <DailyOverview
-          id="sekce-prehled"
+          v-else-if="activePanelId === 'sekce-prehled'"
           class="layout-overview"
           :model-value="selectedEntry"
           @patch-entry="updateEntry"
         />
 
         <MedicationPlan
-          id="sekce-leky"
+          v-else-if="activePanelId === 'sekce-leky'"
           class="layout-medication"
           :medications="sortedMedications"
           @add-medication="addMedication"
@@ -663,20 +739,31 @@ function syncFloatingMenuHeight() {
         />
 
         <DailyTimeline
-          id="sekce-osa"
+          v-else-if="activePanelId === 'sekce-osa'"
           class="layout-timeline"
           :entries="state.entries"
           :selected-date="state.selectedDate"
           @select-date="updateSelectedDate"
         />
         <DaySummary
-          id="sekce-souhrn"
+          v-else-if="activePanelId === 'sekce-souhrn'"
           class="layout-summary"
           :entry="selectedEntry"
           :entries="state.entries"
           :selected-date="state.selectedDate"
         />
-        <ManualSection id="sekce-manualy" class="layout-manuals" />
+        <ManualSection v-else-if="activePanelId === 'sekce-manualy'" class="layout-manuals" />
+        <section v-else class="panel panel-wide home-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="section-kicker">Rychly zapis</p>
+              <h2>Aktualni zachyt dne</h2>
+            </div>
+          </div>
+          <p class="panel-tip">
+            Pro rychly zapis pouzijte horni blok. Ostatni panely otevrite pres prepinac nahore.
+          </p>
+        </section>
       </main>
       <input
         ref="fileInput"
