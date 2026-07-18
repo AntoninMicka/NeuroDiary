@@ -107,6 +107,34 @@ textarea {
   color: var(--muted);
 }
 
+.bootstrap-log-list {
+  margin: 0.85rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.45rem;
+  max-height: min(38vh, 18rem);
+  overflow: auto;
+}
+
+.bootstrap-log-entry {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.65rem;
+  align-items: start;
+  font-size: 0.92rem;
+}
+
+.bootstrap-log-entry-time {
+  font-variant-numeric: tabular-nums;
+  color: var(--accent-strong);
+  font-weight: 700;
+}
+
+.bootstrap-log-entry-message {
+  color: var(--text);
+}
+
 .shell {
   width: min(1200px, calc(100% - 2rem));
   margin: 0 auto;
@@ -130,6 +158,61 @@ textarea {
 
 .boot-detail-warning {
   color: var(--warn);
+}
+
+.boot-history-title {
+  margin: 1rem 0 0.55rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.bootstrap-history {
+  margin-top: 0.95rem;
+  padding: 0.95rem 1rem;
+  border-radius: 18px;
+  background: rgba(31, 41, 51, 0.04);
+  border: 1px solid rgba(31, 41, 51, 0.08);
+}
+
+.bootstrap-history-inline {
+  max-height: 16rem;
+  overflow: auto;
+}
+
+.bootstrap-history-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.bootstrap-history-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.75rem;
+  align-items: start;
+}
+
+.bootstrap-history-item[data-level="warning"] .bootstrap-history-time {
+  color: var(--warn);
+}
+
+.bootstrap-history-item[data-level="error"] .bootstrap-history-time {
+  color: var(--bad);
+}
+
+.bootstrap-history-time {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--accent-strong);
+}
+
+.bootstrap-history-message {
+  margin: 0;
+  color: var(--text);
+  line-height: 1.45;
 }
 
 .hero {
@@ -517,6 +600,43 @@ textarea {
   display: grid;
   gap: 0.35rem;
   margin-top: 0.9rem;
+}
+
+.diagnostic-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(31, 41, 51, 0.34);
+  backdrop-filter: blur(10px);
+}
+
+.diagnostic-dialog {
+  width: min(52rem, 100%);
+  max-height: min(80vh, 52rem);
+  overflow: hidden;
+  display: grid;
+  gap: 1rem;
+  padding: 1.2rem;
+  border-radius: 24px;
+  background: var(--surface-strong);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  box-shadow: var(--shadow);
+}
+
+.diagnostic-dialog-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: start;
+}
+
+.diagnostic-dialog .bootstrap-history {
+  margin-top: 0;
+  max-height: min(58vh, 40rem);
+  overflow: auto;
 }
 
 .sync-warning-card {

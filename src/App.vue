@@ -33,6 +33,11 @@ import {
   saveRecoverySecret,
   saveSyncSettings,
 } from "./services/syncService.js";
+import {
+  appendBootstrapLog,
+  BOOTSTRAP_LOG_EVENT,
+  getBootstrapLogEntries,
+} from "./services/bootstrapLogger.js";
 
 const diaryRepository = ref(null);
 const fileInput = ref(null);
@@ -53,11 +58,13 @@ const pwaOfflineReady = ref(false);
 const pwaUpdateRegistration = ref(null);
 const activePanelId = ref("sekce-home");
 const isUtilityMenuOpen = ref(false);
+const isBootstrapLogOpen = ref(false);
 const syncSettings = reactive(loadSyncSettings());
 const recoverySecretInput = ref("");
 const generatedRecoverySecret = ref("");
 const isSyncBusy = ref(false);
 const isApplyingExternalState = ref(false);
+const bootstrapLogEntries = ref(getBootstrapLogEntries());
 const state = reactive({
   selectedDate: getTodayKey(),
   patientName: "",
@@ -137,10 +144,20 @@ const syncStatusSummary = computed(() => {
 
   return `Revize ${revision} · posledni sync ${syncedAt}`;
 });
+const bootstrapLogCountLabel = computed(() => `${bootstrapLogEntries.value.length} kroku`);
 
 let menuResizeObserver = null;
 let mediaQueryList = null;
 const SERVICE_WORKER_RELOAD_GUARD_KEY = "neurodiary-sw-reload-guard-v1";
+
+function setBootstrapStatus(message, level = "info") {
+  bootstrapStatus.value = message;
+  appendBootstrapLog(message, level);
+}
+
+function syncBootstrapLogEntries(event = null) {
+  bootstrapLogEntries.value = event?.detail?.entries ?? getBootstrapLogEntries();
+}
 
 watch(
   state,
@@ -154,7 +171,8 @@ watch(
 );
 
 onMounted(async () => {
-  bootstrapStatus.value = "Initializing install and connectivity state.";
+  globalThis.addEventListener(BOOTSTRAP_LOG_EVENT, syncBootstrapLogEntries);
+  setBootstrapStatus("Initializing install and connectivity state.");
   initializeInstallState();
   globalThis.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
   globalThis.addEventListener("appinstalled", handleAppInstalled);
@@ -167,26 +185,27 @@ onMounted(async () => {
     navigator.serviceWorker.addEventListener("controllerchange", handleControllerChange);
   }
 
-  bootstrapStatus.value = "Starting local repository initialization.";
+  setBootstrapStatus("Starting local repository initialization.");
   const repository = await createDiaryRepository({
     onProgress(message) {
-      bootstrapStatus.value = message;
+      setBootstrapStatus(message);
     },
   });
-  bootstrapStatus.value = "Repository ready. Loading saved diary state.";
+  setBootstrapStatus("Repository ready. Loading saved diary state.");
   const initialState = repository.loadState();
-  bootstrapStatus.value = "Applying loaded state to the application.";
+  setBootstrapStatus("Applying loaded state to the application.");
   Object.assign(state, initialState);
   diaryRepository.value = repository;
   repositoryMode.value = repository.getMode();
   if (repository.bootstrapWarning) {
     storageMessage.value = repository.bootstrapWarning;
+    appendBootstrapLog(repository.bootstrapWarning, "warning");
   }
-  bootstrapStatus.value = "Initialization completed.";
+  setBootstrapStatus("Initialization completed.");
   isReady.value = true;
 
   await nextTick();
-  bootstrapStatus.value = "Synchronizing floating menu layout.";
+  setBootstrapStatus("Synchronizing floating menu layout.");
   syncFloatingMenuHeight();
 
   if (globalThis.ResizeObserver && floatingMenu.value) {
@@ -198,6 +217,7 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  globalThis.removeEventListener(BOOTSTRAP_LOG_EVENT, syncBootstrapLogEntries);
   menuResizeObserver?.disconnect();
   mediaQueryList?.removeEventListener?.("change", syncInstallState);
   globalThis.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
@@ -350,6 +370,15 @@ function closeUtilityMenu() {
 function handleUtilityAction(action) {
   closeUtilityMenu();
   action();
+}
+
+function openBootstrapLogPanel() {
+  closeUtilityMenu();
+  isBootstrapLogOpen.value = true;
+}
+
+function closeBootstrapLogPanel() {
+  isBootstrapLogOpen.value = false;
 }
 
 function markCloudAuthenticated() {
@@ -732,6 +761,20 @@ function syncFloatingMenuHeight() {
       <h2>Preparing local diary storage</h2>
       <p class="panel-tip">Initializing the offline repository and loading your local data.</p>
       <p class="boot-detail">{{ bootstrapStatus }}</p>
+      <div v-if="bootstrapLogEntries.length" class="bootstrap-history bootstrap-history-inline">
+        <p class="boot-history-title">Prubeh inicializace</p>
+        <ol class="bootstrap-history-list">
+          <li
+            v-for="entry in bootstrapLogEntries"
+            :key="entry.id"
+            class="bootstrap-history-item"
+            :data-level="entry.level"
+          >
+            <span class="bootstrap-history-time">{{ entry.timeLabel }}</span>
+            <p class="bootstrap-history-message">{{ entry.message }}</p>
+          </li>
+        </ol>
+      </div>
       <p v-if="storageMessage" class="boot-detail boot-detail-warning">{{ storageMessage }}</p>
     </div>
 
@@ -793,6 +836,9 @@ function syncFloatingMenuHeight() {
               </button>
 
               <div v-if="isUtilityMenuOpen" class="utility-menu-panel" role="menu" aria-label="Export a zalohy">
+                <button class="utility-menu-item" type="button" role="menuitem" @click="openBootstrapLogPanel">
+                  Diagnostika startu
+                </button>
                 <button class="utility-menu-item" type="button" role="menuitem" @click="handleUtilityAction(printDoctorReport)">
                   Print report
                 </button>
@@ -1111,6 +1157,43 @@ function syncFloatingMenuHeight() {
         accept=".json,application/json"
         @change="importJson"
       />
+      <div
+        v-if="isBootstrapLogOpen"
+        class="diagnostic-dialog-backdrop"
+        role="presentation"
+        @click.self="closeBootstrapLogPanel"
+      >
+        <section
+          class="diagnostic-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="bootstrap-log-dialog-title"
+        >
+          <div class="diagnostic-dialog-header">
+            <div>
+              <p class="section-kicker">Diagnostika</p>
+              <h2 id="bootstrap-log-dialog-title">Historie startu aplikace</h2>
+              <p class="panel-tip">{{ bootstrapLogCountLabel }}</p>
+            </div>
+            <button class="ghost-button" type="button" @click="closeBootstrapLogPanel">
+              Zavrit
+            </button>
+          </div>
+          <div class="bootstrap-history">
+            <ol class="bootstrap-history-list">
+              <li
+                v-for="entry in bootstrapLogEntries"
+                :key="entry.id"
+                class="bootstrap-history-item"
+                :data-level="entry.level"
+              >
+                <span class="bootstrap-history-time">{{ entry.timeLabel }}</span>
+                <p class="bootstrap-history-message">{{ entry.message }}</p>
+              </li>
+            </ol>
+          </div>
+        </section>
+      </div>
     </template>
   </div>
 </template>
