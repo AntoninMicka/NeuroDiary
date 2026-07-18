@@ -61,6 +61,14 @@ const PANEL_ITEMS = [
   { id: "sekce-souhrn", label: "Souhrn" },
   { id: "sekce-manualy", label: "Manualy" },
 ];
+const DATE_NAV_PANEL_IDS = new Set([
+  "sekce-udaje",
+  "sekce-matice",
+  "sekce-osa",
+  "sekce-prehled",
+  "sekce-leky",
+  "sekce-souhrn",
+]);
 const installHelpText = computed(() => {
   if (isInstalledApp.value) {
     return "App is installed and ready for offline use from your device.";
@@ -91,6 +99,7 @@ const activePanelLabel = computed(
 const canGoToPreviousPanel = computed(() => activePanelIndex.value > 0);
 const canGoToNextPanel = computed(() => activePanelIndex.value < PANEL_ITEMS.length - 1);
 const canGoToNextDate = computed(() => state.selectedDate < getTodayKey());
+const showDateSwitcher = computed(() => DATE_NAV_PANEL_IDS.has(activePanelId.value));
 
 let menuResizeObserver = null;
 let mediaQueryList = null;
@@ -589,7 +598,7 @@ function syncFloatingMenuHeight() {
             </button>
           </div>
 
-          <div class="date-switcher">
+          <div v-if="showDateSwitcher" class="date-switcher">
             <button class="ghost-button" type="button" @click="goToPreviousDate">Predchozi den</button>
             <label class="date-switcher-picker">
               <span>Datum</span>

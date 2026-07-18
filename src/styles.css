@@ -1075,6 +1075,10 @@ textarea {
     text-align: left;
   }
 
+  .panel-switcher-row {
+    display: none;
+  }
+
   .day-form {
     grid-template-columns: 1fr;
   }
