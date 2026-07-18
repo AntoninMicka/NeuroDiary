@@ -10,6 +10,7 @@ import {
   HOUR_STATES,
   appendHourStateRecord,
   createMedication,
+  entryContainsDemoData,
   ensureEntry,
   formatLongDate,
   getHourRecordCount,
@@ -145,6 +146,9 @@ const isSelectedDateEditable = computed(() => state.selectedDate === getTodayKey
 const showQuickCapture = computed(() => activePanelId.value === "sekce-home");
 const quickCaptureStateLabel = computed(() => getStateDefinition(selectedStateKey.value).label);
 const canUseDemoTools = computed(() => state.account?.isAuthenticated !== true);
+const hasDemoEntries = computed(() =>
+  Object.values(state.entries ?? {}).some((entry) => entryContainsDemoData(entry)),
+);
 const currentHourRecordCount = computed(() => getHourRecordCount(selectedEntry.value, currentHourLabel.value));
 const activePanelIndex = computed(() =>
   PANEL_ITEMS.findIndex((item) => item.id === activePanelId.value),
@@ -594,6 +598,25 @@ function resetDemo() {
   const fresh = diaryRepository.value.resetState();
   applyImportedState(fresh);
   storageMessage.value = "Demo data restored.";
+}
+
+function removeDemoData() {
+  if (!hasDemoEntries.value) {
+    storageMessage.value = "V aplikaci momentalne nejsou zadna demo data.";
+    return;
+  }
+
+  const filteredEntries = Object.fromEntries(
+    Object.entries(state.entries ?? {}).filter(([, entry]) => !entryContainsDemoData(entry)),
+  );
+  const fallbackDate = Object.keys(filteredEntries).sort().at(-1) ?? getTodayKey();
+
+  applyImportedState({
+    ...state,
+    selectedDate: filteredEntries[fallbackDate] ? fallbackDate : getTodayKey(),
+    entries: filteredEntries,
+  });
+  storageMessage.value = "Demo data byla odebrana z aktualniho uctu.";
 }
 
 function exportDatabase() {
@@ -1092,6 +1115,15 @@ function syncFloatingMenuHeight() {
                 </button>
                 <button class="utility-menu-item" type="button" role="menuitem" @click="handleUtilityAction(openJsonImportPicker)">
                   Import JSON
+                </button>
+                <button
+                  v-if="!canUseDemoTools && hasDemoEntries"
+                  class="utility-menu-item utility-menu-item-danger"
+                  type="button"
+                  role="menuitem"
+                  @click="handleUtilityAction(removeDemoData)"
+                >
+                  Smazat demo data
                 </button>
                 <button
                   v-if="canUseDemoTools"

@@ -605,8 +605,10 @@ export function mergeDiaryStatesAppendOnly(baseState, incomingState) {
   const normalizedIncomingState = normalizeState(cloneSerializable(incomingState));
   const mergedState = normalizeState(cloneSerializable(baseState));
 
-  mergedState.patientName = normalizedIncomingState.patientName || normalizedBaseState.patientName;
-  mergedState.birthYear = normalizedIncomingState.birthYear || normalizedBaseState.birthYear;
+  // Patient profile should follow the side that is currently being merged in,
+  // including intentional clears to an empty string.
+  mergedState.patientName = normalizedIncomingState.patientName ?? normalizedBaseState.patientName;
+  mergedState.birthYear = normalizedIncomingState.birthYear ?? normalizedBaseState.birthYear;
   mergedState.account = {
     ...normalizedBaseState.account,
     ...normalizedIncomingState.account,
@@ -620,7 +622,7 @@ export function mergeDiaryStatesAppendOnly(baseState, incomingState) {
       ...baseEntry,
       ...incomingEntry,
       isDemo: baseEntry.isDemo || incomingEntry.isDemo,
-      medications: mergeMedicationsAppendOnly(baseEntry.medications, incomingEntry.medications),
+      medications: replaceMedications(baseEntry.medications, incomingEntry.medications),
       hourRecords: mergeHourRecordsAppendOnly(baseEntry.hourRecords, incomingEntry.hourRecords),
     };
 
@@ -630,16 +632,11 @@ export function mergeDiaryStatesAppendOnly(baseState, incomingState) {
   return normalizeState(mergedState);
 }
 
-function mergeMedicationsAppendOnly(baseMedications = [], incomingMedications = []) {
-  const mergedById = new Map(baseMedications.map((medication) => [medication.id, medication]));
-
-  for (const medication of incomingMedications) {
-    if (!mergedById.has(medication.id)) {
-      mergedById.set(medication.id, medication);
-    }
-  }
-
-  return [...mergedById.values()].sort((left, right) => left.time.localeCompare(right.time));
+function replaceMedications(baseMedications = [], incomingMedications = []) {
+  const sourceMedications = Array.isArray(incomingMedications) ? incomingMedications : baseMedications;
+  return sourceMedications
+    .map((medication) => ({ ...medication }))
+    .sort((left, right) => left.time.localeCompare(right.time));
 }
 
 function mergeHourRecordsAppendOnly(baseHourRecords = {}, incomingHourRecords = {}) {
