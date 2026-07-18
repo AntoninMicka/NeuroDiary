@@ -57,6 +57,7 @@ const syncSettings = reactive(loadSyncSettings());
 const recoverySecretInput = ref("");
 const generatedRecoverySecret = ref("");
 const isSyncBusy = ref(false);
+const isApplyingExternalState = ref(false);
 const state = reactive({
   selectedDate: getTodayKey(),
   patientName: "",
@@ -144,7 +145,7 @@ const SERVICE_WORKER_RELOAD_GUARD_KEY = "neurodiary-sw-reload-guard-v1";
 watch(
   state,
   () => {
-    if (!isReady.value || !diaryRepository.value) {
+    if (!isReady.value || !diaryRepository.value || isApplyingExternalState.value) {
       return;
     }
     diaryRepository.value.saveState(state);
@@ -537,13 +538,16 @@ async function pullSync() {
 
   isSyncBusy.value = true;
   try {
+    storageMessage.value = "Nacitam sifrovany stav ze serveru.";
     const result = await pullCloudState(syncSettings);
     if (!result.state) {
       storageMessage.value = "Na serveru zatim nejsou zadna data.";
       return;
     }
 
+    storageMessage.value = "Slučuji cloud data s lokalnimi zaznamy.";
     const mergedState = mergeDiaryStatesAppendOnly(state, result.state);
+    storageMessage.value = "Zapisuji slouceny stav do lokalniho uloziste.";
     applyImportedState(mergedState);
     Object.assign(syncSettings, saveSyncSettings({
       ...syncSettings,
@@ -575,6 +579,7 @@ async function pushSync(force = false) {
 
   isSyncBusy.value = true;
   try {
+    storageMessage.value = "Pripravuji lokalni stav pro odeslani do cloud syncu.";
     const result = await pushCloudState({
       state,
       settings: syncSettings,
@@ -583,8 +588,10 @@ async function pushSync(force = false) {
     });
 
     if (result.status === "conflict" && result.remoteState) {
+      storageMessage.value = "Server hlasi konflikt. Slucuji cloud a lokalni data.";
       const mergedState = mergeDiaryStatesAppendOnly(result.remoteState, state);
       applyImportedState(mergedState);
+      storageMessage.value = "Odesilam slouceny stav znovu na server.";
       const retryResult = await pushCloudState({
         state: mergedState,
         settings: {
@@ -698,9 +705,18 @@ async function importJson(event) {
 }
 
 function applyImportedState(nextState) {
-  Object.assign(state, nextState);
-  ensureEntry(state, state.selectedDate);
-  diaryRepository.value?.saveState(state);
+  isApplyingExternalState.value = true;
+  try {
+    state.selectedDate = nextState.selectedDate;
+    state.patientName = nextState.patientName ?? "";
+    state.birthYear = nextState.birthYear ?? "";
+    state.account = nextState.account ?? state.account;
+    state.entries = nextState.entries ?? {};
+    ensureEntry(state, state.selectedDate);
+    diaryRepository.value?.saveState(state);
+  } finally {
+    isApplyingExternalState.value = false;
+  }
 }
 
 function syncFloatingMenuHeight() {
