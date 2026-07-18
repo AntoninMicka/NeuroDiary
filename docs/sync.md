@@ -27,6 +27,22 @@
 - klient bude pred synchronizaci sifrovat payload deniku
 - server bude spravovat revize, casy zmen a dalsi metadata bez pristupu k obsahu deniku
 - conflict flow musi fungovat i nad sifrovanou reprezentaci nebo po lokalnim desifrovani
+- wrapped account key metadata mohou byt ulozena na serveru, ale ne v otevrene podobe account master key
+
+## First E2E Key Model
+
+- `Account Master Key`:
+  hlavni symetricky klic pro sifrovani diary snapshotu
+- `Recovery Secret`:
+  tajemstvi drzené uzivatelem mimo backend
+- `Wrapped Account Key`:
+  account master key zabaleny recovery-derived klicem a ulozeny na serveru
+
+Prakticky dopad:
+
+1. login pres Google / Apple overi identitu
+2. recovery secret umozni desifrovani dat na novem zarizeni
+3. backend sam o sobe data otevrit nedokaze
 
 ## Next Iterations
 

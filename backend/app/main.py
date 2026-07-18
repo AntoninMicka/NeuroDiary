@@ -61,12 +61,13 @@ def healthcheck() -> dict[str, str]:
 def pull_state(user_id: Annotated[str, Depends(verify_bearer_token)]) -> SyncPullResponseModel:
     snapshot = store.load_latest(user_id)
     if snapshot is None:
-        return SyncPullResponseModel(revision=0, updatedAt=None, state=None)
+        return SyncPullResponseModel(revision=0, updatedAt=None, payload=None, wrappedKey=None)
 
     return SyncPullResponseModel(
         revision=snapshot.revision,
         updatedAt=snapshot.updatedAt,
-        state=snapshot.state,
+        payload=snapshot.payload,
+        wrappedKey=snapshot.wrappedKey,
     )
 
 
@@ -79,14 +80,16 @@ def push_state(
         result = store.save_state(
             user_id=user_id,
             base_revision=payload.baseRevision,
-            state=payload.state,
+            payload=payload.payload,
+            wrapped_key=payload.wrappedKey,
             force=payload.force,
         )
         return SyncPushResponseModel(
             status="ok",
             revision=result.revision,
             updatedAt=result.updated_at,
-            state=result.state,
+            payload=result.payload,
+            wrappedKey=result.wrapped_key,
         )
     except RevisionConflictError:
         snapshot = store.load_latest(user_id)
@@ -100,5 +103,6 @@ def push_state(
             status="conflict",
             revision=snapshot.revision,
             updatedAt=snapshot.updatedAt,
-            state=snapshot.state,
+            payload=snapshot.payload,
+            wrappedKey=snapshot.wrappedKey,
         )

@@ -9,14 +9,15 @@ from pathlib import Path
 from threading import Lock
 from typing import Iterator
 
-from .models import DiaryStateModel, SyncEnvelopeModel
+from .models import EncryptedPayloadModel, SyncEnvelopeModel, WrappedKeyEnvelopeModel
 
 
 @dataclass
 class SaveResult:
     revision: int
     updated_at: datetime
-    state: DiaryStateModel
+    payload: EncryptedPayloadModel
+    wrapped_key: WrappedKeyEnvelopeModel | None
 
 
 class RevisionConflictError(Exception):
@@ -46,7 +47,8 @@ class SyncStore:
             user_id TEXT PRIMARY KEY,
             revision INTEGER NOT NULL,
             updated_at TEXT NOT NULL,
-            payload_json TEXT NOT NULL
+            payload_json TEXT NOT NULL,
+            wrapped_key_json TEXT
           )
           """
         )
@@ -57,6 +59,7 @@ class SyncStore:
         row = connection.execute(
           """
           SELECT revision, updated_at, payload_json
+               , wrapped_key_json
           FROM sync_snapshots
           WHERE user_id = ?
           """,
@@ -66,11 +69,16 @@ class SyncStore:
       if row is None:
         return None
 
-      state = DiaryStateModel.model_validate(json.loads(row["payload_json"]))
+      payload = EncryptedPayloadModel.model_validate(json.loads(row["payload_json"]))
+      wrapped_key = None
+      if row["wrapped_key_json"]:
+        wrapped_key = WrappedKeyEnvelopeModel.model_validate(json.loads(row["wrapped_key_json"]))
+
       return SyncEnvelopeModel(
         revision=row["revision"],
         updatedAt=datetime.fromisoformat(row["updated_at"]),
-        state=state,
+        payload=payload,
+        wrappedKey=wrapped_key,
       )
 
     def save_state(
@@ -78,7 +86,8 @@ class SyncStore:
       *,
       user_id: str,
       base_revision: int,
-      state: DiaryStateModel,
+      payload: EncryptedPayloadModel,
+      wrapped_key: WrappedKeyEnvelopeModel | None = None,
       force: bool = False,
     ) -> SaveResult:
       with self._lock:
@@ -90,20 +99,27 @@ class SyncStore:
 
         next_revision = current_revision + 1
         updated_at = datetime.now(UTC)
-        payload_json = state.model_dump_json()
+        payload_json = payload.model_dump_json()
+        wrapped_key_json = wrapped_key.model_dump_json() if wrapped_key else None
 
         with self._connect() as connection:
           connection.execute(
             """
-            INSERT INTO sync_snapshots (user_id, revision, updated_at, payload_json)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO sync_snapshots (user_id, revision, updated_at, payload_json, wrapped_key_json)
+            VALUES (?, ?, ?, ?, ?)
             ON CONFLICT(user_id) DO UPDATE SET
               revision = excluded.revision,
               updated_at = excluded.updated_at,
-              payload_json = excluded.payload_json
+              payload_json = excluded.payload_json,
+              wrapped_key_json = excluded.wrapped_key_json
             """,
-            (user_id, next_revision, updated_at.isoformat(), payload_json),
+            (user_id, next_revision, updated_at.isoformat(), payload_json, wrapped_key_json),
           )
           connection.commit()
 
-        return SaveResult(revision=next_revision, updated_at=updated_at, state=state)
+        return SaveResult(
+          revision=next_revision,
+          updated_at=updated_at,
+          payload=payload,
+          wrapped_key=wrapped_key,
+        )

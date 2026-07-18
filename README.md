@@ -29,3 +29,8 @@ It also includes:
 
 The repository now also contains a first backend sync scaffold in [backend/README.md](/home/antonin/Projects/NeuroDiary/NeuroDiary/backend/README.md:1)
 with a FastAPI-based `pull/push` snapshot API intended as the first step toward multi-device use.
+
+## E2E Encryption
+
+The first end-to-end encryption design is described in [docs/e2e_encryption.md](/home/antonin/Projects/NeuroDiary/NeuroDiary/docs/e2e_encryption.md:1).
+Client-side crypto scaffolding for future sync integration lives in [src/services/e2eCrypto.js](/home/antonin/Projects/NeuroDiary/NeuroDiary/src/services/e2eCrypto.js:1).

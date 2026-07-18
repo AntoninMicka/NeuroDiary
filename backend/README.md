@@ -9,6 +9,7 @@ Prvni serverovy zaklad pro synchronizaci mezi vice zarizenimi.
 - `POST /api/v1/sync/push`
 - revize snapshotu a detekci konfliktu pri zapisu
 - SQLite uloziste na serveru
+- ukladani sifrovaneho payloadu a wrapped key metadata
 
 ## Lokalni spusteni
 
@@ -43,5 +44,6 @@ docker run -p 8080:8080 \
 
 ## Poznamka
 
-Aktualni implementace uklada cely stav deniku jako jeden snapshot. Je to nejjednodussi bezpecny
-zaklad pro prvni synchronizaci. Dalsi iterace muze prejit na jemnejsi sync po entitach nebo dnech.
+Aktualni implementace uklada cely diary snapshot jako jeden sifrovany blob. Je to nejjednodussi
+bezpecny zaklad pro prvni synchronizaci. Dalsi iterace muze prejit na jemnejsi sync po entitach
+nebo dnech.

@@ -33,21 +33,41 @@ class DiaryStateModel(BaseModel):
     entries: dict[str, DiaryEntryModel] = Field(default_factory=dict)
 
 
+class EncryptedPayloadModel(BaseModel):
+    schemaVersion: int = Field(ge=1)
+    algorithm: str = Field(min_length=1)
+    keyVersion: int = Field(ge=1)
+    iv: str = Field(min_length=1)
+    cipherText: str = Field(min_length=1)
+
+
+class WrappedKeyEnvelopeModel(BaseModel):
+    wrappedKey: str = Field(min_length=1)
+    wrappingAlgorithm: str = Field(min_length=1)
+    wrappingSalt: str = Field(min_length=1)
+    wrappingIv: str = Field(min_length=1)
+    wrappingIterations: int = Field(ge=1)
+    keyVersion: int = Field(ge=1)
+
+
 class SyncEnvelopeModel(BaseModel):
     revision: int = Field(ge=0)
     updatedAt: datetime
-    state: DiaryStateModel
+    payload: EncryptedPayloadModel
+    wrappedKey: WrappedKeyEnvelopeModel | None = None
 
 
 class SyncPullResponseModel(BaseModel):
     revision: int = Field(ge=0)
     updatedAt: datetime | None = None
-    state: DiaryStateModel | None = None
+    payload: EncryptedPayloadModel | None = None
+    wrappedKey: WrappedKeyEnvelopeModel | None = None
 
 
 class SyncPushRequestModel(BaseModel):
     baseRevision: int = Field(ge=0)
-    state: DiaryStateModel
+    payload: EncryptedPayloadModel
+    wrappedKey: WrappedKeyEnvelopeModel | None = None
     force: bool = False
 
 
@@ -55,4 +75,5 @@ class SyncPushResponseModel(BaseModel):
     status: Literal["ok", "conflict"]
     revision: int = Field(ge=0)
     updatedAt: datetime
-    state: DiaryStateModel
+    payload: EncryptedPayloadModel
+    wrappedKey: WrappedKeyEnvelopeModel | None = None
