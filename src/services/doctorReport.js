@@ -416,32 +416,7 @@ function buildAnalysisPage(entries, selectedDate) {
   `;
 }
 
-function reportContainsDemoData(entries, selectedDate, explicitValue = null) {
-  if (typeof explicitValue === "boolean") {
-    return explicitValue;
-  }
-
-  const reportDateKeys = new Set([
-    ...buildDateKeys(selectedDate, REPORT_DAYS_PAGE_ONE),
-    ...buildDateKeys(selectedDate, ANALYSIS_LONG_DAYS),
-  ]);
-
-  return [...reportDateKeys].some((dateKey) => entries[dateKey]?.isDemo === true);
-}
-
-function buildDemoWarning(containsDemoData) {
-  if (!containsDemoData) {
-    return "";
-  }
-
-  return `
-    <div class="demo-warning">
-      Varovani: report obsahuje demo nebo testovaci data. Pred klinickym pouzitim jej zkontrolujte.
-    </div>
-  `;
-}
-
-export function buildDoctorReportHtml({ entries, selectedDate, patientName = "", birthYear = "", containsDemoData = null }) {
+export function buildDoctorReportHtml({ entries, selectedDate, patientName = "", birthYear = "" }) {
   const entry = entries[selectedDate];
   if (!entry) {
     throw new Error(`No diary entry found for ${selectedDate}`);
@@ -453,7 +428,6 @@ export function buildDoctorReportHtml({ entries, selectedDate, patientName = "",
   }).format(new Date());
 
   const dateKeys = buildDateKeys(selectedDate, REPORT_DAYS_PAGE_ONE);
-  const reportHasDemoData = reportContainsDemoData(entries, selectedDate, containsDemoData);
 
   return `<!DOCTYPE html>
   <html lang="cs">
@@ -580,16 +554,6 @@ export function buildDoctorReportHtml({ entries, selectedDate, patientName = "",
           font-size: 9px;
           letter-spacing: 0.04em;
           margin-bottom: 2px;
-        }
-        .demo-warning {
-          margin-bottom: 6px;
-          padding: 7px 9px;
-          border: 1.5px solid #b84a4a;
-          background: #fde7e7;
-          color: #7b2222;
-          font-size: 9px;
-          font-weight: 700;
-          line-height: 1.35;
         }
         .day-sheet {
           margin-bottom: 3px;
@@ -956,7 +920,6 @@ export function buildDoctorReportHtml({ entries, selectedDate, patientName = "",
           </header>
 
           <section class="content">
-            ${buildDemoWarning(reportHasDemoData)}
             ${dateKeys.map((dateKey) => buildDayTable(dateKey, entries[dateKey])).join("")}
 
             <p class="footer">NeuroDiary · tiskovy report pro lekare</p>
@@ -969,7 +932,7 @@ export function buildDoctorReportHtml({ entries, selectedDate, patientName = "",
   </html>`;
 }
 
-export function openDoctorReportPrint({ entries, selectedDate, patientName, birthYear, containsDemoData = null }) {
+export function openDoctorReportPrint({ entries, selectedDate, patientName, birthYear }) {
   const reportWindow = window.open("", "_blank");
   if (!reportWindow) {
     throw new Error("Unable to open report window");
@@ -980,7 +943,6 @@ export function openDoctorReportPrint({ entries, selectedDate, patientName, birt
     selectedDate,
     patientName,
     birthYear,
-    containsDemoData,
   });
   reportWindow.document.open();
   reportWindow.document.write(html);
