@@ -196,6 +196,18 @@ export function normalizeHourRecords(rawRecords = []) {
   return normalizedRecords;
 }
 
+function buildHourRecordMergeKey(record) {
+  const normalizedStateKey = normalizeHourState(record?.stateKey) ?? "";
+  const normalizedRecordedAt = typeof record?.recordedAt === "string" ? record.recordedAt : "";
+  const normalizedSource = typeof record?.source === "string" ? record.source : "";
+
+  if (normalizedRecordedAt) {
+    return `ts:${normalizedRecordedAt}|state:${normalizedStateKey}|source:${normalizedSource}`;
+  }
+
+  return `id:${record?.id ?? ""}|state:${normalizedStateKey}|source:${normalizedSource}`;
+}
+
 export function normalizeEntryHours(rawHours) {
   const normalizedHours = createDefaultHours();
 
@@ -588,13 +600,16 @@ function mergeHourRecordsAppendOnly(baseHourRecords = {}, incomingHourRecords = 
   const mergedHourRecords = normalizeEntryHourRecords(baseHourRecords);
 
   for (const hourLabel of TRACKING_HOURS) {
-    const mergedById = new Map(mergedHourRecords[hourLabel].map((record) => [record.id, record]));
-    for (const record of normalizeHourRecords(incomingHourRecords[hourLabel], mergedHourRecords[hourLabel][0]?.stateKey)) {
-      if (!mergedById.has(record.id)) {
-        mergedById.set(record.id, record);
+    const mergedByKey = new Map(
+      mergedHourRecords[hourLabel].map((record) => [buildHourRecordMergeKey(record), record]),
+    );
+    for (const record of normalizeHourRecords(incomingHourRecords[hourLabel])) {
+      const mergeKey = buildHourRecordMergeKey(record);
+      if (!mergedByKey.has(mergeKey)) {
+        mergedByKey.set(mergeKey, record);
       }
     }
-    mergedHourRecords[hourLabel] = [...mergedById.values()].sort((left, right) => {
+    mergedHourRecords[hourLabel] = [...mergedByKey.values()].sort((left, right) => {
       const leftTime = Date.parse(left.recordedAt ?? "") || 0;
       const rightTime = Date.parse(right.recordedAt ?? "") || 0;
       return leftTime - rightTime;
