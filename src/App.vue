@@ -26,6 +26,7 @@ import {
 import { createDiaryRepository } from "./repositories/index.js";
 import { parseJsonBackup, serializeJsonBackup } from "./services/jsonTransfer.js";
 import { openDoctorReportPrint } from "./services/doctorReport.js";
+import { auditDiaryState } from "./services/dataIntegrity.js";
 import { activateServiceWorkerUpdate, OFFLINE_READY_EVENT, UPDATE_READY_EVENT } from "./pwa.js";
 import {
   clearAuthSession,
@@ -93,6 +94,7 @@ const pwaUpdateRegistration = ref(null);
 const activePanelId = ref("sekce-home");
 const isUtilityMenuOpen = ref(false);
 const isBootstrapLogOpen = ref(false);
+const isIntegrityReportOpen = ref(false);
 const isRecoveryTransferOpen = ref(false);
 const isRecoveryCameraOpen = ref(false);
 const syncSettings = reactive(loadSyncSettings());
@@ -209,6 +211,19 @@ const syncStatusSummary = computed(() => {
   return `Revize ${revision} · posledni sync ${syncedAt}`;
 });
 const bootstrapLogCountLabel = computed(() => `${bootstrapLogEntries.value.length} kroku`);
+const integrityReport = computed(() => auditDiaryState(state));
+const integritySummary = computed(() => integrityReport.value.summary);
+const integrityHeadline = computed(() => {
+  if (integritySummary.value.issueCount > 0) {
+    return `Nalezeno ${integritySummary.value.issueCount} chyb a ${integritySummary.value.warningCount} varovani.`;
+  }
+
+  if (integritySummary.value.warningCount > 0) {
+    return `Nalezeno ${integritySummary.value.warningCount} varovani, ale zadne tvrde chyby.`;
+  }
+
+  return "Audit nenasel zadne chyby ani varovani.";
+});
 const effectiveSyncEndpoint = computed(() => getEffectiveSyncEndpoint(syncSettings));
 const buildInfo = __APP_BUILD_INFO__;
 const buildTimestampLabel = computed(() => {
@@ -554,6 +569,15 @@ function openBootstrapLogPanel() {
 
 function closeBootstrapLogPanel() {
   isBootstrapLogOpen.value = false;
+}
+
+function openIntegrityReportPanel() {
+  closeUtilityMenu();
+  isIntegrityReportOpen.value = true;
+}
+
+function closeIntegrityReportPanel() {
+  isIntegrityReportOpen.value = false;
 }
 
 function markCloudAuthenticated(user = null) {
@@ -1444,6 +1468,9 @@ function syncFloatingMenuHeight() {
                 <button class="utility-menu-item" type="button" role="menuitem" @click="openBootstrapLogPanel">
                   Diagnostika startu
                 </button>
+                <button class="utility-menu-item" type="button" role="menuitem" @click="openIntegrityReportPanel">
+                  Kontrola integrity dat
+                </button>
                 <button class="utility-menu-item" type="button" role="menuitem" @click="handleUtilityAction(printDoctorReport)">
                   Print report
                 </button>
@@ -1891,6 +1918,91 @@ function syncFloatingMenuHeight() {
                 <p class="bootstrap-history-message">{{ entry.message }}</p>
               </li>
             </ol>
+          </div>
+        </section>
+      </div>
+      <div
+        v-if="isIntegrityReportOpen"
+        class="diagnostic-dialog-backdrop"
+        role="presentation"
+        @click.self="closeIntegrityReportPanel"
+      >
+        <section
+          class="diagnostic-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="integrity-report-dialog-title"
+        >
+          <div class="diagnostic-dialog-header">
+            <div>
+              <p class="section-kicker">Diagnostika</p>
+              <h2 id="integrity-report-dialog-title">Kontrola integrity dat</h2>
+              <p class="panel-tip">{{ integrityHeadline }}</p>
+            </div>
+            <button class="ghost-button" type="button" @click="closeIntegrityReportPanel">
+              Zavrit
+            </button>
+          </div>
+
+          <div class="sync-warning-card">
+            <strong>Souhrn</strong>
+            <p>
+              Vybrany den: {{ integritySummary.selectedDate }} ·
+              dni celkem: {{ integritySummary.entryCount }} ·
+              neprazdnych dni: {{ integritySummary.nonEmptyEntryCount }}
+            </p>
+            <p>
+              davky: {{ integritySummary.medicationCount }} ·
+              hodinove zaznamy: {{ integritySummary.hourRecordCount }} ·
+              mazaci znacky: {{ integritySummary.deletedDateCount }}
+            </p>
+            <p>
+              chyby: {{ integritySummary.issueCount }} ·
+              varovani: {{ integritySummary.warningCount }}
+            </p>
+          </div>
+
+          <div v-if="integrityReport.issues.length" class="bootstrap-history">
+            <p class="boot-history-title">Chyby</p>
+            <ol class="bootstrap-history-list">
+              <li
+                v-for="(issue, index) in integrityReport.issues"
+                :key="`integrity-error-${index}`"
+                class="bootstrap-history-item"
+                data-level="error"
+              >
+                <span class="bootstrap-history-time">{{ issue.dateKey ?? issue.scope ?? "state" }}</span>
+                <p class="bootstrap-history-message">
+                  {{ issue.message }}
+                  <template v-if="issue.hourLabel"> · hodina {{ issue.hourLabel }}</template>
+                  <template v-if="issue.value"> · {{ issue.value }}</template>
+                </p>
+              </li>
+            </ol>
+          </div>
+
+          <div v-if="integrityReport.warnings.length" class="bootstrap-history">
+            <p class="boot-history-title">Varovani</p>
+            <ol class="bootstrap-history-list">
+              <li
+                v-for="(warning, index) in integrityReport.warnings"
+                :key="`integrity-warning-${index}`"
+                class="bootstrap-history-item"
+                data-level="warning"
+              >
+                <span class="bootstrap-history-time">{{ warning.dateKey ?? warning.scope ?? "state" }}</span>
+                <p class="bootstrap-history-message">
+                  {{ warning.message }}
+                  <template v-if="warning.hourLabel"> · hodina {{ warning.hourLabel }}</template>
+                  <template v-if="warning.value"> · {{ warning.value }}</template>
+                </p>
+              </li>
+            </ol>
+          </div>
+
+          <div v-if="!integrityReport.issues.length && !integrityReport.warnings.length" class="sync-warning-card">
+            <strong>Vysledek</strong>
+            <p>Aktualni lokalni data prosla auditem bez nalezenych problemu.</p>
           </div>
         </section>
       </div>

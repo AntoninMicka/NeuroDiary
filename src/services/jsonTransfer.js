@@ -1,4 +1,5 @@
 import { normalizeState } from "../domain/diary.js";
+import { auditDiaryState } from "./dataIntegrity.js";
 
 export const JSON_BACKUP_FORMAT = "neurodiary-backup";
 export const JSON_BACKUP_VERSION = 1;
@@ -39,5 +40,12 @@ export function parseJsonBackup(raw) {
     throw new Error("JSON backup does not contain application state.");
   }
 
-  return normalizeState(cloneSerializable(parsed.state));
+  const normalizedState = normalizeState(cloneSerializable(parsed.state));
+  const integrityReport = auditDiaryState(normalizedState);
+
+  if (integrityReport.summary.issueCount > 0) {
+    throw new Error("JSON backup failed integrity validation.");
+  }
+
+  return normalizedState;
 }
