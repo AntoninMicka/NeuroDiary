@@ -320,13 +320,6 @@ textarea {
   min-width: 220px;
 }
 
-.floating-menu-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.6rem;
-  justify-content: end;
-}
-
 .utility-menu {
   position: relative;
 }
@@ -500,27 +493,19 @@ textarea {
   margin-top: 0.15rem;
 }
 
-.panel-switcher-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  gap: 0.75rem;
+.panel-switcher-toolbar {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-}
-
-.panel-switcher-current {
-  text-align: center;
-}
-
-.panel-switcher-title {
-  margin: 0;
-  font-size: 1rem;
-  font-weight: 700;
+  justify-content: space-between;
+  gap: 0.75rem;
 }
 
 .panel-switcher-pills {
   display: flex;
   flex-wrap: wrap;
   gap: 0.55rem;
+  flex: 1 1 auto;
 }
 
 .panel-pill {
@@ -537,6 +522,10 @@ textarea {
 .panel-pill-active {
   background: var(--accent);
   color: #fff;
+}
+
+.quick-capture-panel {
+  margin-top: 0;
 }
 
 .date-switcher {
@@ -1377,17 +1366,8 @@ textarea {
     align-items: stretch;
   }
 
-  .panel-switcher-row,
   .date-switcher {
     grid-template-columns: 1fr;
-  }
-
-  .panel-switcher-current {
-    text-align: left;
-  }
-
-  .panel-switcher-row {
-    display: none;
   }
 
   .day-form {
@@ -1415,15 +1395,15 @@ textarea {
     padding-bottom: 0.2rem;
   }
 
+  .panel-switcher-toolbar {
+    align-items: stretch;
+  }
+
   .panel-pill {
     flex: 0 0 auto;
   }
 
-  .floating-menu-actions {
-    justify-content: stretch;
-  }
-
-  .floating-menu-actions .ghost-button,
+  .utility-menu,
   .utility-menu-trigger {
     width: 100%;
   }

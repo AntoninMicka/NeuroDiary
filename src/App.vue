@@ -175,21 +175,12 @@ const showIosInstallGuide = computed(
   () => !isInstalledApp.value && platformInstallMode.value === "ios-share-sheet",
 );
 const isSelectedDateEditable = computed(() => state.selectedDate === getTodayKey());
-const showQuickCapture = computed(() => activePanelId.value === "sekce-home");
 const quickCaptureStateLabel = computed(() => getStateDefinition(selectedStateKey.value).label);
 const quickCaptureMedicationLabel = computed(() => {
   const item = selectedTreatmentPlanItem.value;
   return item ? `${item.name} ${item.dose}` : "Davku z planu";
 });
 const currentHourRecordCount = computed(() => getHourRecordCount(selectedEntry.value, currentHourLabel.value));
-const activePanelIndex = computed(() =>
-  PANEL_ITEMS.findIndex((item) => item.id === activePanelId.value),
-);
-const activePanelLabel = computed(
-  () => PANEL_ITEMS[activePanelIndex.value]?.label ?? "Rychly zapis",
-);
-const canGoToPreviousPanel = computed(() => activePanelIndex.value > 0);
-const canGoToNextPanel = computed(() => activePanelIndex.value < PANEL_ITEMS.length - 1);
 const canGoToNextDate = computed(() => state.selectedDate < getTodayKey());
 const showDateSwitcher = computed(() => DATE_NAV_PANEL_IDS.has(activePanelId.value));
 const hasRecoverySecretStored = computed(() => {
@@ -614,22 +605,6 @@ function selectPanel(panelId) {
   void nextTick(() => {
     syncFloatingMenuHeight();
   });
-}
-
-function goToPreviousPanel() {
-  if (!canGoToPreviousPanel.value) {
-    return;
-  }
-
-  selectPanel(PANEL_ITEMS[activePanelIndex.value - 1].id);
-}
-
-function goToNextPanel() {
-  if (!canGoToNextPanel.value) {
-    return;
-  }
-
-  selectPanel(PANEL_ITEMS[activePanelIndex.value + 1].id);
 }
 
 function goToPreviousDate() {
@@ -1451,7 +1426,23 @@ function syncFloatingMenuHeight() {
             </div>
           </div>
 
-          <div class="floating-menu-actions">
+        </div>
+
+        <div class="panel-switcher" aria-label="Prepinani panelu a data">
+          <div class="panel-switcher-toolbar">
+            <div class="panel-switcher-pills" aria-label="Vyber panelu">
+              <button
+                v-for="item in PANEL_ITEMS"
+                :key="item.id"
+                class="panel-pill"
+                :class="{ 'panel-pill-active': item.id === activePanelId }"
+                type="button"
+                @click="selectPanel(item.id)"
+              >
+                {{ item.label }}
+              </button>
+            </div>
+
             <div class="utility-menu">
               <button
                 class="ghost-button utility-menu-trigger"
@@ -1489,34 +1480,6 @@ function syncFloatingMenuHeight() {
               </div>
             </div>
           </div>
-        </div>
-
-        <div class="panel-switcher" aria-label="Prepinani panelu a data">
-          <div class="panel-switcher-row">
-            <button class="ghost-button" type="button" :disabled="!canGoToPreviousPanel" @click="goToPreviousPanel">
-              Predchozi panel
-            </button>
-            <div class="panel-switcher-current">
-              <p class="hero-label">Aktivni panel</p>
-              <p class="panel-switcher-title">{{ activePanelLabel }}</p>
-            </div>
-            <button class="ghost-button" type="button" :disabled="!canGoToNextPanel" @click="goToNextPanel">
-              Dalsi panel
-            </button>
-          </div>
-
-          <div class="panel-switcher-pills" aria-label="Vyber panelu">
-            <button
-              v-for="item in PANEL_ITEMS"
-              :key="item.id"
-              class="panel-pill"
-              :class="{ 'panel-pill-active': item.id === activePanelId }"
-              type="button"
-              @click="selectPanel(item.id)"
-            >
-              {{ item.label }}
-            </button>
-          </div>
 
           <div v-if="showDateSwitcher" class="date-switcher">
             <button class="ghost-button" type="button" @click="goToPreviousDate">Predchozi den</button>
@@ -1539,81 +1502,6 @@ function syncFloatingMenuHeight() {
               Vynucene smazat tento den
             </button>
           </div>
-        </div>
-
-        <div v-if="showQuickCapture" class="floating-quick-capture">
-          <div class="floating-quick-capture-copy">
-            <p class="section-kicker">Rychly zapis</p>
-            <h3>Zapsat aktualni stav</h3>
-            <p class="panel-tip">
-              Vyberte hodinu, stav nebo davku z planu lecby. Pro detailni upravy pak muzete prejit do hodinove matice.
-            </p>
-            <p v-if="currentHourRecordCount > 1" class="panel-tip">
-              Pro tuto hodinu uz existuje {{ currentHourRecordCount }} zaznamu. Zobrazuje se posledni.
-            </p>
-          </div>
-          <div class="floating-quick-capture-form">
-            <label>
-              <span>Aktualni hodina</span>
-              <select
-                :value="currentHourLabel"
-                :disabled="!isSelectedDateEditable"
-                @input="updateCurrentHourLabel($event.target.value)"
-              >
-                <option v-for="hourLabel in Object.keys(selectedEntry.hours)" :key="hourLabel" :value="hourLabel">
-                  {{ hourLabel }}
-                </option>
-              </select>
-            </label>
-
-            <label>
-              <span>Aktualni stav</span>
-              <select
-                :value="selectedStateKey"
-                :disabled="!isSelectedDateEditable"
-                @input="updateSelectedStateKey($event.target.value)"
-              >
-                <option v-for="item in HOUR_STATES" :key="item.key" :value="item.key">
-                  {{ item.label }}
-                </option>
-              </select>
-            </label>
-
-            <button
-              class="primary-button"
-              type="button"
-              :disabled="!isSelectedDateEditable"
-              @click="writeCurrentState"
-            >
-              Zapsat {{ quickCaptureStateLabel }}
-            </button>
-
-            <label>
-              <span>Davka z planu</span>
-              <select
-                :value="selectedTreatmentPlanId"
-                :disabled="!isSelectedDateEditable || sortedTreatmentPlan.length === 0"
-                @input="selectedTreatmentPlanId = $event.target.value"
-              >
-                <option value="">Vyberte planovanou davku</option>
-                <option v-for="item in sortedTreatmentPlan" :key="item.id" :value="item.id">
-                  {{ item.time }} · {{ item.name }} · {{ item.dose }}
-                </option>
-              </select>
-            </label>
-
-            <button
-              class="ghost-button"
-              type="button"
-              :disabled="!isSelectedDateEditable || !selectedTreatmentPlanItem"
-              @click="recordMedicationFromPlan"
-            >
-              Zapsat {{ quickCaptureMedicationLabel }} ted
-            </button>
-          </div>
-          <p v-if="!isSelectedDateEditable" class="matrix-readonly-note floating-quick-capture-note">
-            Rychly zapis je dostupny jen pro dnesni datum. Pro historicky den pouzijte jen nahled.
-          </p>
         </div>
 
         <div v-if="!isOnline" class="status-banner status-banner-offline" role="status">
@@ -1854,12 +1742,81 @@ function syncFloatingMenuHeight() {
           <div class="panel-heading">
             <div>
               <p class="section-kicker">Rychly zapis</p>
-              <h2>Aktualni zachyt dne</h2>
+              <h2>Zapsat aktualni stav</h2>
             </div>
           </div>
-          <p class="panel-tip">
-            Pro rychly zapis pouzijte horni blok. Ostatni panely otevrite pres prepinac nahore.
-          </p>
+          <div class="floating-quick-capture quick-capture-panel">
+            <div class="floating-quick-capture-copy">
+              <p class="panel-tip">
+                Vyberte hodinu, stav nebo davku z planu lecby. Pro detailni upravy pak muzete prejit do hodinove matice.
+              </p>
+              <p v-if="currentHourRecordCount > 1" class="panel-tip">
+                Pro tuto hodinu uz existuje {{ currentHourRecordCount }} zaznamu. Zobrazuje se posledni.
+              </p>
+            </div>
+            <div class="floating-quick-capture-form">
+              <label>
+                <span>Aktualni hodina</span>
+                <select
+                  :value="currentHourLabel"
+                  :disabled="!isSelectedDateEditable"
+                  @input="updateCurrentHourLabel($event.target.value)"
+                >
+                  <option v-for="hourLabel in Object.keys(selectedEntry.hours)" :key="hourLabel" :value="hourLabel">
+                    {{ hourLabel }}
+                  </option>
+                </select>
+              </label>
+
+              <label>
+                <span>Aktualni stav</span>
+                <select
+                  :value="selectedStateKey"
+                  :disabled="!isSelectedDateEditable"
+                  @input="updateSelectedStateKey($event.target.value)"
+                >
+                  <option v-for="item in HOUR_STATES" :key="item.key" :value="item.key">
+                    {{ item.label }}
+                  </option>
+                </select>
+              </label>
+
+              <button
+                class="primary-button"
+                type="button"
+                :disabled="!isSelectedDateEditable"
+                @click="writeCurrentState"
+              >
+                Zapsat {{ quickCaptureStateLabel }}
+              </button>
+
+              <label>
+                <span>Davka z planu</span>
+                <select
+                  :value="selectedTreatmentPlanId"
+                  :disabled="!isSelectedDateEditable || sortedTreatmentPlan.length === 0"
+                  @input="selectedTreatmentPlanId = $event.target.value"
+                >
+                  <option value="">Vyberte planovanou davku</option>
+                  <option v-for="item in sortedTreatmentPlan" :key="item.id" :value="item.id">
+                    {{ item.time }} · {{ item.name }} · {{ item.dose }}
+                  </option>
+                </select>
+              </label>
+
+              <button
+                class="ghost-button"
+                type="button"
+                :disabled="!isSelectedDateEditable || !selectedTreatmentPlanItem"
+                @click="recordMedicationFromPlan"
+              >
+                Zapsat {{ quickCaptureMedicationLabel }} ted
+              </button>
+            </div>
+            <p v-if="!isSelectedDateEditable" class="matrix-readonly-note floating-quick-capture-note">
+              Rychly zapis je dostupny jen pro dnesni datum. Pro historicky den pouzijte jen nahled.
+            </p>
+          </div>
         </section>
       </main>
       <input
