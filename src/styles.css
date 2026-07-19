@@ -485,6 +485,7 @@ textarea {
 .single-panel-shell {
   display: grid;
   gap: 1.25rem;
+  touch-action: pan-y;
 }
 
 .panel-switcher {

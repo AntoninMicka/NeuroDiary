@@ -74,6 +74,7 @@ const fileInput = ref(null);
 const jsonFileInput = ref(null);
 const qrFileInput = ref(null);
 const floatingMenu = ref(null);
+const panelShell = ref(null);
 const googleSignInTarget = ref(null);
 const recoveryQrCanvas = ref(null);
 const recoveryQrVideo = ref(null);
@@ -259,6 +260,9 @@ const canScanRecoveryQrLive = computed(() => canScanRecoveryQrFromCamera());
 
 let recoveryCameraStream = null;
 let recoveryCameraScanTimeoutId = 0;
+let panelSwipeStartX = 0;
+let panelSwipeStartY = 0;
+let panelSwipePointerType = "";
 
 let menuResizeObserver = null;
 let mediaQueryList = null;
@@ -605,6 +609,68 @@ function selectPanel(panelId) {
   void nextTick(() => {
     syncFloatingMenuHeight();
   });
+}
+
+function selectAdjacentPanel(direction) {
+  const activePanelIndex = PANEL_ITEMS.findIndex((item) => item.id === activePanelId.value);
+  if (activePanelIndex < 0) {
+    return;
+  }
+
+  const nextIndex = activePanelIndex + direction;
+  if (nextIndex < 0 || nextIndex >= PANEL_ITEMS.length) {
+    return;
+  }
+
+  selectPanel(PANEL_ITEMS[nextIndex].id);
+}
+
+function isInteractiveSwipeTarget(target) {
+  if (!(target instanceof Element)) {
+    return false;
+  }
+
+  return Boolean(target.closest("button, input, select, textarea, label, a, summary, [role='button']"));
+}
+
+function handlePanelTouchStart(event) {
+  if (event.touches.length !== 1 || isUtilityMenuOpen.value) {
+    panelSwipePointerType = "";
+    return;
+  }
+
+  if (isInteractiveSwipeTarget(event.target)) {
+    panelSwipePointerType = "";
+    return;
+  }
+
+  const [touch] = event.touches;
+  panelSwipeStartX = touch.clientX;
+  panelSwipeStartY = touch.clientY;
+  panelSwipePointerType = "touch";
+}
+
+function handlePanelTouchEnd(event) {
+  if (panelSwipePointerType !== "touch" || event.changedTouches.length !== 1) {
+    panelSwipePointerType = "";
+    return;
+  }
+
+  const [touch] = event.changedTouches;
+  const deltaX = touch.clientX - panelSwipeStartX;
+  const deltaY = touch.clientY - panelSwipeStartY;
+  panelSwipePointerType = "";
+
+  if (Math.abs(deltaX) < 56 || Math.abs(deltaX) <= Math.abs(deltaY) * 1.3) {
+    return;
+  }
+
+  if (deltaX < 0) {
+    selectAdjacentPanel(1);
+    return;
+  }
+
+  selectAdjacentPanel(-1);
 }
 
 function goToPreviousDate() {
@@ -1521,7 +1587,12 @@ function syncFloatingMenuHeight() {
         <p v-if="storageMessage" class="storage-message floating-menu-message">{{ storageMessage }}</p>
       </section>
 
-      <main class="single-panel-shell">
+      <main
+        ref="panelShell"
+        class="single-panel-shell"
+        @touchstart.passive="handlePanelTouchStart"
+        @touchend.passive="handlePanelTouchEnd"
+      >
         <section v-if="activePanelId === 'sekce-udaje'" class="panel panel-wide layout-profile">
           <div class="panel-heading">
             <div>
