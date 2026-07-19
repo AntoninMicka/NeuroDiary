@@ -92,16 +92,7 @@
         </div>
 
         <div class="manual-block">
-          <h4>3. Reset demo dat</h4>
-          <p>
-            Tlacitko <strong>Reset demo data</strong> obnovi simulovana testovaci data. Tento krok je
-            vhodny pro demonstrace, ale nemel by se pouzivat nad realnymi pacientskymi zaznamy bez
-            predchozi zalohy.
-          </p>
-        </div>
-
-        <div class="manual-block">
-          <h4>4. Doporuceny provoz</h4>
+          <h4>3. Doporuceny provoz</h4>
           <p>
             Pred aktualizaci aplikace nebo testovanim nove verze vytvorte export databaze. Pri
             sdileni reportu kontrolujte, zda neobsahuje vice osobnich udaju, nez je potreba.

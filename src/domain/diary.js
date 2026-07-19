@@ -387,22 +387,8 @@ function createSimulatedEntry(dateKey, previousSignature = null) {
 }
 
 export function createDemoState(days = 21) {
-  const state = createInitialState();
-  state.patientName = "Jan Novak";
-  state.birthYear = "1958";
-  let previousSignature = null;
-  const demoDays = Math.max(days - 1, 0);
-
-  for (let offset = demoDays; offset >= 1; offset -= 1) {
-    const dateKey = shiftDateKey(state.selectedDate, -offset);
-    const { entry, signature } = createSimulatedEntry(dateKey, previousSignature);
-    state.entries[dateKey] = entry;
-    previousSignature = signature;
-  }
-
-  state.entries[state.selectedDate] = createDefaultEntry();
-
-  return state;
+  void days;
+  return normalizeState(createInitialState());
 }
 
 export function normalizeHourState(stateKey) {
@@ -444,11 +430,9 @@ export function resolveHourStateRecords(records = [], displayMode = "latest") {
   return normalizedRecords.at(-1)?.stateKey ?? null;
 }
 
-export function normalizeHourRecords(rawRecords = [], fallbackStateKey = "on") {
+export function normalizeHourRecords(rawRecords = []) {
   if (!Array.isArray(rawRecords) || rawRecords.length === 0) {
-    return HOUR_STATE_KEYS.has(fallbackStateKey)
-      ? [createHourStateRecord({ stateKey: fallbackStateKey, source: "legacy" })]
-      : [];
+    return [];
   }
 
   const normalizedRecords = rawRecords
@@ -457,7 +441,7 @@ export function normalizeHourRecords(rawRecords = [], fallbackStateKey = "on") {
         id: record?.id,
         stateKey: record?.stateKey ?? record,
         recordedAt: record?.recordedAt,
-        source: record?.source ?? "legacy",
+        source: record?.source ?? "imported",
       }),
     )
     .sort((left, right) => {
@@ -466,11 +450,7 @@ export function normalizeHourRecords(rawRecords = [], fallbackStateKey = "on") {
       return leftTime - rightTime;
     });
 
-  return normalizedRecords.length > 0
-    ? normalizedRecords
-    : HOUR_STATE_KEYS.has(fallbackStateKey)
-      ? [createHourStateRecord({ stateKey: fallbackStateKey, source: "legacy" })]
-      : [];
+  return normalizedRecords;
 }
 
 export function normalizeEntryHours(rawHours) {
@@ -494,12 +474,11 @@ export function normalizeEntryHours(rawHours) {
 }
 
 export function normalizeEntryHourRecords(rawHourRecords, rawHours = null) {
-  const fallbackHours = rawHours ? normalizeEntryHours(rawHours) : createDefaultHours();
   const normalizedHourRecords = {};
 
   for (const hourLabel of TRACKING_HOURS) {
     const rawRecords = rawHourRecords?.[hourLabel];
-    normalizedHourRecords[hourLabel] = normalizeHourRecords(rawRecords, fallbackHours[hourLabel]);
+    normalizedHourRecords[hourLabel] = normalizeHourRecords(rawRecords);
   }
 
   return normalizedHourRecords;

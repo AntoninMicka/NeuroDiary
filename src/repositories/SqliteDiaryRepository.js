@@ -1,7 +1,6 @@
 import initSqlJs from "sql.js";
 import wasmUrl from "sql.js/dist/sql-wasm.wasm?url";
 import {
-  createDemoState,
   createDefaultHours,
   createInitialState,
   createTreatmentPlanItem,
@@ -357,7 +356,7 @@ export class SqliteDiaryRepository extends DiaryRepository {
     this.enableForeignKeys();
     this.runMigrations();
 
-    const state = createDemoState();
+    const state = normalizeState(createInitialState());
     this.saveState(state);
     return state;
   }

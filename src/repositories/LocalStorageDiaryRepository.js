@@ -1,4 +1,4 @@
-import { createDemoState, createInitialState, normalizeState } from "../domain/diary.js";
+import { createInitialState, normalizeState } from "../domain/diary.js";
 import { DiaryRepository } from "./DiaryRepository.js";
 
 const STORAGE_KEY = "neurodiary-vue-poc-v1";
@@ -45,7 +45,7 @@ export class LocalStorageDiaryRepository extends DiaryRepository {
   }
 
   resetState() {
-    const state = createDemoState();
+    const state = normalizeState(createInitialState());
     this.saveState(state);
     return state;
   }

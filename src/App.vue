@@ -13,7 +13,6 @@ import {
   createInitialState,
   createMedication,
   createTreatmentPlanItem,
-  entryContainsDemoData,
   ensureEntry,
   formatLongDate,
   getHourRecordCount,
@@ -180,10 +179,6 @@ const quickCaptureMedicationLabel = computed(() => {
   const item = selectedTreatmentPlanItem.value;
   return item ? `${item.name} ${item.dose}` : "Davku z planu";
 });
-const canUseDemoTools = computed(() => state.account?.isAuthenticated !== true);
-const hasDemoEntries = computed(() =>
-  Object.values(state.entries ?? {}).some((entry) => entryContainsDemoData(entry)),
-);
 const currentHourRecordCount = computed(() => getHourRecordCount(selectedEntry.value, currentHourLabel.value));
 const activePanelIndex = computed(() =>
   PANEL_ITEMS.findIndex((item) => item.id === activePanelId.value),
@@ -708,36 +703,6 @@ async function resetSelectedDateEverywhere() {
     await pushSync(true);
     storageMessage.value = `Den ${dateKey} byl vynucene smazan a reset byl odeslan do cloud syncu.`;
   }
-}
-
-function resetDemo() {
-  if (!canUseDemoTools.value) {
-    storageMessage.value = "Demo data jsou pro prihlaseny ucet zakazana.";
-    return;
-  }
-
-  const fresh = diaryRepository.value.resetState();
-  applyImportedState(fresh);
-  storageMessage.value = "Demo data restored.";
-}
-
-function removeDemoData() {
-  if (!hasDemoEntries.value) {
-    storageMessage.value = "V aplikaci momentalne nejsou zadna demo data.";
-    return;
-  }
-
-  const filteredEntries = Object.fromEntries(
-    Object.entries(state.entries ?? {}).filter(([, entry]) => !entryContainsDemoData(entry)),
-  );
-  const fallbackDate = Object.keys(filteredEntries).sort().at(-1) ?? getTodayKey();
-
-  applyImportedState({
-    ...state,
-    selectedDate: filteredEntries[fallbackDate] ? fallbackDate : getTodayKey(),
-    entries: filteredEntries,
-  });
-  storageMessage.value = "Demo data byla odebrana z aktualniho uctu.";
 }
 
 function resetAllData() {
@@ -1493,24 +1458,6 @@ function syncFloatingMenuHeight() {
                 </button>
                 <button class="utility-menu-item" type="button" role="menuitem" @click="handleUtilityAction(openJsonImportPicker)">
                   Import JSON
-                </button>
-                <button
-                  v-if="!canUseDemoTools && hasDemoEntries"
-                  class="utility-menu-item utility-menu-item-danger"
-                  type="button"
-                  role="menuitem"
-                  @click="handleUtilityAction(removeDemoData)"
-                >
-                  Smazat demo data
-                </button>
-                <button
-                  v-if="canUseDemoTools"
-                  class="utility-menu-item utility-menu-item-danger"
-                  type="button"
-                  role="menuitem"
-                  @click="handleUtilityAction(resetDemo)"
-                >
-                  Reset demo data
                 </button>
               </div>
             </div>
