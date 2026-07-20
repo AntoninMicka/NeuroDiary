@@ -1126,15 +1126,6 @@ function openRecoveryQrImageImport() {
   qrFileInput.value?.click();
 }
 
-function openRecoveryQrImport() {
-  if (canScanRecoveryQrLive.value) {
-    void openRecoveryCameraScanner();
-    return;
-  }
-
-  openRecoveryQrImageImport();
-}
-
 async function importRecoveryQr(event) {
   const [file] = event.target.files ?? [];
   if (!file) {
@@ -1739,12 +1730,20 @@ function syncFloatingMenuHeight() {
                 Zobrazit QR
               </button>
               <button
+                v-if="canScanRecoveryQrLive"
+                class="ghost-button"
+                type="button"
+                @click="openRecoveryCameraScanner"
+              >
+                Nacist QR kamerou
+              </button>
+              <button
                 class="ghost-button"
                 type="button"
                 :disabled="!canImportRecoveryQr"
-                @click="openRecoveryQrImport"
+                @click="openRecoveryQrImageImport"
               >
-                Nacist z QR
+                Nacist QR ze souboru
               </button>
             </div>
 
@@ -1909,7 +1908,6 @@ function syncFloatingMenuHeight() {
         class="visually-hidden"
         type="file"
         accept="image/*"
-        capture="environment"
         @change="importRecoveryQr"
       />
       <div
