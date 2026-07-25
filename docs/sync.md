@@ -13,7 +13,8 @@
 2. Ulozi si posledni `revision`
 3. Po lokalnich zmenach odesle `POST /api/v1/sync/push`
 4. Pokud `baseRevision` nesedi se serverem, backend vrati `status: "conflict"`
-5. Konflikt se v dalsi iteraci vyresi pres porovnani lokalniho a serveroveho snapshotu
+5. Klient desifruje oba snapshoty a slouci denni zaznamy, hodinove udalosti a davky
+6. Smazane dny a davky se prenaseji jako tombstones, aby je starsi zarizeni neobnovilo
 
 ## Why Snapshot Sync First
 
@@ -46,8 +47,16 @@ Prakticky dopad:
 
 ## Next Iterations
 
-- key management a recovery flow
 - sync po jednotlivych dnech nebo entitach
-- lepsi conflict resolution
 - audit historie zmen
-- autentizace po uzivatelich misto docasneho single-user tokenu
+- retry s exponencialnim backoffem
+- verzovani lecebneho planu pro historickou adherence
+
+## Aktualni klientsky tok
+
+- pri startu: `pull -> merge -> push`, pokud je ucet, endpoint a sifrovaci klic dostupny
+- rucne: tlacitko Synchronizovat spousti stejny tok
+- po zmene: persistentni dirty flag a kontrola automatickeho push jednou za minutu
+- uspesny push maze dirty flag jen pokud behem requestu nevznikla dalsi lokalni zmena
+- chyba pull zastavi navazujici push
+- payload je sifrovan pomoci account master key; recovery secret slouzi k obnoveni na novem zarizeni

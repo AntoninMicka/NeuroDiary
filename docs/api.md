@@ -3,14 +3,25 @@
 ## Base
 
 - `GET /healthz`
+- `GET /readyz`
+- `GET /api/v1/meta`
 - `GET /api/v1/sync/pull`
 - `POST /api/v1/sync/push`
+- `DELETE /api/v1/sync/reset`
+
+## Provozni endpointy
+
+- `/healthz` kontroluje proces a vraci storage, auth rezim a verzi.
+- `/readyz` provadi databazovy dotaz a pri nedostupne DB vraci HTTP 503.
+- `/api/v1/meta` vraci verzi a verejne capabilities bez secrets.
+- Kazda HTTP odpoved obsahuje `X-Request-ID`; klient muze vlastni ID poslat ve stejnem headeru.
 
 ## Authentication
 
-- Pro prvni serverovy zaklad je podporovan bearer token:
+- Preferovany rezim pouziva Google/Apple identity exchange a kratkodobou NeuroDiary session.
+- Jako docasny fallback je podporovan bearer token:
   `Authorization: Bearer <NEURODIARY_API_TOKEN>`
-- Pokud token neni nastaveny, backend bezi v docasnem single-user rezimu.
+- Pokud je zapnuta federovana autentizace, sync endpointy vyzaduji platnou session.
 
 ## Pull
 
@@ -132,3 +143,4 @@ Konflikt:
 - API prefix: `/api/v1`
 - revize jsou monotonicky rostouci snapshot counter
 - server uklada sifrovany payload a metadata, nikoliv otevreny diary state
+- build commit je dostupny pres `/healthz`, `/readyz` a `/api/v1/meta`

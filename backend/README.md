@@ -6,11 +6,16 @@ Prvni serverovy zaklad pro synchronizaci mezi vice zarizenimi.
 
 - servirovat zabaleny frontend na `/`
 - `GET /healthz`
+- `GET /readyz` s kontrolou databaze
+- `GET /api/v1/meta` s verzi a capabilities
 - `GET /api/v1/sync/pull`
 - `POST /api/v1/sync/push`
+- `DELETE /api/v1/sync/reset`
 - revize snapshotu a detekci konfliktu pri zapisu
-- SQLite uloziste na serveru
+- SQLite pro vyvoj a PostgreSQL pro produkci
 - ukladani sifrovaneho payloadu a wrapped key metadata
+- federovane Google/Apple prihlaseni s legacy token fallbackem
+- strukturovane JSON request logy a korelacni `X-Request-ID`
 
 ## Lokalni spusteni
 
@@ -21,6 +26,13 @@ pip install -r backend/requirements.txt
 npm install
 npm run build
 uvicorn backend.app.main:app --reload
+```
+
+Testy:
+
+```bash
+pip install -r backend/requirements-dev.txt
+pytest backend/tests
 ```
 
 ## Konfigurace
@@ -36,6 +48,10 @@ uvicorn backend.app.main:app --reload
   Seznam frontend originu oddelenych carkou.
 - `NEURODIARY_FRONTEND_DIST`
   Cesta k zabalenemu frontend `dist/` adresari. V Docker image je nastavena automaticky.
+- `NEURODIARY_VERSION`
+  Commit nebo verze zobrazena v health a metadata endpointech.
+- `NEURODIARY_LOG_LEVEL`
+  Uroven aplikacnich JSON logu, vychozi `INFO`.
 
 ## Docker
 
@@ -54,6 +70,9 @@ Backend uz umi bezet nad `PostgreSQL` pres `NEURODIARY_DATABASE_URL`, takze je p
 pro centralni databazi vhodnou pro `Cloud Run`, a zaroven ze stejne sluzby servirovat i Vue frontend.
 
 Lokalni SQLite varianta zustava zachovana hlavne pro lokalni vyvoj a rychle testovani.
+
+Provozni endpointy, alerty, zalohy a incident postup jsou v
+[docs/operations.md](/home/antonin/Projects/NeuroDiary/NeuroDiary/docs/operations.md:1).
 
 ## Poznamka
 

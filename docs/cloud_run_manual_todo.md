@@ -134,12 +134,19 @@ Poznamka:
 - [ ] otevrit `/healthz`
 - [ ] overit, ze vraci `status: ok`
 - [ ] overit, ze vraci `storage: postgres`
+- [ ] otevrit `/readyz` a overit `status: ready`
+- [ ] otevrit `/api/v1/meta` a overit aktualni build verzi a capabilities
+- [ ] overit, ze response obsahuje `X-Request-ID`
+- [ ] v Cloud Logging overit strukturovany `http_request` zaznam bez payloadu a identity pacienta
 - [ ] overit, ze `Cloud sync` panel zobrazi Google a pripadne Apple prihlaseni
 - [ ] prihlasit se pres Google
 - [ ] overit, ze po prihlaseni uz neni potreba API token
 - [ ] otestovat `GET /api/v1/sync/pull`
 - [ ] otestovat `POST /api/v1/sync/push`
 - [ ] otestovat sync mezi dvema zarizenimi
+- [ ] zalozit uptime checks pro `/healthz` a `/readyz`
+- [ ] nastavit alert na HTTP 5xx a neuspesnou readiness
+- [ ] zapnout automaticke Cloud SQL zalohy a point-in-time recovery
 
 ## 15. Bezpecnostni follow-up
 

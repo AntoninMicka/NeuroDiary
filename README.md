@@ -24,6 +24,11 @@ It also includes:
 - import of an existing `.sqlite` backup
 - printable doctor report for the selected diary day
 - installable PWA shell with manifest and service worker caching
+- treatment plan compared with actually recorded doses and daily adherence
+- long-term ON/MID/OFF trends with explicit data-quality coverage
+- browser medication reminders for Firefox and Chrome
+- encrypted multi-device synchronization with automatic pull/push and conflict merging
+- input validation, integrity diagnostics, and deletion tombstones
 
 ## Sync Backend
 
@@ -32,6 +37,8 @@ with a FastAPI-based `pull/push` snapshot API intended as the first step toward 
 
 Cloud Run deployment notes and the GitHub Actions workflow are documented in
 [docs/cloud_run_deploy.md](/home/antonin/Projects/NeuroDiary/NeuroDiary/docs/cloud_run_deploy.md:1).
+Monitoring, backups, and incident handling are documented in
+[docs/operations.md](/home/antonin/Projects/NeuroDiary/NeuroDiary/docs/operations.md:1).
 
 ## E2E Encryption
 
