@@ -3,17 +3,21 @@ import {
   TRACKING_HOURS,
   UNDEFINED_ENTRY_VALUE,
   createDefaultHours,
+  getTodayKey,
   normalizeHourState,
   normalizeState,
   resolveHourStateRecords,
 } from "../domain/diary.js";
+import {
+  buildMedicationDuplicateKey,
+  validateBirthYear,
+  validateMedicationInput,
+} from "./validation.js";
 
 const VALID_HOUR_STATE_KEYS = new Set(HOUR_STATES.map((item) => item.key));
 const VALID_SLEEP_QUALITY_VALUES = new Set(["poor", "mixed", "good", UNDEFINED_ENTRY_VALUE]);
 const VALID_OVERALL_STATUS_VALUES = new Set(["hard", "stable", "good", UNDEFINED_ENTRY_VALUE]);
 const DATE_KEY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-const TIME_PATTERN = /^\d{2}:\d{2}$/;
-const YEAR_PATTERN = /^\d{4}$/;
 
 function cloneSerializable(value) {
   return JSON.parse(JSON.stringify(value));
@@ -33,7 +37,7 @@ function isFutureDateKey(dateKey) {
     return false;
   }
 
-  const todayKey = new Date().toISOString().slice(0, 10);
+  const todayKey = getTodayKey();
   return dateKey > todayKey;
 }
 
@@ -96,6 +100,7 @@ export function auditDiaryState(inputState) {
     selectedDate: state.selectedDate,
     entryCount: 0,
     nonEmptyEntryCount: 0,
+    plannedMedicationCount: state.treatmentPlan?.length ?? 0,
     medicationCount: 0,
     hourRecordCount: 0,
     deletedDateCount: Object.keys(state.deletedEntryDates ?? {}).length,
@@ -112,12 +117,40 @@ export function auditDiaryState(inputState) {
     });
   }
 
-  if (typeof state.birthYear === "string" && state.birthYear.trim() && !YEAR_PATTERN.test(state.birthYear.trim())) {
-    pushIssue(warnings, "warning", "Rok narozeni nema ocekavany ctyrmistny format.", {
+  const birthYearValidation = validateBirthYear(state.birthYear);
+  if (!birthYearValidation.isValid) {
+    pushIssue(warnings, "warning", birthYearValidation.message, {
       scope: "profile",
       field: "birthYear",
       value: state.birthYear,
     });
+  }
+  if (state.patientName.length > 120) {
+    pushIssue(warnings, "warning", "Jmeno pacienta je neobvykle dlouhe.", {
+      scope: "profile",
+      field: "patientName",
+      value: state.patientName.length,
+    });
+  }
+
+  const treatmentPlanKeys = new Set();
+  for (const medication of state.treatmentPlan ?? []) {
+    const validation = validateMedicationInput(medication);
+    if (!validation.isValid) {
+      pushIssue(issues, "error", "Planovana davka nema platne udaje.", {
+        scope: "treatmentPlan",
+        value: Object.values(validation.errors).join(" "),
+      });
+    }
+
+    const duplicateKey = buildMedicationDuplicateKey(medication);
+    if (treatmentPlanKeys.has(duplicateKey)) {
+      pushIssue(warnings, "warning", "Plan obsahuje duplicitni davku.", {
+        scope: "treatmentPlan",
+        value: duplicateKey,
+      });
+    }
+    treatmentPlanKeys.add(duplicateKey);
   }
 
   for (const [dateKey, deletedAt] of Object.entries(state.deletedEntryDates ?? {})) {
@@ -184,6 +217,14 @@ export function auditDiaryState(inputState) {
         value: entry.updatedAt,
       });
     }
+    if (entry.notes.length > 5000) {
+      pushIssue(warnings, "warning", "Poznamka dne prekrocila limit 5000 znaku.", {
+        scope: "entry",
+        dateKey,
+        field: "notes",
+        value: entry.notes.length,
+      });
+    }
 
     if (!VALID_SLEEP_QUALITY_VALUES.has(entry.sleepQuality)) {
       pushIssue(issues, "error", "Zaznam ma neplatnou hodnotu kvality spanku.", {
@@ -207,15 +248,16 @@ export function auditDiaryState(inputState) {
     for (const medication of entry.medications ?? []) {
       summary.medicationCount += 1;
 
-      if (!TIME_PATTERN.test(medication.time)) {
-        pushIssue(issues, "error", "Davka ma neplatny cas.", {
+      const medicationValidation = validateMedicationInput(medication);
+      if (!medicationValidation.isValid) {
+        pushIssue(issues, "error", "Davka nema platne udaje.", {
           scope: "medication",
           dateKey,
-          value: `${medication.name} ${medication.dose} @ ${medication.time}`,
+          value: Object.values(medicationValidation.errors).join(" "),
         });
       }
 
-      const duplicateKey = `${medication.time}|${medication.name}|${medication.dose}`;
+      const duplicateKey = buildMedicationDuplicateKey(medication);
       if (medicationDuplicateKeys.has(duplicateKey)) {
         pushIssue(warnings, "warning", "Den obsahuje duplicitni davku se stejnym casem, nazvem a mnozstvim.", {
           scope: "medication",

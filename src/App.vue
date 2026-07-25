@@ -69,6 +69,12 @@ import {
   BOOTSTRAP_LOG_EVENT,
   getBootstrapLogEntries,
 } from "./services/bootstrapLogger.js";
+import {
+  buildMedicationDuplicateKey,
+  isValidDateKey,
+  validateBirthYear,
+  validateMedicationInput,
+} from "./services/validation.js";
 
 const PENDING_SYNC_CHANGES_STORAGE_KEY = "neurodiary-pending-sync-changes-v1";
 
@@ -100,6 +106,7 @@ const recoveryQrVideo = ref(null);
 const isReady = ref(false);
 const repositoryMode = ref("loading");
 const storageMessage = ref("");
+const birthYearValidationMessage = ref("");
 const bootstrapStatus = ref("Starting application bootstrap.");
 const quickCaptureNow = ref(new Date());
 const selectedStateKey = ref("on");
@@ -470,6 +477,10 @@ onUnmounted(() => {
 });
 
 function updateSelectedDate(dateKey) {
+  if (!isValidDateKey(dateKey) || dateKey > getTodayKey()) {
+    storageMessage.value = "Vyberte platne datum, ktere neni v budoucnosti.";
+    return;
+  }
   state.selectedDate = dateKey;
   ensureEntry(state, dateKey);
 }
@@ -483,7 +494,15 @@ function updateEntry(nextEntry) {
 }
 
 function updateProfile(field, value) {
-  state[field] = value;
+  state[field] = field === "patientName" ? value.slice(0, 120) : value;
+}
+
+function updateBirthYear(value) {
+  const validation = validateBirthYear(value);
+  birthYearValidationMessage.value = validation.message;
+  if (validation.isValid) {
+    state.birthYear = validation.value;
+  }
 }
 
 function updateSyncSetting(field, value) {
@@ -756,8 +775,21 @@ function goToNextDate() {
 }
 
 function addMedication(payload) {
-  selectedEntry.value.medications.push(createMedication(payload));
+  const validation = validateMedicationInput(payload);
+  if (!validation.isValid) {
+    storageMessage.value = Object.values(validation.errors)[0] ?? "Davku se nepodarilo zapsat.";
+    return false;
+  }
+
+  const duplicateKey = buildMedicationDuplicateKey(validation.value);
+  if (selectedEntry.value.medications.some((item) => buildMedicationDuplicateKey(item) === duplicateKey)) {
+    storageMessage.value = "Stejna davka je pro tento cas uz zapsana.";
+    return false;
+  }
+
+  selectedEntry.value.medications.push(createMedication(validation.value));
   selectedEntry.value.updatedAt = new Date().toISOString();
+  return true;
 }
 
 function removeMedication(medicationId) {
@@ -792,11 +824,14 @@ function recordMedicationFromPlan() {
   }
 
   const currentTime = getCurrentTimeLabel();
-  addMedication({
+  const wasAdded = addMedication({
     name: planItem.name,
     dose: planItem.dose,
     time: currentTime,
   });
+  if (!wasAdded) {
+    return;
+  }
   storageMessage.value = `Davka ${planItem.name} ${planItem.dose} byla zapsana na ${currentTime}.`;
 }
 
@@ -1730,6 +1765,7 @@ function syncFloatingMenuHeight() {
               <input
                 :value="state.selectedDate"
                 type="date"
+                :max="getTodayKey()"
                 @input="updateSelectedDate($event.target.value)"
               />
             </label>
@@ -1738,6 +1774,7 @@ function syncFloatingMenuHeight() {
               <input
                 :value="state.patientName"
                 type="text"
+                maxlength="120"
                 placeholder="Jan Novak"
                 @input="updateProfile('patientName', $event.target.value)"
               />
@@ -1748,9 +1785,13 @@ function syncFloatingMenuHeight() {
                 :value="state.birthYear"
                 type="text"
                 inputmode="numeric"
+                maxlength="4"
+                pattern="[0-9]{4}"
+                :aria-invalid="Boolean(birthYearValidationMessage)"
                 placeholder="1958"
-                @input="updateProfile('birthYear', $event.target.value)"
+                @input="updateBirthYear($event.target.value)"
               />
+              <small v-if="birthYearValidationMessage" class="form-error">{{ birthYearValidationMessage }}</small>
             </label>
           </form>
 

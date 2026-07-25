@@ -1,5 +1,6 @@
 <script setup>
-import { reactive } from "vue";
+import { reactive, ref } from "vue";
+import { buildMedicationDuplicateKey, validateMedicationInput } from "../services/validation.js";
 
 const props = defineProps({
   treatmentPlan: {
@@ -19,13 +20,25 @@ const form = reactive({
   dose: "",
   time: "08:00",
 });
+const errors = reactive({});
+const formMessage = ref("");
 
 function submitForm() {
-  if (!form.name.trim() || !form.dose.trim() || !form.time) {
+  const validation = validateMedicationInput(form);
+  Object.keys(errors).forEach((field) => delete errors[field]);
+  Object.assign(errors, validation.errors);
+  formMessage.value = "";
+  if (!validation.isValid) {
     return;
   }
 
-  emit("add-plan-item", { ...form });
+  const duplicateKey = buildMedicationDuplicateKey(validation.value);
+  if (props.treatmentPlan.some((item) => buildMedicationDuplicateKey(item) === duplicateKey)) {
+    formMessage.value = "Stejna davka se stejnym casem uz v planu existuje.";
+    return;
+  }
+
+  emit("add-plan-item", validation.value);
   form.name = "";
   form.dose = "";
   form.time = "08:00";
@@ -44,20 +57,24 @@ function submitForm() {
     <form class="stack-form" @submit.prevent="submitForm">
       <label>
         <span>Nazev</span>
-        <input v-model="form.name" type="text" placeholder="Levodopa" />
+        <input v-model="form.name" type="text" maxlength="100" required placeholder="Levodopa" :aria-invalid="Boolean(errors.name)" />
+        <small v-if="errors.name" class="form-error">{{ errors.name }}</small>
       </label>
 
       <label>
         <span>Davka</span>
-        <input v-model="form.dose" type="text" placeholder="100 mg" />
+        <input v-model="form.dose" type="text" maxlength="50" required placeholder="100 mg" :aria-invalid="Boolean(errors.dose)" />
+        <small v-if="errors.dose" class="form-error">{{ errors.dose }}</small>
       </label>
 
       <label>
         <span>Cas</span>
-        <input v-model="form.time" type="time" />
+        <input v-model="form.time" type="time" required :aria-invalid="Boolean(errors.time)" />
+        <small v-if="errors.time" class="form-error">{{ errors.time }}</small>
       </label>
 
       <button class="primary-button" type="submit">Pridat do planu</button>
+      <p v-if="formMessage" class="form-error" role="alert">{{ formMessage }}</p>
     </form>
 
     <p class="panel-tip">Plan slouzi jako sablona. Skutecne uzitou davku zapisete rychlym zapisem s aktualnim casem.</p>

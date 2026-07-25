@@ -575,6 +575,19 @@ textarea {
   font-size: 0.92rem;
 }
 
+.form-error {
+  margin: 0;
+  color: var(--bad);
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+input[aria-invalid="true"],
+select[aria-invalid="true"] {
+  border-color: rgba(184, 74, 74, 0.65);
+  box-shadow: 0 0 0 3px rgba(184, 74, 74, 0.1);
+}
+
 .sync-settings-card {
   margin-top: 1rem;
   padding-top: 1rem;

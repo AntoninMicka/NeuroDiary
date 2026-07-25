@@ -47,11 +47,19 @@ Cíl MVP:
 * Dialogové zadávání
 * Přístupnost
 
-### [pending] 1.6 Pravidla validace a kvality dat
+### [in_progress] 1.6 Pravidla validace a kvality dat
 
 * validace časů, dávek a povinných polí
 * detekce nekonzistentních denních záznamů
 * pravidla pro chybějící nebo neúplná data
+
+Aktuální stav:
+
+* sdílená validace názvu léku, dávky a skutečně platného času
+* kontrola roku narození, budoucích a neplatných dat
+* ochrana proti duplicitní plánované i skutečně užité dávce
+* audit nekonzistentních záznamů, tombstones a duplicitních identifikátorů
+* zbývá klasifikace chybějících a neúplných dnů pro statistiky a reporty
 
 ### [pending] 1.4 Návrh doménové architektury
 

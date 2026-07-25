@@ -58,6 +58,7 @@ function patchEntry(field, value) {
         <textarea
           :value="props.modelValue.notes"
           rows="4"
+          maxlength="5000"
           placeholder="Napriklad: ztuhlost po obede, tres lepsi po prochazce..."
           @input="patchEntry('notes', $event.target.value)"
         />
