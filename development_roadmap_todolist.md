@@ -102,12 +102,20 @@ s fallbackem na localStorage, včetně import/export `.sqlite`.
 
 ### [poc_done] 2.3 Správa léků
 
-### [pending] 2.7 Léčebný plán vs. skutečně užité dávky
+### [in_progress] 2.7 Léčebný plán vs. skutečně užité dávky
 
 * definice pravidelné medikace
 * odlišení plánované a skutečně užité dávky
 * příprava podkladů pro pozdější adherence analýzy
 * evidence skutečně užitých léčiv včetně času a dávky
+
+Aktuální stav:
+
+* nové skutečné dávky mají přímou vazbu na položku léčebného plánu
+* starší dávky se párují podle názvu, množství a nejbližšího času
+* den zobrazuje dávky užité včas, dříve, později, čekající a vynechané
+* dostupný je denní souhrn adherence a přehled neplánovaných dávek
+* zbývá verzování léčebného plánu v čase a dlouhodobá adherence analýza
 
 ### [poc_done] 2.4 Denní záznam
 

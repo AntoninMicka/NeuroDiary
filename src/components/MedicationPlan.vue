@@ -1,5 +1,7 @@
 <script setup>
-import { reactive, ref } from "vue";
+import { computed, reactive, ref } from "vue";
+import { getTodayKey } from "../domain/diary.js";
+import { analyzeMedicationAdherence } from "../services/adherence.js";
 import { buildMedicationDuplicateKey, validateMedicationInput } from "../services/validation.js";
 
 const props = defineProps({
@@ -9,6 +11,14 @@ const props = defineProps({
   },
   recordedMedications: {
     type: Array,
+    required: true,
+  },
+  selectedDate: {
+    type: String,
+    required: true,
+  },
+  currentTime: {
+    type: Date,
     required: true,
   },
 });
@@ -22,6 +32,15 @@ const form = reactive({
 });
 const errors = reactive({});
 const formMessage = ref("");
+const adherence = computed(() =>
+  analyzeMedicationAdherence({
+    treatmentPlan: props.treatmentPlan,
+    recordedMedications: props.recordedMedications,
+    selectedDate: props.selectedDate,
+    todayDate: getTodayKey(),
+    now: props.currentTime,
+  }),
+);
 
 function submitForm() {
   const validation = validateMedicationInput(form);
@@ -79,21 +98,48 @@ function submitForm() {
 
     <p class="panel-tip">Plan slouzi jako sablona. Skutecne uzitou davku zapisete rychlym zapisem s aktualnim casem.</p>
 
-    <ul class="list">
-      <li v-for="medication in treatmentPlan" :key="medication.id">
+    <div class="adherence-summary" aria-label="Souhrn dodrzeni lecby">
+      <div>
+        <strong>{{ adherence.summary.takenCount }}/{{ adherence.summary.plannedCount }}</strong>
+        <span>uzitych planovanych davek</span>
+      </div>
+      <div>
+        <strong>{{ adherence.summary.missedCount }}</strong>
+        <span>vynechanych</span>
+      </div>
+      <div>
+        <strong>{{ adherence.summary.upcomingCount }}</strong>
+        <span>cekajicich</span>
+      </div>
+      <div>
+        <strong>{{ adherence.summary.adherencePercent === null ? "—" : `${adherence.summary.adherencePercent} %` }}</strong>
+        <span>adherence uzavrenych davek</span>
+      </div>
+    </div>
+
+    <ul class="list adherence-list">
+      <li v-for="dose in adherence.plannedDoses" :key="dose.planItem.id">
         <div class="medication-copy">
-          <strong>{{ medication.time }} - {{ medication.name }}</strong>
-          <span>{{ medication.dose }}</span>
+          <strong>{{ dose.planItem.time }} - {{ dose.planItem.name }}</strong>
+          <span>
+            {{ dose.planItem.dose }}
+            <template v-if="dose.recordedMedication">
+              · skutecne {{ dose.recordedMedication.time }}
+            </template>
+          </span>
         </div>
 
-        <button type="button" @click="emit('remove-plan-item', medication.id)">Odebrat</button>
+        <span :class="['adherence-status', `adherence-status-${dose.statusKey}`]">
+          {{ dose.statusLabel }}
+        </span>
+        <button type="button" @click="emit('remove-plan-item', dose.planItem.id)">Odebrat z planu</button>
       </li>
     </ul>
 
     <div class="panel-heading medication-record-heading">
       <div>
         <p class="section-kicker">Aktualni den</p>
-        <h3>Zapsane davky</h3>
+        <h3>Vsechny zapsane davky</h3>
       </div>
     </div>
 

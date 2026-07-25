@@ -134,7 +134,9 @@ export function auditDiaryState(inputState) {
   }
 
   const treatmentPlanKeys = new Set();
+  const treatmentPlanIds = new Set();
   for (const medication of state.treatmentPlan ?? []) {
+    treatmentPlanIds.add(medication.id);
     const validation = validateMedicationInput(medication);
     if (!validation.isValid) {
       pushIssue(issues, "error", "Planovana davka nema platne udaje.", {
@@ -279,6 +281,13 @@ export function auditDiaryState(inputState) {
         } else {
           seenMedicationIds.set(medication.id, dateKey);
         }
+      }
+      if (medication.planItemId && !treatmentPlanIds.has(medication.planItemId)) {
+        pushIssue(warnings, "warning", "Zapsana davka odkazuje na polozku, ktera uz neni v lecebném planu.", {
+          scope: "medication",
+          dateKey,
+          value: medication.planItemId,
+        });
       }
     }
 

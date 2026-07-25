@@ -16,6 +16,7 @@ class MedicationModel(BaseModel):
     name: str = Field(min_length=1)
     dose: str = Field(min_length=1)
     time: str = Field(pattern=r"^\d{2}:\d{2}$")
+    planItemId: str | None = None
 
 
 class DiaryEntryModel(BaseModel):

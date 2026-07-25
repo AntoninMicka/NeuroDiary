@@ -787,7 +787,10 @@ function addMedication(payload) {
     return false;
   }
 
-  selectedEntry.value.medications.push(createMedication(validation.value));
+  selectedEntry.value.medications.push(createMedication({
+    ...validation.value,
+    planItemId: payload.planItemId,
+  }));
   selectedEntry.value.updatedAt = new Date().toISOString();
   return true;
 }
@@ -828,6 +831,7 @@ function recordMedicationFromPlan() {
     name: planItem.name,
     dose: planItem.dose,
     time: currentTime,
+    planItemId: planItem.id,
   });
   if (!wasAdded) {
     return;
@@ -1962,6 +1966,8 @@ function syncFloatingMenuHeight() {
           class="layout-medication"
           :treatment-plan="sortedTreatmentPlan"
           :recorded-medications="sortedMedications"
+          :selected-date="state.selectedDate"
+          :current-time="quickCaptureNow"
           @add-plan-item="addTreatmentPlanItem"
           @remove-plan-item="removeTreatmentPlanItem"
           @remove-recorded-medication="removeMedication"

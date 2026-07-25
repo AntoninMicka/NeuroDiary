@@ -97,12 +97,16 @@ export function getTrackableHourLabel(date = new Date()) {
 }
 
 export function createMedication(payload) {
-  return {
+  const medication = {
     id: payload.id ?? generateId(),
     name: payload.name.trim(),
     dose: payload.dose.trim(),
     time: payload.time,
   };
+  if (typeof payload.planItemId === "string" && payload.planItemId) {
+    medication.planItemId = payload.planItemId;
+  }
+  return medication;
 }
 
 export function createTreatmentPlanItem(payload) {

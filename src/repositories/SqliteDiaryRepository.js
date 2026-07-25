@@ -13,7 +13,7 @@ import {
 import { DiaryRepository } from "./DiaryRepository.js";
 
 const STORAGE_KEY = "neurodiary-sqlite-db-v1";
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 
 const MIGRATIONS = [
   {
@@ -85,6 +85,14 @@ const MIGRATIONS = [
     run(db) {
       db.run(`
         ALTER TABLE diary_entries ADD COLUMN updated_at TEXT NOT NULL DEFAULT '';
+      `);
+    },
+  },
+  {
+    version: 5,
+    run(db) {
+      db.run(`
+        ALTER TABLE medications ADD COLUMN plan_item_id TEXT NOT NULL DEFAULT '';
       `);
     },
   },
@@ -317,10 +325,17 @@ export class SqliteDiaryRepository extends DiaryRepository {
         for (const medication of normalizedEntry.medications) {
           this.db.run(
             `
-              INSERT INTO medications (id, entry_date, name, dose, time)
-              VALUES (?, ?, ?, ?, ?)
+              INSERT INTO medications (id, entry_date, name, dose, time, plan_item_id)
+              VALUES (?, ?, ?, ?, ?, ?)
             `,
-            [medication.id, entryDate, medication.name, medication.dose, medication.time],
+            [
+              medication.id,
+              entryDate,
+              medication.name,
+              medication.dose,
+              medication.time,
+              medication.planItemId ?? "",
+            ],
           );
         }
 
@@ -430,7 +445,7 @@ export class SqliteDiaryRepository extends DiaryRepository {
 
   selectMedications(entryDate) {
     const statement = this.db.prepare(`
-      SELECT id, name, dose, time
+      SELECT id, name, dose, time, plan_item_id
       FROM medications
       WHERE entry_date = ?
       ORDER BY time, id
@@ -441,12 +456,16 @@ export class SqliteDiaryRepository extends DiaryRepository {
       const results = [];
       while (statement.step()) {
         const row = statement.getAsObject();
-        results.push({
+        const medication = {
           id: row.id,
           name: row.name,
           dose: row.dose,
           time: row.time,
-        });
+        };
+        if (row.plan_item_id) {
+          medication.planItemId = row.plan_item_id;
+        }
+        results.push(medication);
       }
       return results;
     } finally {
