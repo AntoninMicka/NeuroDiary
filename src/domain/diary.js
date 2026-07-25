@@ -531,7 +531,7 @@ export function mergeDiaryStatesAppendOnly(baseState, incomingState) {
       ...incomingEntry,
       sleepQuality: selectPreferredEntryValue(mergedEntryBase.sleepQuality, incomingEntry?.sleepQuality),
       overallStatus: selectPreferredEntryValue(mergedEntryBase.overallStatus, incomingEntry?.overallStatus),
-      medications: replaceMedications(mergedEntryBase.medications, incomingEntry?.medications),
+      medications: mergeMedicationsAppendOnly(mergedEntryBase.medications, incomingEntry?.medications),
       hourRecords: mergeHourRecordsAppendOnly(mergedEntryBase.hourRecords, incomingEntry?.hourRecords),
       updatedAt: selectLatestIsoDateTime(mergedEntryBase.updatedAt ?? "", incomingEntry?.updatedAt ?? ""),
     };
@@ -585,14 +585,19 @@ function replaceTreatmentPlan(basePlan = [], incomingPlan = []) {
     .sort((left, right) => left.time.localeCompare(right.time));
 }
 
-function replaceMedications(baseMedications = [], incomingMedications = []) {
-  const hasIncomingMedications = Array.isArray(incomingMedications) && incomingMedications.length > 0;
-  const hasBaseMedications = Array.isArray(baseMedications) && baseMedications.length > 0;
-  const sourceMedications = hasIncomingMedications || !hasBaseMedications
-    ? incomingMedications
-    : baseMedications;
-  return sourceMedications
-    .map((medication) => ({ ...medication }))
+function mergeMedicationsAppendOnly(baseMedications = [], incomingMedications = []) {
+  const mergedById = new Map();
+
+  for (const medication of [...baseMedications, ...incomingMedications]) {
+    const mergeKey = medication.id
+      ? `id:${medication.id}`
+      : `legacy:${medication.time}|${medication.name}|${medication.dose}`;
+    if (!mergedById.has(mergeKey)) {
+      mergedById.set(mergeKey, { ...medication });
+    }
+  }
+
+  return [...mergedById.values()]
     .sort((left, right) => left.time.localeCompare(right.time));
 }
 
