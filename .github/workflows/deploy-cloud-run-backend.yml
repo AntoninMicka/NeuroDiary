@@ -70,8 +70,25 @@ jobs:
             NEURODIARY_GOOGLE_CLIENT_ID=${{ vars.NEURODIARY_GOOGLE_CLIENT_ID }}
             NEURODIARY_APPLE_CLIENT_ID=${{ vars.NEURODIARY_APPLE_CLIENT_ID }}
             NEURODIARY_APPLE_REDIRECT_PATH=${{ vars.NEURODIARY_APPLE_REDIRECT_PATH }}
+            NEURODIARY_VERSION=${{ github.sha }}
           env_vars_update_strategy: merge
-          flags: "--port=8080 --allow-unauthenticated ${{ vars.CLOUD_RUN_DEPLOY_FLAGS }}"
+          flags: >-
+            --port=8080
+            --allow-unauthenticated
+            --startup-probe=httpGet.path=/readyz,httpGet.port=8080,initialDelaySeconds=0,timeoutSeconds=3,periodSeconds=5,failureThreshold=12
+            --liveness-probe=httpGet.path=/healthz,httpGet.port=8080,initialDelaySeconds=10,timeoutSeconds=3,periodSeconds=30,failureThreshold=3
+            ${{ vars.CLOUD_RUN_DEPLOY_FLAGS }}
+
+      - name: Verify deployed service
+        env:
+          SERVICE_URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          curl --fail --silent --show-error --retry 8 --retry-all-errors --retry-delay 5 \
+            "${SERVICE_URL}/healthz"
+          curl --fail --silent --show-error --retry 8 --retry-all-errors --retry-delay 5 \
+            "${SERVICE_URL}/readyz"
+          curl --fail --silent --show-error \
+            "${SERVICE_URL}/api/v1/meta"
 
       - name: Show deployed URL
         run: |

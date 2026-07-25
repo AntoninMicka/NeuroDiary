@@ -78,6 +78,10 @@ class SqliteSyncStore:
             )
             connection.commit()
 
+    def check_health(self) -> None:
+        with self._connect() as connection:
+            connection.execute("SELECT 1").fetchone()
+
     def load_latest(self, user_id: str) -> SyncEnvelopeModel | None:
         with self._connect() as connection:
             row = connection.execute(
@@ -187,6 +191,12 @@ class PostgresSyncStore:
                     """
                 )
             connection.commit()
+
+    def check_health(self) -> None:
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT 1")
+                cursor.fetchone()
 
     def load_latest(self, user_id: str) -> SyncEnvelopeModel | None:
         with self._connect() as connection:

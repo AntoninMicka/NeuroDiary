@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import json
+import logging
 import os
+import time
+import uuid
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, Header, HTTPException, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from .auth import AuthManager
 from .models import (
@@ -23,6 +27,7 @@ from .store import RevisionConflictError, create_sync_store
 
 
 APP_NAME = "NeuroDiary Sync API"
+APP_VERSION = os.getenv("NEURODIARY_VERSION", "0.1.0")
 API_TOKEN = os.getenv("NEURODIARY_API_TOKEN", "")
 DATABASE_URL = os.getenv("NEURODIARY_DATABASE_URL", "").strip()
 DATABASE_PATH = os.getenv("NEURODIARY_DATABASE_PATH", "backend/data/neurodiary-sync.db")
@@ -40,7 +45,15 @@ CORS_ORIGINS = [
 
 store = create_sync_store(database_url=DATABASE_URL or None, database_path=DATABASE_PATH)
 auth_manager = AuthManager()
-app = FastAPI(title=APP_NAME, version="0.1.0")
+logger = logging.getLogger("neurodiary")
+if not logger.handlers:
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    logger.addHandler(handler)
+logger.setLevel(os.getenv("NEURODIARY_LOG_LEVEL", "INFO").upper())
+logger.propagate = False
+
+app = FastAPI(title=APP_NAME, version=APP_VERSION)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
@@ -49,10 +62,59 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+def log_event(severity: str, event: str, **details: object) -> None:
+    payload = {
+        "severity": severity,
+        "event": event,
+        "service": "neurodiary-sync",
+        "version": APP_VERSION,
+        **details,
+    }
+    logger.log(getattr(logging, severity, logging.INFO), json.dumps(payload, separators=(",", ":")))
+
+
+@app.middleware("http")
+async def request_logging_middleware(request: Request, call_next):
+    started_at = time.perf_counter()
+    incoming_request_id = request.headers.get("x-request-id", "")
+    request_id = incoming_request_id[:128] if incoming_request_id else str(uuid.uuid4())
+    try:
+        response = await call_next(request)
+    except Exception as error:
+        log_event(
+            "ERROR",
+            "http_request_failed",
+            requestId=request_id,
+            method=request.method,
+            path=request.url.path,
+            status=500,
+            durationMs=round((time.perf_counter() - started_at) * 1000, 2),
+            errorType=type(error).__name__,
+        )
+        raise
+
+    response.headers["x-request-id"] = request_id
+    log_event(
+        "INFO" if response.status_code < 500 else "ERROR",
+        "http_request",
+        requestId=request_id,
+        method=request.method,
+        path=request.url.path,
+        status=response.status_code,
+        durationMs=round((time.perf_counter() - started_at) * 1000, 2),
+    )
+    return response
+
 
 @app.on_event("startup")
 def on_startup() -> None:
     store.initialize()
+    log_event(
+        "INFO",
+        "application_started",
+        storage="postgres" if DATABASE_URL else "sqlite",
+        auth="federated" if auth_manager.federated_auth_enabled else "legacy",
+    )
 
 
 def verify_bearer_token(
@@ -65,7 +127,38 @@ def verify_bearer_token(
 def healthcheck() -> dict[str, str]:
     backend = "postgres" if DATABASE_URL else "sqlite"
     auth_mode = "federated" if auth_manager.federated_auth_enabled else "legacy"
-    return {"status": "ok", "storage": backend, "auth": auth_mode}
+    return {"status": "ok", "storage": backend, "auth": auth_mode, "version": APP_VERSION}
+
+
+@app.get("/readyz")
+def readiness_check():
+    try:
+        store.check_health()
+    except Exception as error:
+        log_event("ERROR", "readiness_failed", errorType=type(error).__name__)
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={"status": "unavailable", "storage": "postgres" if DATABASE_URL else "sqlite"},
+        )
+    return {
+        "status": "ready",
+        "storage": "postgres" if DATABASE_URL else "sqlite",
+        "version": APP_VERSION,
+    }
+
+
+@app.get("/api/v1/meta")
+def api_metadata() -> dict[str, object]:
+    return {
+        "name": APP_NAME,
+        "version": APP_VERSION,
+        "capabilities": {
+            "encryptedSnapshotSync": True,
+            "wrappedRecoveryKey": True,
+            "federatedAuth": auth_manager.federated_auth_enabled,
+            "legacyToken": bool(API_TOKEN),
+        },
+    }
 
 
 @app.get("/api/v1/auth/config", response_model=AuthConfigResponseModel)

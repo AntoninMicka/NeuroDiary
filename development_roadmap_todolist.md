@@ -393,7 +393,7 @@ Navazující kroky:
 * audit posledních konfliktů
 * ověřit, jak bude conflict workflow fungovat nad end-to-end šifrovanými daty
 
-### [pending] 6.6 Deploy backendu
+### [ready_for_external_setup] 6.6 Deploy backendu
 
 * zvolit první cílovou platformu
   Google Cloud Run
@@ -411,13 +411,27 @@ Navazující kroky pro Cloud Run:
 * vlastní doména pro frontend API komunikaci
 * oddělit metadata synchronizace od šifrovaných uživatelských dat
 
-### [pending] 6.7 Monitoring a provoz
+Repozitar obsahuje image build, Workload Identity deploy workflow, startup/liveness probes a
+automaticky smoke test nasazene URL. Dokonceni vyzaduje konkretni GCP projekt, Cloud SQL,
+repository variables a secrets podle `docs/cloud_run_manual_todo.md`.
+
+### [in_progress] 6.7 Monitoring a provoz
 
 * structured logging
 * základní error reporting
 * healthcheck monitoring
 * zálohy serverové databáze
 * jednoduchý incident / recovery postup
+
+Aktualni stav:
+
+* strukturovane JSON request logy bez payloadu a identity uzivatele
+* korelacni `X-Request-ID`
+* oddelene liveness `/healthz` a DB readiness `/readyz`
+* capability/version endpoint a post-deploy smoke test
+* CI build frontendu a backendove health testy
+* provozni runbook v `docs/operations.md`
+* zbyva zapnout Cloud Monitoring alerty a Cloud SQL zalohy v konkretnim GCP projektu
 
 ### [pending] 6.8 Integrace mobilních úložišť
 
