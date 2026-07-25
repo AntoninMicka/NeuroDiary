@@ -5,6 +5,7 @@ import MedicationPlan from "./components/MedicationPlan.vue";
 import HourMatrix from "./components/HourMatrix.vue";
 import DaySummary from "./components/DaySummary.vue";
 import DailyTimeline from "./components/DailyTimeline.vue";
+import LongTermTrends from "./components/LongTermTrends.vue";
 import ManualSection from "./components/ManualSection.vue";
 import {
   HOUR_STATES,
@@ -175,6 +176,7 @@ const PANEL_ITEMS = [
   { id: "sekce-prehled", label: "Denni zapis" },
   { id: "sekce-leky", label: "Lecba" },
   { id: "sekce-souhrn", label: "Souhrn" },
+  { id: "sekce-trendy", label: "Trendy" },
   { id: "sekce-manualy", label: "Manualy" },
 ];
 const DATE_NAV_PANEL_IDS = new Set([
@@ -184,6 +186,7 @@ const DATE_NAV_PANEL_IDS = new Set([
   "sekce-prehled",
   "sekce-leky",
   "sekce-souhrn",
+  "sekce-trendy",
 ]);
 const installHelpText = computed(() => {
   if (isInstalledApp.value) {
@@ -1985,6 +1988,13 @@ function syncFloatingMenuHeight() {
           class="layout-summary"
           :entry="selectedEntry"
           :entries="state.entries"
+          :selected-date="state.selectedDate"
+        />
+        <LongTermTrends
+          v-else-if="activePanelId === 'sekce-trendy'"
+          class="layout-trends"
+          :entries="state.entries"
+          :treatment-plan="sortedTreatmentPlan"
           :selected-date="state.selectedDate"
         />
         <ManualSection v-else-if="activePanelId === 'sekce-manualy'" class="layout-manuals" />

@@ -161,7 +161,7 @@ První implementační vlna pro analytickou vrstvu:
 
 ### [done] 3.2 Denní časová osa
 
-### [pending] 3.3 Rozložení stavů
+### [done] 3.3 Rozložení stavů
 
 Pouze jako drobná doplňková informace pro orientaci v datech.
 
@@ -171,7 +171,16 @@ Poznámka:
 
 ### [pending] 3.4 Wearing-off analýza
 
-### [pending] 3.5 Dlouhodobé trendy
+### [in_progress] 3.5 Dlouhodobé trendy
+
+Aktuální stav:
+
+* samostatný pohled pro období 30, 90, 180 a 365 dní
+* týdenní rozložení ON / MID / OFF / dyskineze / spánek
+* porovnání podílu ON a OFF mezi první a druhou polovinou období
+* pokrytí dat a průměrný počet zaznamenaných hodin
+* orientační adherence po týdnech s upozorněním na použití aktuálního léčebného plánu
+* zbývá verzování léčebného plánu a klinické ověření interpretace metrik
 
 ### [pending] 3.6 Kvalita dat pro analýzy
 

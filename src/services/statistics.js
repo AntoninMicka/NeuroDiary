@@ -1,4 +1,5 @@
 import { HOUR_STATES, getStateDefinition } from "../domain/diary.js";
+import { analyzeMedicationAdherence } from "./adherence.js";
 
 const TRACKED_SUMMARY_STATES = HOUR_STATES.map((state) => state.key);
 
@@ -134,4 +135,124 @@ export function buildStateDistribution(hourCounts = {}) {
       percent,
     };
   });
+}
+
+function sumStateHours(target, source) {
+  for (const stateKey of TRACKED_SUMMARY_STATES) {
+    target[stateKey] += source[stateKey] ?? 0;
+  }
+}
+
+function createEmptyStateTotals() {
+  return TRACKED_SUMMARY_STATES.reduce((totals, stateKey) => {
+    totals[stateKey] = 0;
+    return totals;
+  }, {});
+}
+
+export function analyzeLongTermTrends(entries, treatmentPlan, endDateKey, days = 90) {
+  const dateKeys = getPeriodDateKeys(endDateKey, days);
+  const daily = dateKeys.map((dateKey) => {
+    const entry = entries[dateKey];
+    const analysis = entry ? analyzeEntry(entry) : null;
+    const trackedHours = analysis
+      ? Object.values(analysis.hourCounts).reduce((sum, count) => sum + count, 0)
+      : 0;
+    const adherence = analyzeMedicationAdherence({
+      treatmentPlan,
+      recordedMedications: entry?.medications ?? [],
+      selectedDate: dateKey,
+      todayDate: endDateKey,
+      now: new Date(`${endDateKey}T23:59:00`),
+    });
+
+    return {
+      dateKey,
+      hasData: trackedHours > 0 || (entry?.medications?.length ?? 0) > 0,
+      trackedHours,
+      hourCounts: analysis?.hourCounts ?? {},
+      medicationCount: analysis?.medicationCount ?? 0,
+      adherence,
+    };
+  });
+
+  const buckets = [];
+  for (let index = 0; index < daily.length; index += 7) {
+    const bucketDays = daily.slice(index, index + 7);
+    const totals = createEmptyStateTotals();
+    let recordedDays = 0;
+    let trackedHours = 0;
+    let medicationCount = 0;
+    let takenCount = 0;
+    let missedCount = 0;
+
+    for (const day of bucketDays) {
+      if (day.hasData) {
+        recordedDays += 1;
+      }
+      trackedHours += day.trackedHours;
+      medicationCount += day.medicationCount;
+      takenCount += day.adherence.summary.takenCount;
+      missedCount += day.adherence.summary.missedCount;
+      sumStateHours(totals, day.hourCounts);
+    }
+
+    const evaluatedDoses = takenCount + missedCount;
+    buckets.push({
+      fromDate: bucketDays[0].dateKey,
+      toDate: bucketDays.at(-1).dateKey,
+      dayCount: bucketDays.length,
+      recordedDays,
+      trackedHours,
+      medicationCount,
+      totals,
+      distribution: buildStateDistribution(totals),
+      adherencePercent: evaluatedDoses > 0 ? Math.round((takenCount / evaluatedDoses) * 100) : null,
+    });
+  }
+
+  const midpoint = Math.floor(daily.length / 2);
+  const summarizeHalf = (half) => {
+    const totals = createEmptyStateTotals();
+    let recordedDays = 0;
+    let trackedHours = 0;
+    for (const day of half) {
+      if (day.hasData) {
+        recordedDays += 1;
+      }
+      trackedHours += day.trackedHours;
+      sumStateHours(totals, day.hourCounts);
+    }
+    const motorHours = (totals.on ?? 0) + (totals.partial ?? 0) + (totals.off ?? 0) + (totals.dyskinesia ?? 0);
+    return {
+      recordedDays,
+      trackedHours,
+      onPercent: motorHours > 0 ? ((totals.on ?? 0) / motorHours) * 100 : null,
+      offPercent: motorHours > 0 ? ((totals.off ?? 0) / motorHours) * 100 : null,
+    };
+  };
+  const firstHalf = summarizeHalf(daily.slice(0, midpoint));
+  const secondHalf = summarizeHalf(daily.slice(midpoint));
+  const recordedDays = daily.filter((day) => day.hasData).length;
+  const trackedHours = daily.reduce((sum, day) => sum + day.trackedHours, 0);
+
+  return {
+    fromDate: dateKeys[0],
+    toDate: dateKeys.at(-1),
+    days,
+    recordedDays,
+    coveragePercent: Math.round((recordedDays / days) * 100),
+    averageTrackedHours: recordedDays > 0 ? trackedHours / recordedDays : 0,
+    buckets,
+    firstHalf,
+    secondHalf,
+    onChange:
+      firstHalf.onPercent === null || secondHalf.onPercent === null
+        ? null
+        : secondHalf.onPercent - firstHalf.onPercent,
+    offChange:
+      firstHalf.offPercent === null || secondHalf.offPercent === null
+        ? null
+        : secondHalf.offPercent - firstHalf.offPercent,
+  };
 }
