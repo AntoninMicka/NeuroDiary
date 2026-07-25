@@ -320,6 +320,12 @@ textarea {
   min-width: 220px;
 }
 
+.quick-sync-button {
+  flex: 0 0 auto;
+  min-width: 10.5rem;
+  white-space: nowrap;
+}
+
 .utility-menu {
   position: relative;
 }
@@ -1399,6 +1405,10 @@ textarea {
   .floating-menu {
     top: 0.6rem;
     padding: 0.75rem 0.8rem 0.85rem;
+  }
+
+  .quick-sync-button {
+    width: 100%;
   }
 
   .panel-switcher-pills {

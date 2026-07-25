@@ -224,6 +224,14 @@ const integrityHeadline = computed(() => {
   return "Audit nenasel zadne chyby ani varovani.";
 });
 const effectiveSyncEndpoint = computed(() => getEffectiveSyncEndpoint(syncSettings));
+const hasSyncIdentity = computed(() =>
+  requiresSignedInUserForSync.value
+    ? Boolean(authSession.value?.user)
+    : Boolean(syncSettings.apiToken?.trim()),
+);
+const isQuickSyncAvailable = computed(
+  () => isOnline.value && Boolean(effectiveSyncEndpoint.value) && hasSyncIdentity.value && hasSyncMasterKeyStored.value,
+);
 const buildInfo = __APP_BUILD_INFO__;
 const buildTimestampLabel = computed(() => {
   if (!buildInfo?.builtAt) {
@@ -366,6 +374,9 @@ onMounted(async () => {
   setBootstrapStatus("Initialization completed.");
   isReady.value = true;
   await tryAutoRecoverLocalSyncKey();
+  if (isQuickSyncAvailable.value) {
+    void quickSync({ automatic: true });
+  }
 
   await nextTick();
   setBootstrapStatus("Synchronizing floating menu layout.");
@@ -1208,7 +1219,7 @@ async function initializeSync() {
 
 async function pullSync() {
   if (!ensureSyncIdentity()) {
-    return;
+    return false;
   }
 
   isSyncBusy.value = true;
@@ -1218,7 +1229,7 @@ async function pullSync() {
     refreshSyncKeyMaterialStatus();
     if (!result.state) {
       storageMessage.value = "Na serveru zatim nejsou zadna data.";
-      return;
+      return true;
     }
 
     storageMessage.value = "Slučuji cloud data s lokalnimi zaznamy.";
@@ -1235,6 +1246,7 @@ async function pullSync() {
     }));
     markCloudAuthenticated(authSession.value?.user ?? null);
     storageMessage.value = "Data byla doplnena ze serveru bez mazani lokalnich zaznamu.";
+    return true;
   } catch (error) {
     console.error("Sync pull failed", error);
     Object.assign(syncSettings, saveSyncSettings({
@@ -1243,6 +1255,7 @@ async function pullSync() {
       lastSyncMessage: error.message,
     }));
     storageMessage.value = `Synchronizace ze serveru selhala: ${error.message}`;
+    return false;
   } finally {
     isSyncBusy.value = false;
   }
@@ -1252,7 +1265,7 @@ async function pushSync(force = false) {
   const shouldForce = force === true;
 
   if (!ensureSyncIdentity()) {
-    return;
+    return false;
   }
 
   isSyncBusy.value = true;
@@ -1291,7 +1304,7 @@ async function pushSync(force = false) {
       markCloudAuthenticated(authSession.value?.user ?? null);
       refreshSyncKeyMaterialStatus();
       storageMessage.value = "Konflikt byl sloucen append-only a synchronizace dokoncena.";
-      return;
+      return true;
     }
 
     Object.assign(syncSettings, saveSyncSettings({
@@ -1305,6 +1318,7 @@ async function pushSync(force = false) {
     markCloudAuthenticated(authSession.value?.user ?? null);
     refreshSyncKeyMaterialStatus();
     storageMessage.value = "Lokalni data byla odeslana do cloud syncu.";
+    return true;
   } catch (error) {
     console.error("Sync push failed", error);
     Object.assign(syncSettings, saveSyncSettings({
@@ -1313,9 +1327,37 @@ async function pushSync(force = false) {
       lastSyncMessage: error.message,
     }));
     storageMessage.value = `Synchronizace na server selhala: ${error.message}`;
+    return false;
   } finally {
     isSyncBusy.value = false;
   }
+}
+
+async function quickSync(options = {}) {
+  const automatic = options?.automatic === true;
+  if (isSyncBusy.value || !isQuickSyncAvailable.value) {
+    if (!automatic && !isOnline.value) {
+      storageMessage.value = "Rychlou synchronizaci nelze spustit bez pripojeni k internetu.";
+    }
+    return false;
+  }
+
+  storageMessage.value = automatic
+    ? "Spoustim automatickou synchronizaci: pull a pote push."
+    : "Spoustim rychlou synchronizaci: pull a pote push.";
+
+  const pullCompleted = await pullSync();
+  if (!pullCompleted) {
+    return false;
+  }
+
+  const pushCompleted = await pushSync();
+  if (pushCompleted) {
+    storageMessage.value = automatic
+      ? "Automaticka synchronizace byla dokoncena."
+      : "Rychla synchronizace byla dokoncena.";
+  }
+  return pushCompleted;
 }
 
 function persistRecoverySecret() {
@@ -1502,6 +1544,15 @@ function syncFloatingMenuHeight() {
             </div>
           </div>
 
+          <button
+            class="primary-button quick-sync-button"
+            type="button"
+            :disabled="isSyncBusy || !isQuickSyncAvailable"
+            :title="isQuickSyncAvailable ? 'Stahnout, sloucit a odeslat data' : 'Synchronizace neni dostupna nebo nastavena'"
+            @click="quickSync"
+          >
+            {{ isSyncBusy ? "Synchronizuji…" : "Synchronizovat" }}
+          </button>
         </div>
 
         <div class="panel-switcher" aria-label="Prepinani panelu a data">
