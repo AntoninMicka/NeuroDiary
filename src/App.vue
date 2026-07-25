@@ -69,6 +69,24 @@ import {
   getBootstrapLogEntries,
 } from "./services/bootstrapLogger.js";
 
+const PENDING_SYNC_CHANGES_STORAGE_KEY = "neurodiary-pending-sync-changes-v1";
+
+function loadPendingSyncChanges() {
+  try {
+    return globalThis.localStorage?.getItem(PENDING_SYNC_CHANGES_STORAGE_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function savePendingSyncChanges(hasPendingChanges) {
+  try {
+    globalThis.localStorage?.setItem(PENDING_SYNC_CHANGES_STORAGE_KEY, String(hasPendingChanges));
+  } catch {
+    // Local state remains authoritative even when the browser blocks localStorage.
+  }
+}
+
 const diaryRepository = ref(null);
 const fileInput = ref(null);
 const jsonFileInput = ref(null);
@@ -107,6 +125,7 @@ const generatedRecoverySecret = ref("");
 const storedRecoverySecret = ref(loadSyncKeyMaterial().recoverySecret ?? "");
 const syncKeyMaterialRefreshToken = ref(0);
 const isSyncBusy = ref(false);
+const hasPendingSyncChanges = ref(loadPendingSyncChanges());
 const isAuthBusy = ref(false);
 const isAutoRecoveringSyncKey = ref(false);
 const isRecoveryCameraBusy = ref(false);
@@ -282,6 +301,9 @@ let panelSwipePointerType = "";
 let menuResizeObserver = null;
 let mediaQueryList = null;
 let quickCaptureClockIntervalId = 0;
+let automaticPushIntervalId = 0;
+let localChangeVersion = 0;
+let isUpdatingSyncMetadata = false;
 const SERVICE_WORKER_RELOAD_GUARD_KEY = "neurodiary-sw-reload-guard-v1";
 
 function setBootstrapStatus(message, level = "info") {
@@ -327,9 +349,23 @@ watch(
   { deep: true },
 );
 
+watch(
+  state,
+  () => {
+    if (!isReady.value || isApplyingExternalState.value || isUpdatingSyncMetadata) {
+      return;
+    }
+    localChangeVersion += 1;
+    hasPendingSyncChanges.value = true;
+    savePendingSyncChanges(true);
+  },
+  { deep: true, flush: "sync" },
+);
+
 onMounted(async () => {
   refreshQuickCaptureClock();
   quickCaptureClockIntervalId = globalThis.setInterval(refreshQuickCaptureClock, 30_000);
+  automaticPushIntervalId = globalThis.setInterval(pushPendingChanges, 60_000);
   globalThis.addEventListener("focus", refreshQuickCaptureClock);
   globalThis.document?.addEventListener("visibilitychange", refreshQuickCaptureClock);
   globalThis.addEventListener(BOOTSTRAP_LOG_EVENT, syncBootstrapLogEntries);
@@ -415,6 +451,7 @@ watchEffect(() => {
 
 onUnmounted(() => {
   globalThis.clearInterval(quickCaptureClockIntervalId);
+  globalThis.clearInterval(automaticPushIntervalId);
   globalThis.removeEventListener("focus", refreshQuickCaptureClock);
   globalThis.document?.removeEventListener("visibilitychange", refreshQuickCaptureClock);
   closeRecoveryCameraScanner();
@@ -602,16 +639,21 @@ function closeIntegrityReportPanel() {
 }
 
 function markCloudAuthenticated(user = null) {
-  if (user ?? authSession.value?.user) {
-    applyAuthenticatedAccount(user ?? authSession.value?.user);
-    return;
-  }
+  isUpdatingSyncMetadata = true;
+  try {
+    if (user ?? authSession.value?.user) {
+      applyAuthenticatedAccount(user ?? authSession.value?.user);
+      return;
+    }
 
-  if (!isFederatedAuthEnabled.value && syncSettings.apiToken?.trim()) {
-    applyAuthenticatedAccount({
-      provider: "cloud-token",
-      userId: "legacy-token-user",
-    });
+    if (!isFederatedAuthEnabled.value && syncSettings.apiToken?.trim()) {
+      applyAuthenticatedAccount({
+        provider: "cloud-token",
+        userId: "legacy-token-user",
+      });
+    }
+  } finally {
+    isUpdatingSyncMetadata = false;
   }
 }
 
@@ -1269,6 +1311,7 @@ async function pushSync(force = false) {
   }
 
   isSyncBusy.value = true;
+  const pushedChangeVersion = localChangeVersion;
   try {
     storageMessage.value = "Pripravuji lokalni stav pro odeslani do cloud syncu.";
     const result = await pushCloudState({
@@ -1303,6 +1346,7 @@ async function pushSync(force = false) {
       }));
       markCloudAuthenticated(authSession.value?.user ?? null);
       refreshSyncKeyMaterialStatus();
+      clearPushedChanges(pushedChangeVersion);
       storageMessage.value = "Konflikt byl sloucen append-only a synchronizace dokoncena.";
       return true;
     }
@@ -1317,6 +1361,7 @@ async function pushSync(force = false) {
     }));
     markCloudAuthenticated(authSession.value?.user ?? null);
     refreshSyncKeyMaterialStatus();
+    clearPushedChanges(pushedChangeVersion);
     storageMessage.value = "Lokalni data byla odeslana do cloud syncu.";
     return true;
   } catch (error) {
@@ -1331,6 +1376,22 @@ async function pushSync(force = false) {
   } finally {
     isSyncBusy.value = false;
   }
+}
+
+function clearPushedChanges(pushedChangeVersion) {
+  if (localChangeVersion === pushedChangeVersion) {
+    hasPendingSyncChanges.value = false;
+    savePendingSyncChanges(false);
+  }
+}
+
+async function pushPendingChanges() {
+  if (!hasPendingSyncChanges.value || isSyncBusy.value || !isQuickSyncAvailable.value) {
+    return false;
+  }
+
+  storageMessage.value = "Byly zjisteny lokalni zmeny. Spoustim automaticky push.";
+  return pushSync();
 }
 
 async function quickSync(options = {}) {
@@ -1541,6 +1602,7 @@ function syncFloatingMenuHeight() {
               </span>
               <span v-if="pwaOfflineReady" class="status-chip status-chip-ready">Offline cache ready</span>
               <span v-if="pwaUpdateRegistration" class="status-chip status-chip-update">Update ready</span>
+              <span v-if="hasPendingSyncChanges" class="status-chip status-chip-update">Zmeny cekaji na sync</span>
             </div>
           </div>
 
