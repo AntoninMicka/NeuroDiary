@@ -188,6 +188,7 @@ export class SqliteDiaryRepository extends DiaryRepository {
     const birthYear = this.selectSetting("birth_year");
     const accountJson = this.selectSetting("account_json");
     const deletedEntryDatesJson = this.selectSetting("deleted_entry_dates_json");
+    const deletedMedicationIdsJson = this.selectSetting("deleted_medication_ids_json");
     state.treatmentPlan = this.selectTreatmentPlan();
     if (selectedDate) {
       state.selectedDate = selectedDate;
@@ -210,6 +211,13 @@ export class SqliteDiaryRepository extends DiaryRepository {
         state.deletedEntryDates = JSON.parse(deletedEntryDatesJson);
       } catch {
         state.deletedEntryDates = {};
+      }
+    }
+    if (deletedMedicationIdsJson) {
+      try {
+        state.deletedMedicationIds = JSON.parse(deletedMedicationIdsJson);
+      } catch {
+        state.deletedMedicationIds = {};
       }
     }
 
@@ -274,6 +282,10 @@ export class SqliteDiaryRepository extends DiaryRepository {
       this.db.run("INSERT INTO app_settings (key, value) VALUES (?, ?)", [
         "deleted_entry_dates_json",
         JSON.stringify(state.deletedEntryDates ?? {}),
+      ]);
+      this.db.run("INSERT INTO app_settings (key, value) VALUES (?, ?)", [
+        "deleted_medication_ids_json",
+        JSON.stringify(state.deletedMedicationIds ?? {}),
       ]);
 
       for (const item of state.treatmentPlan ?? []) {

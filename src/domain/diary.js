@@ -130,6 +130,7 @@ export function createInitialState() {
     },
     treatmentPlan: [],
     deletedEntryDates: {},
+    deletedMedicationIds: {},
     entries: {},
   };
 }
@@ -322,13 +323,13 @@ function normalizeTreatmentPlan(rawPlan) {
     .sort((left, right) => left.time.localeCompare(right.time));
 }
 
-function normalizeDeletedEntryDates(rawDeletedEntryDates) {
-  if (!rawDeletedEntryDates || typeof rawDeletedEntryDates !== "object") {
+function normalizeDeletionMap(rawDeletionMap) {
+  if (!rawDeletionMap || typeof rawDeletionMap !== "object") {
     return {};
   }
 
   return Object.fromEntries(
-    Object.entries(rawDeletedEntryDates)
+    Object.entries(rawDeletionMap)
       .filter(
         ([dateKey, deletedAt]) =>
           typeof dateKey === "string" && typeof deletedAt === "string" && deletedAt.trim().length > 0,
@@ -361,7 +362,8 @@ function sanitizeStateShape(parsed, { ensureSelectedDate = true, hydrateHourReco
   }
 
   state.treatmentPlan = normalizeTreatmentPlan(state.treatmentPlan);
-  state.deletedEntryDates = normalizeDeletedEntryDates(state.deletedEntryDates);
+  state.deletedEntryDates = normalizeDeletionMap(state.deletedEntryDates);
+  state.deletedMedicationIds = normalizeDeletionMap(state.deletedMedicationIds);
 
   state.account.isAuthenticated = state.account.isAuthenticated === true;
   state.account.provider = typeof state.account.provider === "string" ? state.account.provider : "";
@@ -380,6 +382,7 @@ function sanitizeStateShape(parsed, { ensureSelectedDate = true, hydrateHourReco
       entry.medications = entry.medications
         .filter((item) => item && typeof item.name === "string" && typeof item.dose === "string" && typeof item.time === "string")
         .map((item) => createMedication(item))
+        .filter((item) => !state.deletedMedicationIds[item.id])
         .sort((left, right) => left.time.localeCompare(right.time));
     }
     reconcileEntryHourState(entry, "latest", { hydrateFromHours: hydrateHourRecordsFromHours });
@@ -439,6 +442,17 @@ export function markEntryDeleted(state, dateKey, deletedAt = new Date().toISOStr
 
   state.deletedEntryDates[dateKey] = deletedAt;
   delete state.entries[dateKey];
+}
+
+export function markMedicationDeleted(state, medicationId, deletedAt = new Date().toISOString()) {
+  if (!state.deletedMedicationIds || typeof state.deletedMedicationIds !== "object") {
+    state.deletedMedicationIds = {};
+  }
+
+  state.deletedMedicationIds[medicationId] = deletedAt;
+  for (const entry of Object.values(state.entries ?? {})) {
+    entry.medications = (entry.medications ?? []).filter((item) => item.id !== medicationId);
+  }
 }
 
 export function prepareStateForSync(state) {
@@ -501,6 +515,10 @@ export function mergeDiaryStatesAppendOnly(baseState, incomingState) {
     ...normalizedBaseState.deletedEntryDates,
     ...normalizedIncomingState.deletedEntryDates,
   };
+  mergedState.deletedMedicationIds = mergeDeletionMaps(
+    normalizedBaseState.deletedMedicationIds,
+    normalizedIncomingState.deletedMedicationIds,
+  );
 
   for (const dateKey of allDateKeys) {
     const deletionAt = selectLatestIsoDateTime(
@@ -556,6 +574,14 @@ function compareIsoDateTimes(leftValue = "", rightValue = "") {
 
 function selectLatestIsoDateTime(leftValue = "", rightValue = "") {
   return compareIsoDateTimes(leftValue, rightValue) >= 0 ? leftValue : rightValue;
+}
+
+function mergeDeletionMaps(baseMap = {}, incomingMap = {}) {
+  const mergedMap = { ...baseMap };
+  for (const [key, incomingDeletedAt] of Object.entries(incomingMap)) {
+    mergedMap[key] = selectLatestIsoDateTime(mergedMap[key] ?? "", incomingDeletedAt);
+  }
+  return mergedMap;
 }
 
 function selectPreferredProfileValue(baseValue = "", incomingValue = "") {

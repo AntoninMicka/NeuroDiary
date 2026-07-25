@@ -17,6 +17,7 @@ import {
   formatLongDate,
   getHourRecordCount,
   getStateDefinition,
+  markMedicationDeleted,
   markEntryDeleted,
   mergeDiaryStatesAppendOnly,
   shiftDateKey,
@@ -144,6 +145,7 @@ const state = reactive({
   },
   treatmentPlan: [],
   deletedEntryDates: {},
+  deletedMedicationIds: {},
   entries: {},
 });
 
@@ -759,9 +761,7 @@ function addMedication(payload) {
 }
 
 function removeMedication(medicationId) {
-  selectedEntry.value.medications = selectedEntry.value.medications.filter(
-    (item) => item.id !== medicationId,
-  );
+  markMedicationDeleted(state, medicationId);
   selectedEntry.value.updatedAt = new Date().toISOString();
 }
 
@@ -1500,6 +1500,7 @@ function applyImportedState(nextState) {
     state.birthYear = nextState.birthYear ?? "";
     state.treatmentPlan = nextState.treatmentPlan ?? [];
     state.deletedEntryDates = nextState.deletedEntryDates ?? {};
+    state.deletedMedicationIds = nextState.deletedMedicationIds ?? {};
     state.account = nextState.account ?? state.account;
     state.entries = nextState.entries ?? {};
     ensureEntry(state, state.selectedDate);
@@ -2104,7 +2105,8 @@ function syncFloatingMenuHeight() {
             <p>
               davky: {{ integritySummary.medicationCount }} ·
               hodinove zaznamy: {{ integritySummary.hourRecordCount }} ·
-              mazaci znacky: {{ integritySummary.deletedDateCount }}
+              smazane dny: {{ integritySummary.deletedDateCount }} ·
+              smazane davky: {{ integritySummary.deletedMedicationCount }}
             </p>
             <p>
               chyby: {{ integritySummary.issueCount }} ·

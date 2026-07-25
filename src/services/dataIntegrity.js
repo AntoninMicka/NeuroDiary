@@ -99,6 +99,7 @@ export function auditDiaryState(inputState) {
     medicationCount: 0,
     hourRecordCount: 0,
     deletedDateCount: Object.keys(state.deletedEntryDates ?? {}).length,
+    deletedMedicationCount: Object.keys(state.deletedMedicationIds ?? {}).length,
     issueCount: 0,
     warningCount: 0,
   };
@@ -134,6 +135,22 @@ export function auditDiaryState(inputState) {
         scope: "deletedEntryDates",
         dateKey,
         value: deletedAt,
+      });
+    }
+  }
+
+  for (const [medicationId, deletedAt] of Object.entries(state.deletedMedicationIds ?? {})) {
+    if (!medicationId.trim()) {
+      pushIssue(issues, "error", "Mazaci znacka davky nema platne ID.", {
+        scope: "deletedMedicationIds",
+        value: deletedAt,
+      });
+    }
+
+    if (!isIsoDateTime(deletedAt)) {
+      pushIssue(issues, "error", "Mazaci znacka davky nema platny cas smazani.", {
+        scope: "deletedMedicationIds",
+        value: medicationId,
       });
     }
   }
