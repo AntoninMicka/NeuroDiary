@@ -82,7 +82,7 @@ const isReady = ref(false);
 const repositoryMode = ref("loading");
 const storageMessage = ref("");
 const bootstrapStatus = ref("Starting application bootstrap.");
-const currentHourLabel = ref(getTrackableHourLabel());
+const quickCaptureNow = ref(new Date());
 const selectedStateKey = ref("on");
 const selectedTreatmentPlanId = ref("");
 const deferredInstallPrompt = ref(null);
@@ -181,6 +181,13 @@ const quickCaptureMedicationLabel = computed(() => {
   const item = selectedTreatmentPlanItem.value;
   return item ? `${item.name} ${item.dose}` : "Davku z planu";
 });
+const currentHourLabel = computed(() => getTrackableHourLabel(quickCaptureNow.value));
+const currentTimeLabel = computed(() =>
+  new Intl.DateTimeFormat("cs-CZ", {
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(quickCaptureNow.value),
+);
 const currentHourRecordCount = computed(() => getHourRecordCount(selectedEntry.value, currentHourLabel.value));
 const canGoToNextDate = computed(() => state.selectedDate < getTodayKey());
 const showDateSwitcher = computed(() => DATE_NAV_PANEL_IDS.has(activePanelId.value));
@@ -266,6 +273,7 @@ let panelSwipePointerType = "";
 
 let menuResizeObserver = null;
 let mediaQueryList = null;
+let quickCaptureClockIntervalId = 0;
 const SERVICE_WORKER_RELOAD_GUARD_KEY = "neurodiary-sw-reload-guard-v1";
 
 function setBootstrapStatus(message, level = "info") {
@@ -312,6 +320,10 @@ watch(
 );
 
 onMounted(async () => {
+  refreshQuickCaptureClock();
+  quickCaptureClockIntervalId = globalThis.setInterval(refreshQuickCaptureClock, 30_000);
+  globalThis.addEventListener("focus", refreshQuickCaptureClock);
+  globalThis.document?.addEventListener("visibilitychange", refreshQuickCaptureClock);
   globalThis.addEventListener(BOOTSTRAP_LOG_EVENT, syncBootstrapLogEntries);
   setBootstrapStatus("Initializing install and connectivity state.");
   try {
@@ -391,6 +403,9 @@ watchEffect(() => {
 });
 
 onUnmounted(() => {
+  globalThis.clearInterval(quickCaptureClockIntervalId);
+  globalThis.removeEventListener("focus", refreshQuickCaptureClock);
+  globalThis.document?.removeEventListener("visibilitychange", refreshQuickCaptureClock);
   closeRecoveryCameraScanner();
   globalThis.removeEventListener(BOOTSTRAP_LOG_EVENT, syncBootstrapLogEntries);
   menuResizeObserver?.disconnect();
@@ -426,8 +441,8 @@ function updateSyncSetting(field, value) {
   Object.assign(syncSettings, saveSyncSettings(syncSettings));
 }
 
-function updateCurrentHourLabel(value) {
-  currentHourLabel.value = value;
+function refreshQuickCaptureClock() {
+  quickCaptureNow.value = new Date();
 }
 
 function refreshSyncKeyMaterialStatus() {
@@ -435,8 +450,8 @@ function refreshSyncKeyMaterialStatus() {
   storedRecoverySecret.value = loadSyncKeyMaterial().recoverySecret ?? "";
 }
 
-function getCurrentTimeLabel() {
-  return new Date().toTimeString().slice(0, 5);
+function getCurrentTimeLabel(date = new Date()) {
+  return date.toTimeString().slice(0, 5);
 }
 
 function updateSelectedStateKey(value) {
@@ -744,10 +759,14 @@ function updateHour({ label, stateKey }) {
 }
 
 function writeCurrentState() {
-  appendHourStateRecord(selectedEntry.value, currentHourLabel.value, selectedStateKey.value, {
-    source: "manual",
+  const recordedAt = new Date();
+  const hourLabel = getTrackableHourLabel(recordedAt);
+  quickCaptureNow.value = recordedAt;
+  appendHourStateRecord(selectedEntry.value, hourLabel, selectedStateKey.value, {
+    source: "quick-capture",
+    recordedAt: recordedAt.toISOString(),
   });
-  storageMessage.value = `Stav ${getStateDefinition(selectedStateKey.value).label} zapsan pro hodinu ${currentHourLabel.value}.`;
+  storageMessage.value = `Stav ${getStateDefinition(selectedStateKey.value).label} zapsan v ${getCurrentTimeLabel(recordedAt)} pro hodinu ${hourLabel}.`;
 }
 
 async function resetSelectedDateEverywhere() {
@@ -1825,18 +1844,10 @@ function syncFloatingMenuHeight() {
               </p>
             </div>
             <div class="floating-quick-capture-form">
-              <label>
-                <span>Aktualni hodina</span>
-                <select
-                  :value="currentHourLabel"
-                  :disabled="!isSelectedDateEditable"
-                  @input="updateCurrentHourLabel($event.target.value)"
-                >
-                  <option v-for="hourLabel in Object.keys(selectedEntry.hours)" :key="hourLabel" :value="hourLabel">
-                    {{ hourLabel }}
-                  </option>
-                </select>
-              </label>
+              <p class="panel-tip">
+                Systemovy cas: <strong>{{ currentTimeLabel }}</strong> · zapis do hodiny
+                <strong>{{ currentHourLabel }}</strong>
+              </p>
 
               <label>
                 <span>Aktualni stav</span>
