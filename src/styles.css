@@ -944,6 +944,39 @@ textarea {
   margin-top: 1rem;
 }
 
+.medication-reminder-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(10rem, auto);
+  gap: 0.8rem;
+  align-items: end;
+  margin-top: 1rem;
+  padding: 0.9rem;
+  border-radius: 16px;
+  background: rgba(31, 122, 140, 0.07);
+  border: 1px solid rgba(31, 122, 140, 0.12);
+}
+
+.medication-reminder-card > div,
+.medication-reminder-card label {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.reminder-toggle {
+  grid-template-columns: auto auto;
+  align-items: center;
+  align-self: center;
+}
+
+.reminder-toggle input {
+  width: 1.2rem;
+  height: 1.2rem;
+}
+
+.medication-reminder-note {
+  grid-column: 1 / -1;
+}
+
 .adherence-summary > div {
   display: grid;
   gap: 0.2rem;
@@ -1684,6 +1717,11 @@ textarea {
 
   .adherence-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .medication-reminder-card {
+    grid-template-columns: 1fr;
+    align-items: stretch;
   }
 
   .adherence-list li {

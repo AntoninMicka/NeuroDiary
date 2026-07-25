@@ -1,4 +1,4 @@
-const CACHE_NAME = "neurodiary-shell-v1";
+const CACHE_NAME = "neurodiary-shell-v2";
 const APP_SHELL = ["/", "/index.html", "/manifest.webmanifest", "/icons/icon-192.svg", "/icons/icon-512.svg"];
 
 self.addEventListener("install", (event) => {
@@ -42,6 +42,21 @@ self.addEventListener("message", (event) => {
   if (event.data?.type === "SKIP_WAITING") {
     self.skipWaiting();
   }
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const targetUrl = new URL(event.notification.data?.url ?? "/", self.location.origin).href;
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(async (clients) => {
+      const existingClient = clients.find((client) => new URL(client.url).origin === self.location.origin);
+      if (existingClient) {
+        await existingClient.focus();
+        return;
+      }
+      await self.clients.openWindow(targetUrl);
+    }),
+  );
 });
 
 async function handleNavigation(request) {

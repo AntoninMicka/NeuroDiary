@@ -76,6 +76,14 @@ import {
   validateBirthYear,
   validateMedicationInput,
 } from "./services/validation.js";
+import {
+  canUseMedicationNotifications,
+  checkMedicationReminders,
+  getMedicationNotificationPermission,
+  loadMedicationReminderSettings,
+  requestMedicationNotificationPermission,
+  saveMedicationReminderSettings,
+} from "./services/medicationReminders.js";
 
 const PENDING_SYNC_CHANGES_STORAGE_KEY = "neurodiary-pending-sync-changes-v1";
 
@@ -126,6 +134,7 @@ const isIntegrityReportOpen = ref(false);
 const isRecoveryTransferOpen = ref(false);
 const isRecoveryCameraOpen = ref(false);
 const syncSettings = reactive(loadSyncSettings());
+const medicationReminderSettings = reactive(loadMedicationReminderSettings());
 const authConfig = reactive(createDefaultAuthConfig());
 const authSession = ref(loadStoredAuthSession());
 const previousAuthUserId = ref(authSession.value?.user?.userId ?? "");
@@ -142,6 +151,7 @@ const isApplyingExternalState = ref(false);
 const bootstrapLogEntries = ref(getBootstrapLogEntries());
 const isCapturingBootstrapProgress = ref(true);
 const recoveryCameraMessage = ref("");
+const medicationNotificationPermission = ref(getMedicationNotificationPermission());
 const state = reactive({
   selectedDate: getTodayKey(),
   patientName: "",
@@ -263,6 +273,7 @@ const hasSyncIdentity = computed(() =>
 const isQuickSyncAvailable = computed(
   () => isOnline.value && Boolean(effectiveSyncEndpoint.value) && hasSyncIdentity.value && hasSyncMasterKeyStored.value,
 );
+const medicationNotificationsSupported = computed(() => canUseMedicationNotifications());
 const buildInfo = __APP_BUILD_INFO__;
 const buildTimestampLabel = computed(() => {
   if (!buildInfo?.builtAt) {
@@ -421,6 +432,7 @@ onMounted(async () => {
   }
   setBootstrapStatus("Initialization completed.");
   isReady.value = true;
+  await checkDueMedicationReminders();
   await tryAutoRecoverLocalSyncKey();
   if (isQuickSyncAvailable.value) {
     void quickSync({ automatic: true });
@@ -515,6 +527,56 @@ function updateSyncSetting(field, value) {
 
 function refreshQuickCaptureClock() {
   quickCaptureNow.value = new Date();
+  void checkDueMedicationReminders();
+}
+
+async function setMedicationRemindersEnabled(enabled) {
+  if (!enabled) {
+    Object.assign(medicationReminderSettings, saveMedicationReminderSettings({
+      ...medicationReminderSettings,
+      enabled: false,
+    }));
+    storageMessage.value = "Pripomenuti leku byla vypnuta.";
+    return;
+  }
+
+  const permission = await requestMedicationNotificationPermission();
+  medicationNotificationPermission.value = permission;
+  const wasEnabled = permission === "granted";
+  Object.assign(medicationReminderSettings, saveMedicationReminderSettings({
+    ...medicationReminderSettings,
+    enabled: wasEnabled,
+  }));
+  storageMessage.value = wasEnabled
+    ? "Pripomenuti leku jsou zapnuta."
+    : "Prohlizec nepovolil systemova upozorneni.";
+  if (wasEnabled) {
+    await checkDueMedicationReminders();
+  }
+}
+
+function updateMedicationReminderLeadMinutes(value) {
+  Object.assign(medicationReminderSettings, saveMedicationReminderSettings({
+    ...medicationReminderSettings,
+    leadMinutes: Number(value),
+  }));
+}
+
+async function checkDueMedicationReminders() {
+  if (!isReady.value || !medicationReminderSettings.enabled) {
+    return;
+  }
+  try {
+    await checkMedicationReminders({
+      treatmentPlan: state.treatmentPlan,
+      recordedMedications: state.entries[getTodayKey()]?.medications ?? [],
+      settings: medicationReminderSettings,
+      todayKey: getTodayKey(),
+      now: quickCaptureNow.value,
+    });
+  } catch (error) {
+    console.error("Medication reminder check failed", error);
+  }
 }
 
 function refreshSyncKeyMaterialStatus() {
@@ -1971,9 +2033,15 @@ function syncFloatingMenuHeight() {
           :recorded-medications="sortedMedications"
           :selected-date="state.selectedDate"
           :current-time="quickCaptureNow"
+          :reminder-enabled="medicationReminderSettings.enabled"
+          :reminder-lead-minutes="medicationReminderSettings.leadMinutes"
+          :notification-permission="medicationNotificationPermission"
+          :notifications-supported="medicationNotificationsSupported"
           @add-plan-item="addTreatmentPlanItem"
           @remove-plan-item="removeTreatmentPlanItem"
           @remove-recorded-medication="removeMedication"
+          @update-reminder-enabled="setMedicationRemindersEnabled"
+          @update-reminder-lead-minutes="updateMedicationReminderLeadMinutes"
         />
 
         <DailyTimeline

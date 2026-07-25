@@ -21,9 +21,31 @@ const props = defineProps({
     type: Date,
     required: true,
   },
+  reminderEnabled: {
+    type: Boolean,
+    required: true,
+  },
+  reminderLeadMinutes: {
+    type: Number,
+    required: true,
+  },
+  notificationPermission: {
+    type: String,
+    required: true,
+  },
+  notificationsSupported: {
+    type: Boolean,
+    required: true,
+  },
 });
 
-const emit = defineEmits(["add-plan-item", "remove-plan-item", "remove-recorded-medication"]);
+const emit = defineEmits([
+  "add-plan-item",
+  "remove-plan-item",
+  "remove-recorded-medication",
+  "update-reminder-enabled",
+  "update-reminder-lead-minutes",
+]);
 
 const form = reactive({
   name: "",
@@ -97,6 +119,45 @@ function submitForm() {
     </form>
 
     <p class="panel-tip">Plan slouzi jako sablona. Skutecne uzitou davku zapisete rychlym zapisem s aktualnim casem.</p>
+
+    <div class="medication-reminder-card">
+      <div>
+        <strong>Pripomenuti leku</strong>
+        <p v-if="notificationsSupported" class="panel-tip">
+          Systemova upozorneni ve Firefoxu a Chromu. Opravneni:
+          {{ notificationPermission === "granted" ? "povoleno" : notificationPermission === "denied" ? "zakazano" : "nezadano" }}.
+        </p>
+        <p v-else class="form-error">
+          Tento prohlizec nebo nezabezpecene HTTP pripojeni systemova upozorneni nepodporuje.
+        </p>
+      </div>
+      <label class="reminder-toggle">
+        <input
+          :checked="reminderEnabled"
+          :disabled="!notificationsSupported"
+          type="checkbox"
+          @change="emit('update-reminder-enabled', $event.target.checked)"
+        />
+        <span>Zapnout</span>
+      </label>
+      <label>
+        <span>Upozornit</span>
+        <select
+          :value="reminderLeadMinutes"
+          :disabled="!reminderEnabled"
+          @change="emit('update-reminder-lead-minutes', Number($event.target.value))"
+        >
+          <option :value="0">V cas davky</option>
+          <option :value="5">5 minut predem</option>
+          <option :value="10">10 minut predem</option>
+          <option :value="15">15 minut predem</option>
+          <option :value="30">30 minut predem</option>
+        </select>
+      </label>
+      <p class="panel-tip medication-reminder-note">
+        V teto verzi musi byt aplikace otevrena nebo bezet na pozadi. Spolehlive upozorneni po uplnem ukonceni prohlizece bude vyzadovat Web Push.
+      </p>
+    </div>
 
     <div class="adherence-summary" aria-label="Souhrn dodrzeni lecby">
       <div>

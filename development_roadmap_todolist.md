@@ -519,7 +519,17 @@ Ještě před plným napojením klienta na produkční sync:
 
 ## Fáze 7 – Notifikace
 
-### [pending] 7.1 Připomenutí léků
+### [in_progress] 7.1 Připomenutí léků
+
+Aktuální stav:
+
+* lokální systémová upozornění podle časů v léčebném plánu
+* volba upozornění v čase dávky nebo 5–30 minut předem
+* ochrana proti duplicitním upozorněním a přeskočení již užité dávky
+* persistentní notifikace přes Service Worker pro Firefox a Chrome na Linuxu, Windows a Androidu
+* aktuální lokální plánovač vyžaduje otevřenou nebo běžící aplikaci
+* pro spolehlivé doručení po úplném ukončení prohlížeče bude potřeba serverový Web Push
+* Apple platformy jsou pro tuto fázi vědomě odloženy; kompatibilita se vyhodnotí později
 
 ### [pending] 7.2 Připomenutí vyplnění deníku
 
