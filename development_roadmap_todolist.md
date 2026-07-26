@@ -564,8 +564,12 @@ Aktuální stav:
 * volba upozornění v čase dávky nebo 5–30 minut předem
 * ochrana proti duplicitním upozorněním a přeskočení již užité dávky
 * persistentní notifikace přes Service Worker pro Firefox a Chrome na Linuxu, Windows a Androidu
-* aktuální lokální plánovač vyžaduje otevřenou nebo běžící aplikaci
-* pro spolehlivé doručení po úplném ukončení prohlížeče bude potřeba serverový Web Push
+* lokální fallback plánovač vyžaduje otevřenou nebo běžící aplikaci
+* Web Push subscription, anonymní UTC plán a Service Worker příjem po zavření aplikace
+* server neukládá názvy léků ani dávky a posílá pouze obecný text připomínky
+* plán se obnovuje na 31 dní při spuštění aplikace a při změně léčby
+* interní dispatch endpoint je chráněný scheduler tokenem
+* zbývá nastavit produkční VAPID klíče a Cloud Scheduler job
 * Apple platformy jsou pro tuto fázi vědomě odloženy; kompatibilita se vyhodnotí později
 
 ### [pending] 7.2 Připomenutí vyplnění deníku

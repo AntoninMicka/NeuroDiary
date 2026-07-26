@@ -16,6 +16,7 @@ Prvni serverovy zaklad pro synchronizaci mezi vice zarizenimi.
 - ukladani sifrovaneho payloadu a wrapped key metadata
 - federovane Google/Apple prihlaseni s legacy token fallbackem
 - strukturovane JSON request logy a korelacni `X-Request-ID`
+- Web Push subscriptions a anonymni casovy plan pripominek
 
 ## Lokalni spusteni
 
@@ -52,6 +53,12 @@ pytest backend/tests
   Commit nebo verze zobrazena v health a metadata endpointech.
 - `NEURODIARY_LOG_LEVEL`
   Uroven aplikacnich JSON logu, vychozi `INFO`.
+- `NEURODIARY_VAPID_PUBLIC_KEY`, `NEURODIARY_VAPID_PRIVATE_KEY`, `NEURODIARY_VAPID_SUBJECT`
+  Vsechny tri hodnoty zapinaji Web Push. Private key patri do secret manageru.
+- `NEURODIARY_PUSH_SCHEDULER_TOKEN`
+  Nahodny secret pro interni dispatch endpoint volany Cloud Schedulerem.
+- `NEURODIARY_PUSH_ENDPOINT_HOSTS`
+  Povolene suffixy push provideru; omezuje zneuziti endpointu pro SSRF.
 
 ## Docker
 

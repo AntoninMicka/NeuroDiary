@@ -38,3 +38,18 @@ def test_request_id_is_preserved(monkeypatch, tmp_path):
         response = client.get("/healthz", headers={"x-request-id": "diagnostic-request"})
 
     assert response.headers["x-request-id"] == "diagnostic-request"
+
+
+def test_push_is_disabled_without_vapid_configuration(monkeypatch, tmp_path):
+    monkeypatch.delenv("NEURODIARY_VAPID_PUBLIC_KEY", raising=False)
+    monkeypatch.delenv("NEURODIARY_VAPID_PRIVATE_KEY", raising=False)
+    monkeypatch.delenv("NEURODIARY_VAPID_SUBJECT", raising=False)
+    app = load_app(monkeypatch, tmp_path)
+
+    with TestClient(app) as client:
+        config = client.get("/api/v1/push/config")
+        dispatch = client.post("/api/v1/internal/push/dispatch")
+
+    assert config.status_code == 200
+    assert config.json() == {"enabled": False, "publicKey": ""}
+    assert dispatch.status_code == 401

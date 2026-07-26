@@ -37,6 +37,18 @@ const props = defineProps({
     type: Boolean,
     required: true,
   },
+  webPushAvailable: {
+    type: Boolean,
+    required: true,
+  },
+  webPushStatus: {
+    type: String,
+    required: true,
+  },
+  webPushMessage: {
+    type: String,
+    required: true,
+  },
 });
 
 const emit = defineEmits([
@@ -198,7 +210,16 @@ function submitForm() {
         </select>
       </label>
       <p class="panel-tip medication-reminder-note">
-        V teto verzi musi byt aplikace otevrena nebo bezet na pozadi. Spolehlive upozorneni po uplnem ukonceni prohlizece bude vyzadovat Web Push.
+        <template v-if="webPushStatus === 'active'">
+          Web Push je aktivni. Obecna pripominka muze dorazit i po uplnem zavreni aplikace.
+        </template>
+        <template v-else-if="webPushAvailable">
+          Lokalni rezim vyzaduje otevrenou aplikaci. Web Push ceka na prihlaseni nebo dokonceni registrace.
+        </template>
+        <template v-else>
+          Lokalni rezim vyzaduje otevrenou aplikaci. Serverovy Web Push zatim neni dostupny.
+        </template>
+        <span v-if="webPushMessage"> {{ webPushMessage }}</span>
       </p>
     </div>
 

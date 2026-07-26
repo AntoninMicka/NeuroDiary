@@ -85,6 +85,12 @@ import {
   requestMedicationNotificationPermission,
   saveMedicationReminderSettings,
 } from "./services/medicationReminders.js";
+import {
+  canUseWebPush,
+  fetchWebPushConfig,
+  registerWebPush,
+  unregisterWebPush,
+} from "./services/webPushService.js";
 
 const PENDING_SYNC_CHANGES_STORAGE_KEY = "neurodiary-pending-sync-changes-v1";
 
@@ -136,6 +142,7 @@ const isRecoveryTransferOpen = ref(false);
 const isRecoveryCameraOpen = ref(false);
 const syncSettings = reactive(loadSyncSettings());
 const medicationReminderSettings = reactive(loadMedicationReminderSettings());
+const webPushConfig = reactive({ enabled: false, publicKey: "" });
 const authConfig = reactive(createDefaultAuthConfig());
 const authSession = ref(loadStoredAuthSession());
 const previousAuthUserId = ref(authSession.value?.user?.userId ?? "");
@@ -153,6 +160,8 @@ const bootstrapLogEntries = ref(getBootstrapLogEntries());
 const isCapturingBootstrapProgress = ref(true);
 const recoveryCameraMessage = ref("");
 const medicationNotificationPermission = ref(getMedicationNotificationPermission());
+const webPushStatus = ref("local-only");
+const webPushMessage = ref("");
 const state = reactive({
   selectedDate: getTodayKey(),
   patientName: "",
@@ -402,6 +411,11 @@ onMounted(async () => {
   } catch (error) {
     console.error("Unable to load auth config", error);
   }
+  try {
+    Object.assign(webPushConfig, await fetchWebPushConfig(getEffectiveSyncEndpoint(syncSettings)));
+  } catch (error) {
+    console.error("Unable to load Web Push config", error);
+  }
   initializeInstallState();
   globalThis.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
   globalThis.addEventListener("appinstalled", handleAppInstalled);
@@ -412,6 +426,7 @@ onMounted(async () => {
 
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.addEventListener("controllerchange", handleControllerChange);
+    navigator.serviceWorker.addEventListener("message", handleServiceWorkerMessage);
   }
 
   setBootstrapStatus("Starting local repository initialization.");
@@ -437,6 +452,9 @@ onMounted(async () => {
   setBootstrapStatus("Initialization completed.");
   isReady.value = true;
   await checkDueMedicationReminders();
+  if (medicationReminderSettings.enabled) {
+    void refreshWebPushRegistration();
+  }
   await tryAutoRecoverLocalSyncKey();
   if (isQuickSyncAvailable.value) {
     void quickSync({ automatic: true });
@@ -484,6 +502,7 @@ onUnmounted(() => {
   globalThis.document?.removeEventListener("visibilitychange", refreshQuickCaptureClock);
   closeRecoveryCameraScanner();
   globalThis.removeEventListener(BOOTSTRAP_LOG_EVENT, syncBootstrapLogEntries);
+  globalThis.navigator?.serviceWorker?.removeEventListener("message", handleServiceWorkerMessage);
   menuResizeObserver?.disconnect();
   mediaQueryList?.removeEventListener?.("change", syncInstallState);
   globalThis.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
@@ -536,10 +555,23 @@ function refreshQuickCaptureClock() {
 
 async function setMedicationRemindersEnabled(enabled) {
   if (!enabled) {
+    if (webPushStatus.value === "active") {
+      try {
+        await unregisterWebPush({
+          endpoint: effectiveSyncEndpoint.value,
+          apiToken: syncSettings.apiToken,
+        });
+      } catch (error) {
+        console.error("Unable to unregister Web Push", error);
+      }
+    }
     Object.assign(medicationReminderSettings, saveMedicationReminderSettings({
       ...medicationReminderSettings,
       enabled: false,
+      webPushEnabled: false,
     }));
+    webPushStatus.value = "local-only";
+    webPushMessage.value = "";
     storageMessage.value = "Pripomenuti leku byla vypnuta.";
     return;
   }
@@ -550,12 +582,14 @@ async function setMedicationRemindersEnabled(enabled) {
   Object.assign(medicationReminderSettings, saveMedicationReminderSettings({
     ...medicationReminderSettings,
     enabled: wasEnabled,
+    webPushEnabled: wasEnabled && webPushConfig.enabled,
   }));
   storageMessage.value = wasEnabled
     ? "Pripomenuti leku jsou zapnuta."
     : "Prohlizec nepovolil systemova upozorneni.";
   if (wasEnabled) {
     await checkDueMedicationReminders();
+    await refreshWebPushRegistration();
   }
 }
 
@@ -564,10 +598,55 @@ function updateMedicationReminderLeadMinutes(value) {
     ...medicationReminderSettings,
     leadMinutes: Number(value),
   }));
+  void refreshWebPushRegistration();
+}
+
+async function refreshWebPushRegistration() {
+  if (!medicationReminderSettings.enabled || !medicationReminderSettings.webPushEnabled) {
+    webPushStatus.value = "local-only";
+    return;
+  }
+  if (!canUseWebPush() || !webPushConfig.enabled) {
+    webPushStatus.value = "unavailable";
+    webPushMessage.value = "Serverovy Web Push neni nakonfigurovan.";
+    return;
+  }
+  if (!hasSyncIdentity.value) {
+    webPushStatus.value = "needs-auth";
+    webPushMessage.value = "Pro Web Push je potreba prihlaseni nebo API token.";
+    return;
+  }
+  try {
+    webPushStatus.value = "registering";
+    const result = await registerWebPush({
+      endpoint: effectiveSyncEndpoint.value,
+      apiToken: syncSettings.apiToken,
+      publicKey: webPushConfig.publicKey,
+      treatmentPlan: state.treatmentPlan,
+      entries: state.entries,
+      leadMinutes: medicationReminderSettings.leadMinutes,
+      startDateKey: getTodayKey(),
+    });
+    webPushStatus.value = "active";
+    webPushMessage.value = `Naplanovano ${result.scheduledCount} obecnych upozorneni na pristich 31 dni.`;
+  } catch (error) {
+    console.error("Unable to register Web Push", error);
+    webPushStatus.value = "error";
+    webPushMessage.value = error.message;
+  }
+}
+
+function handleServiceWorkerMessage(event) {
+  if (event.data?.type === "PUSH_SUBSCRIPTION_CHANGED") {
+    void refreshWebPushRegistration();
+  }
 }
 
 async function checkDueMedicationReminders() {
   if (!isReady.value || !medicationReminderSettings.enabled) {
+    return;
+  }
+  if (webPushStatus.value === "active") {
     return;
   }
   try {
@@ -861,6 +940,7 @@ function addMedication(payload) {
     planItemId: payload.planItemId,
   }));
   selectedEntry.value.updatedAt = new Date().toISOString();
+  void refreshWebPushRegistration();
   return true;
 }
 
@@ -881,6 +961,7 @@ function addTreatmentPlanItem(payload) {
         && item.validFrom === payload.validFrom,
     )?.id ?? activeTodayTreatmentPlan.value[0]?.id ?? "";
   }
+  void refreshWebPushRegistration();
 }
 
 function endTreatmentPlanItem(planItemId, validTo) {
@@ -892,6 +973,7 @@ function endTreatmentPlanItem(planItemId, validTo) {
   if (selectedTreatmentPlanId.value === planItemId) {
     selectedTreatmentPlanId.value = activeTodayTreatmentPlan.value[0]?.id ?? "";
   }
+  void refreshWebPushRegistration();
 }
 
 function recordMedicationFromPlan() {
@@ -1125,9 +1207,20 @@ async function signInWithApple() {
   }
 }
 
-function signOut() {
+async function signOut() {
+  if (webPushStatus.value === "active") {
+    try {
+      await unregisterWebPush({
+        endpoint: effectiveSyncEndpoint.value,
+        apiToken: syncSettings.apiToken,
+      });
+    } catch (error) {
+      console.error("Unable to unregister Web Push during sign-out", error);
+    }
+  }
   clearAuthSession();
   authSession.value = null;
+  webPushStatus.value = "needs-auth";
   applyAuthenticatedAccount(null);
   storageMessage.value = "Prihlaseni bylo odpojeno. Lokalni data zustala zachovana.";
 }
@@ -1630,12 +1723,16 @@ function applyImportedState(nextState) {
   } finally {
     isApplyingExternalState.value = false;
   }
+  void refreshWebPushRegistration();
 }
 
 watch(
   () => authSession.value?.user?.userId ?? "",
   (nextUserId, previousUserId) => {
     previousAuthUserId.value = nextUserId;
+    if (nextUserId) {
+      void refreshWebPushRegistration();
+    }
     if (!previousUserId || !nextUserId || previousUserId === nextUserId) {
       return;
     }
@@ -2052,6 +2149,9 @@ function syncFloatingMenuHeight() {
           :reminder-lead-minutes="medicationReminderSettings.leadMinutes"
           :notification-permission="medicationNotificationPermission"
           :notifications-supported="medicationNotificationsSupported"
+          :web-push-available="webPushConfig.enabled && canUseWebPush()"
+          :web-push-status="webPushStatus"
+          :web-push-message="webPushMessage"
           @add-plan-item="addTreatmentPlanItem"
           @end-plan-item="endTreatmentPlanItem"
           @remove-recorded-medication="removeMedication"

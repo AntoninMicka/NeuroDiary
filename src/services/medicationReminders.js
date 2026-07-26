@@ -8,6 +8,7 @@ export function createDefaultMedicationReminderSettings() {
   return {
     enabled: false,
     leadMinutes: 0,
+    webPushEnabled: false,
   };
 }
 
@@ -25,6 +26,7 @@ export function loadMedicationReminderSettings() {
 export function saveMedicationReminderSettings(settings) {
   const nextSettings = {
     enabled: settings.enabled === true,
+    webPushEnabled: settings.webPushEnabled === true,
     leadMinutes: [0, 5, 10, 15, 30].includes(Number(settings.leadMinutes))
       ? Number(settings.leadMinutes)
       : 0,

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+import hmac
 import logging
 import os
 import time
 import uuid
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Annotated
 
@@ -22,7 +24,14 @@ from .models import (
     SyncPushRequestModel,
     SyncPushResponseModel,
     SyncResetResponseModel,
+    PushConfigResponseModel,
+    PushDispatchResponseModel,
+    PushRegistrationRequestModel,
+    PushRegistrationResponseModel,
+    PushUnsubscribeRequestModel,
 )
+from .push_service import PushService, WebPushException
+from .push_store import create_push_store
 from .store import RevisionConflictError, create_sync_store
 
 
@@ -42,8 +51,11 @@ CORS_ORIGINS = [
     for origin in os.getenv("NEURODIARY_CORS_ORIGINS", "http://localhost:5173").split(",")
     if origin.strip()
 ]
+PUSH_SCHEDULER_TOKEN = os.getenv("NEURODIARY_PUSH_SCHEDULER_TOKEN", "").strip()
 
 store = create_sync_store(database_url=DATABASE_URL or None, database_path=DATABASE_PATH)
+push_store = create_push_store(database_url=DATABASE_URL or None, database_path=DATABASE_PATH)
+push_service = PushService()
 auth_manager = AuthManager()
 logger = logging.getLogger("neurodiary")
 if not logger.handlers:
@@ -109,6 +121,7 @@ async def request_logging_middleware(request: Request, call_next):
 @app.on_event("startup")
 def on_startup() -> None:
     store.initialize()
+    push_store.initialize()
     log_event(
         "INFO",
         "application_started",
@@ -157,6 +170,7 @@ def api_metadata() -> dict[str, object]:
             "wrappedRecoveryKey": True,
             "federatedAuth": auth_manager.federated_auth_enabled,
             "legacyToken": bool(API_TOKEN),
+            "webPush": push_service.enabled,
         },
     }
 
@@ -171,6 +185,107 @@ def auth_config() -> AuthConfigResponseModel:
         appleRedirectPath=auth_manager.apple_redirect_path,
         legacyApiTokenEnabled=bool(API_TOKEN),
         federatedAuthEnabled=auth_manager.federated_auth_enabled,
+    )
+
+
+@app.get("/api/v1/push/config", response_model=PushConfigResponseModel)
+def push_config() -> PushConfigResponseModel:
+    return PushConfigResponseModel(
+        enabled=push_service.enabled,
+        publicKey=push_service.public_key if push_service.enabled else "",
+    )
+
+
+@app.put("/api/v1/push/registration", response_model=PushRegistrationResponseModel)
+def register_push(
+    payload: PushRegistrationRequestModel,
+    user_id: Annotated[str, Depends(verify_bearer_token)],
+) -> PushRegistrationResponseModel:
+    if not push_service.enabled:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Web Push is not configured.",
+        )
+    if not push_service.is_endpoint_allowed(payload.subscription.endpoint):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Push endpoint host is not allowed.",
+        )
+    now = datetime.now(UTC)
+    future_reminders = [
+        reminder
+        for reminder in payload.reminders
+        if reminder.scheduledAt > now and reminder.scheduledAt <= now + timedelta(days=32)
+    ]
+    safe_payload = payload.model_copy(update={"reminders": future_reminders})
+    scheduled_count = push_store.replace_registration(user_id, safe_payload)
+    return PushRegistrationResponseModel(status="ok", scheduledCount=scheduled_count)
+
+
+@app.delete("/api/v1/push/registration", response_model=PushRegistrationResponseModel)
+def unregister_push(
+    payload: PushUnsubscribeRequestModel,
+    user_id: Annotated[str, Depends(verify_bearer_token)],
+) -> PushRegistrationResponseModel:
+    push_store.delete_subscription(user_id, payload.endpoint)
+    return PushRegistrationResponseModel(status="ok", scheduledCount=0)
+
+
+@app.post("/api/v1/internal/push/dispatch", response_model=PushDispatchResponseModel)
+def dispatch_push(
+    x_scheduler_token: Annotated[str | None, Header()] = None,
+) -> PushDispatchResponseModel:
+    if not PUSH_SCHEDULER_TOKEN or not hmac.compare_digest(
+        x_scheduler_token or "",
+        PUSH_SCHEDULER_TOKEN,
+    ):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid scheduler token.")
+    if not push_service.enabled:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Web Push is not configured.",
+        )
+
+    sent = 0
+    failed = 0
+    removed_subscriptions = 0
+    for reminder in push_store.load_due(datetime.now(UTC)):
+        subscription = {
+            "endpoint": reminder.endpoint,
+            "keys": {"p256dh": reminder.p256dh, "auth": reminder.auth},
+        }
+        try:
+            push_service.send_generic_medication_reminder(subscription)
+            push_store.mark_sent(reminder)
+            sent += 1
+        except WebPushException as error:
+            failed += 1
+            if push_service.is_expired_subscription(error):
+                push_store.delete_subscription(reminder.user_id, reminder.endpoint)
+                removed_subscriptions += 1
+            else:
+                push_store.mark_failed(reminder)
+            log_event(
+                "WARNING",
+                "push_delivery_failed",
+                errorType=type(error).__name__,
+                expiredSubscription=push_service.is_expired_subscription(error),
+            )
+        except Exception as error:
+            failed += 1
+            push_store.mark_failed(reminder)
+            log_event(
+                "ERROR",
+                "push_delivery_failed",
+                errorType=type(error).__name__,
+                expiredSubscription=False,
+            )
+
+    return PushDispatchResponseModel(
+        status="ok",
+        sent=sent,
+        failed=failed,
+        removedSubscriptions=removed_subscriptions,
     )
 
 

@@ -1,4 +1,4 @@
-const CACHE_NAME = "neurodiary-shell-v2";
+const CACHE_NAME = "neurodiary-shell-v3";
 const APP_SHELL = ["/", "/index.html", "/manifest.webmanifest", "/icons/icon-192.svg", "/icons/icon-512.svg"];
 
 self.addEventListener("install", (event) => {
@@ -55,6 +55,38 @@ self.addEventListener("notificationclick", (event) => {
         return;
       }
       await self.clients.openWindow(targetUrl);
+    }),
+  );
+});
+
+self.addEventListener("push", (event) => {
+  let payload = {};
+  try {
+    payload = event.data?.json() ?? {};
+  } catch {
+    payload = {};
+  }
+  event.waitUntil(
+    self.registration.showNotification(payload.title ?? "NeuroDiary", {
+      body: payload.body ?? "Mate naplanovanou pripominku.",
+      icon: "/icons/icon-192.svg",
+      badge: "/icons/icon-192.svg",
+      tag: `push-${payload.type ?? "reminder"}`,
+      renotify: true,
+      data: {
+        url: payload.url ?? "/",
+        type: payload.type ?? "reminder",
+      },
+    }),
+  );
+});
+
+self.addEventListener("pushsubscriptionchange", (event) => {
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        client.postMessage({ type: "PUSH_SUBSCRIPTION_CHANGED" });
+      }
     }),
   );
 });
