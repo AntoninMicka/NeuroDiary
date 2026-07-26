@@ -2071,6 +2071,8 @@ function syncFloatingMenuHeight() {
           :entry="selectedEntry"
           :entries="state.entries"
           :selected-date="state.selectedDate"
+          @open-hour-matrix="activePanelId = 'sekce-matice'"
+          @open-daily-overview="activePanelId = 'sekce-prehled'"
         />
         <LongTermTrends
           v-else-if="activePanelId === 'sekce-trendy'"

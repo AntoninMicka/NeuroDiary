@@ -2,6 +2,7 @@
 import { computed } from "vue";
 import { HOUR_STATES, formatOverallStatus, formatSleepQuality, getStateDefinition } from "../domain/diary.js";
 import { analyzeEntry, analyzePeriod, buildMetricSeries, buildStateDistribution } from "../services/statistics.js";
+import { evaluateDayQuality } from "../services/dataQuality.js";
 
 const props = defineProps({
   entry: {
@@ -17,8 +18,10 @@ const props = defineProps({
     required: true,
   },
 });
+const emit = defineEmits(["open-hour-matrix", "open-daily-overview"]);
 
 const entryAnalysis = computed(() => analyzeEntry(props.entry));
+const dayQuality = computed(() => evaluateDayQuality(props.entry, props.selectedDate));
 const weeklyAnalysis = computed(() => analyzePeriod(props.entries, props.selectedDate, 7));
 const monthlyAnalysis = computed(() => analyzePeriod(props.entries, props.selectedDate, 30));
 const weeklySeries = computed(() => buildMetricSeries(props.entries, props.selectedDate, 7));
@@ -51,13 +54,13 @@ const distributionPanels = computed(() => [
   {
     key: "week",
     title: "7 dni",
-    meta: `${weeklyAnalysis.value.recordedDays}/${weeklyAnalysis.value.trackedDays} dni`,
+    meta: `${weeklyAnalysis.value.reliableDays}/${weeklyAnalysis.value.trackedDays} spolehlivych dni`,
     items: buildStateDistribution(weeklyAnalysis.value.totals),
   },
   {
     key: "month",
     title: "30 dni",
-    meta: `${monthlyAnalysis.value.recordedDays}/${monthlyAnalysis.value.trackedDays} dni`,
+    meta: `${monthlyAnalysis.value.reliableDays}/${monthlyAnalysis.value.trackedDays} spolehlivych dni`,
     items: buildStateDistribution(monthlyAnalysis.value.totals),
   },
 ]);
@@ -167,6 +170,34 @@ const histogramRows = computed(() => [
         <h2>Rychly prehled</h2>
       </div>
     </div>
+
+    <section :class="['data-quality-card', `quality-${dayQuality.key}`]" aria-live="polite">
+      <div>
+        <p class="section-kicker">Kvalita dat</p>
+        <h3>{{ dayQuality.label }}</h3>
+        <p>{{ dayQuality.description }}</p>
+        <strong>
+          {{ dayQuality.recordedHourCount }}/{{ dayQuality.expectedHourCount }} ocekavanych hodin
+          · {{ dayQuality.hourCoveragePercent }} %
+        </strong>
+      </div>
+      <ul v-if="dayQuality.missingItems.length">
+        <li v-for="item in dayQuality.missingItems" :key="item">{{ item }}</li>
+      </ul>
+      <div v-if="dayQuality.missingItems.length" class="data-quality-actions">
+        <button v-if="dayQuality.missingHourLabels.length" class="ghost-button" type="button" @click="emit('open-hour-matrix')">
+          Doplnit hodiny
+        </button>
+        <button
+          v-if="!dayQuality.hasSleepQuality || !dayQuality.hasOverallStatus"
+          class="ghost-button"
+          type="button"
+          @click="emit('open-daily-overview')"
+        >
+          Doplnit souhrn dne
+        </button>
+      </div>
+    </section>
 
     <div class="summary">
       <div v-for="card in cards" :key="card.title" class="summary-card">

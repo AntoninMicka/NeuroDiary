@@ -7,6 +7,7 @@ import {
   summarizeHours,
   TRACKING_HOURS,
 } from "../domain/diary.js";
+import { evaluateDayQuality } from "./dataQuality.js";
 
 const REPORT_DAYS_PAGE_ONE = 4;
 const ANALYSIS_DAYS = 7;
@@ -107,6 +108,7 @@ function buildMedicationTimelineRow(entry) {
 
 function buildDayTable(dateKey, entry) {
   const note = entry?.notes?.trim() || "Bez poznamek.";
+  const quality = evaluateDayQuality(entry, dateKey);
 
   return `
     <section class="day-sheet">
@@ -116,6 +118,7 @@ function buildDayTable(dateKey, entry) {
           <p class="day-subtitle">
             Spanek: ${escapeHtml(entry ? formatSleepQuality(entry.sleepQuality) : "Bez zaznamu")}
             · Den: ${escapeHtml(entry ? formatOverallStatus(entry.overallStatus) : "Bez zaznamu")}
+            · Kvalita dat: ${escapeHtml(quality.label)} (${quality.hourCoveragePercent} % hodin)
           </p>
         </div>
       </div>
@@ -160,7 +163,9 @@ function collectEntries(entries, selectedDate, count) {
 }
 
 function summarizeWindow(entries, selectedDate, count) {
-  const items = collectEntries(entries, selectedDate, count).filter(({ entry }) => Boolean(entry));
+  const items = collectEntries(entries, selectedDate, count)
+    .map((item) => ({ ...item, quality: evaluateDayQuality(item.entry, item.dateKey) }))
+    .filter(({ quality }) => quality.hasAnyData);
   const stateTotals = HOUR_STATES.reduce((accumulator, state) => {
     accumulator[state.key] = 0;
     return accumulator;
@@ -168,10 +173,14 @@ function summarizeWindow(entries, selectedDate, count) {
 
   let totalMedicationDoses = 0;
   let daysWithData = 0;
+  let reliableDays = 0;
 
-  for (const { entry } of items) {
+  for (const { entry, quality } of items) {
     const counts = summarizeHours(entry.hours);
     daysWithData += 1;
+    if (quality.isReliable) {
+      reliableDays += 1;
+    }
     totalMedicationDoses += entry.medications.length;
 
     for (const state of HOUR_STATES) {
@@ -183,6 +192,7 @@ function summarizeWindow(entries, selectedDate, count) {
 
   return {
     daysWithData,
+    reliableDays,
     totalMedicationDoses,
     averageDoses: daysWithData ? (totalMedicationDoses / daysWithData).toFixed(1) : "0.0",
     dominantState: getStateDefinition(dominantState).label,
@@ -277,7 +287,8 @@ function buildTrendRows(entries, selectedDate) {
   return collectEntries(entries, selectedDate, ANALYSIS_DAYS)
     .reverse()
     .map(({ dateKey, entry }) => {
-      if (!entry) {
+      const quality = evaluateDayQuality(entry, dateKey);
+      if (!quality.hasAnyData) {
         return `
           <tr>
             <td>${escapeHtml(formatLongDate(dateKey))}</td>
@@ -293,7 +304,7 @@ function buildTrendRows(entries, selectedDate) {
         <tr>
           <td>${escapeHtml(formatLongDate(dateKey))}</td>
           <td>${escapeHtml(formatSleepQuality(entry.sleepQuality))}</td>
-          <td>${escapeHtml(formatOverallStatus(entry.overallStatus))}</td>
+          <td>${escapeHtml(`${formatOverallStatus(entry.overallStatus)} · ${quality.label}`)}</td>
           <td>${escapeHtml(getStateDefinition(dominantStateKey).label)}</td>
           <td>${escapeHtml(String(entry.medications.length))}</td>
         </tr>
@@ -355,8 +366,8 @@ function buildAnalysisPage(entries, selectedDate) {
 
       <section class="analysis-cards">
         <article class="analysis-card">
-          <strong>Dny se zaznamem</strong>
-          <span>${escapeHtml(String(summary.daysWithData))} / ${ANALYSIS_DAYS}</span>
+          <strong>Spolehlive dny</strong>
+          <span>${escapeHtml(String(summary.reliableDays))} / ${ANALYSIS_DAYS}</span>
         </article>
         <article class="analysis-card">
           <strong>Prumer davek / den</strong>

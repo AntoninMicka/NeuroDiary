@@ -22,8 +22,8 @@ const analysis = computed(() =>
   analyzeLongTermTrends(props.entries, props.treatmentPlan, props.selectedDate, periodDays.value),
 );
 const qualityLabel = computed(() => {
-  if (analysis.value.coveragePercent < 40) {
-    return "Nizke pokryti dat — trend muze byt zavadejici.";
+  if (analysis.value.reliableCoveragePercent < 40) {
+    return "Mene nez 40 % dni ma dostatecna data — trend muze byt zavadejici.";
   }
   if (analysis.value.averageTrackedHours < 6) {
     return "Dny obsahuji malo hodinovych zaznamu — vysledky berte orientacne.";
@@ -67,8 +67,8 @@ function formatShortDate(dateKey) {
 
     <div class="trend-summary-grid">
       <article>
-        <strong>{{ analysis.recordedDays }}/{{ analysis.days }}</strong>
-        <span>dni s daty · {{ analysis.coveragePercent }} %</span>
+        <strong>{{ analysis.reliableDays }}/{{ analysis.days }}</strong>
+        <span>spolehlivych dni · {{ analysis.reliableCoveragePercent }} %</span>
       </article>
       <article>
         <strong>{{ analysis.averageTrackedHours.toFixed(1) }} h</strong>
@@ -84,7 +84,7 @@ function formatShortDate(dateKey) {
       </article>
     </div>
 
-    <p :class="['trend-quality-note', { 'is-warning': analysis.coveragePercent < 40 || analysis.averageTrackedHours < 6 }]">
+    <p :class="['trend-quality-note', { 'is-warning': analysis.reliableCoveragePercent < 40 || analysis.averageTrackedHours < 6 }]">
       {{ qualityLabel }}
     </p>
 
@@ -101,7 +101,7 @@ function formatShortDate(dateKey) {
         <article v-for="bucket in analysis.buckets" :key="bucket.fromDate" class="trend-week-row">
           <div class="trend-week-label">
             <strong>{{ formatShortDate(bucket.fromDate) }}–{{ formatShortDate(bucket.toDate) }}</strong>
-            <span>{{ bucket.recordedDays }}/{{ bucket.dayCount }} dni · {{ bucket.trackedHours }} h</span>
+            <span>{{ bucket.reliableDays }}/{{ bucket.dayCount }} spolehlivych dni · {{ bucket.trackedHours }} h</span>
           </div>
           <div class="trend-stacked-bar" :title="`${bucket.trackedHours} zaznamenanych hodin`">
             <span

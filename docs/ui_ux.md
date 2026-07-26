@@ -20,6 +20,17 @@ casu. UI rozlisuje vcas, drive, pozdeji, cekajici a vynechanou davku. Tolerance 
 Trendy zobrazuji 30–365 dni po sedmidennich blocich. Vzdy ukazuji pokryti dat a upozorni na nizky
 pocet zaznamenanych dni nebo hodin. Statistiky jsou orientacni.
 
+Denni kvalita ma ctyri urovne:
+
+- `Bez dat`: zadne hodinove, souhrnne, poznamkove ani medikacni udaje,
+- `Neuplny den`: existuji jen dilci data,
+- `Dostatecna data`: alespon 60 % ocekavanych hodin a alespon jedna souhrnna hodnota,
+- `Kompletni den`: alespon 90 % ocekavanych hodin, kvalita spanku i celkove hodnoceni.
+
+U dnesniho dne se pocitaji pouze hodiny, ktere uz nastaly. Souhrn nabizi prime prepnuti do
+hodinove matice nebo denniho prehledu. Trendy uvadeji podil dostatecnych a kompletnich dni;
+zcela prazdny den se nepovazuje za vynechani vsech planovanych leku.
+
 ## Pristupnost a mobil
 
 Formulare pouzivaji nativni vstupy, `aria-invalid` a textove chybove zpravy. Rozlozeni adherence,

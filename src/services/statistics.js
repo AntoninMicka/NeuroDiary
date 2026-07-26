@@ -1,5 +1,6 @@
 import { HOUR_STATES, getStateDefinition } from "../domain/diary.js";
 import { analyzeMedicationAdherence } from "./adherence.js";
+import { evaluateDayQuality, summarizePeriodQuality } from "./dataQuality.js";
 
 const TRACKED_SUMMARY_STATES = HOUR_STATES.map((state) => state.key);
 
@@ -47,6 +48,7 @@ export function analyzeEntry(entry) {
 
 export function analyzePeriod(entries, endDateKey, days = 7) {
   const dateKeys = getPeriodDateKeys(endDateKey, days);
+  const periodQuality = summarizePeriodQuality(entries, dateKeys);
 
   const totals = TRACKED_SUMMARY_STATES.reduce((accumulator, stateKey) => {
     accumulator[stateKey] = 0;
@@ -63,7 +65,8 @@ export function analyzePeriod(entries, endDateKey, days = 7) {
 
   for (const dateKey of dateKeys) {
     const entry = entries[dateKey];
-    if (!entry) {
+    const quality = evaluateDayQuality(entry, dateKey);
+    if (!entry || !quality.hasAnyData) {
       continue;
     }
 
@@ -85,6 +88,8 @@ export function analyzePeriod(entries, endDateKey, days = 7) {
     toDate: dateKeys[dateKeys.length - 1],
     trackedDays: days,
     recordedDays,
+    reliableDays: periodQuality.reliableDays,
+    quality: periodQuality,
     medicationTotal,
     averageMedicationCount: recordedDays > 0 ? medicationTotal / recordedDays : 0,
     totals,
@@ -109,7 +114,8 @@ export function buildMetricSeries(entries, endDateKey, days = 7) {
 
     return {
       dateKey,
-      hasEntry: Boolean(entry),
+      hasEntry: Boolean(entry) && evaluateDayQuality(entry, dateKey).hasAnyData,
+      qualityKey: evaluateDayQuality(entry, dateKey).key,
       on: analysis?.hourCounts.on ?? 0,
       dyskinesia: analysis?.hourCounts.dyskinesia ?? 0,
       partial: analysis?.hourCounts.partial ?? 0,
@@ -158,8 +164,9 @@ export function analyzeLongTermTrends(entries, treatmentPlan, endDateKey, days =
     const trackedHours = analysis
       ? Object.values(analysis.hourCounts).reduce((sum, count) => sum + count, 0)
       : 0;
+    const quality = evaluateDayQuality(entry, dateKey);
     const adherence = analyzeMedicationAdherence({
-      treatmentPlan,
+      treatmentPlan: quality.hasAnyData ? treatmentPlan : [],
       recordedMedications: entry?.medications ?? [],
       selectedDate: dateKey,
       todayDate: endDateKey,
@@ -168,7 +175,8 @@ export function analyzeLongTermTrends(entries, treatmentPlan, endDateKey, days =
 
     return {
       dateKey,
-      hasData: trackedHours > 0 || (entry?.medications?.length ?? 0) > 0,
+      hasData: quality.hasAnyData,
+      quality,
       trackedHours,
       hourCounts: analysis?.hourCounts ?? {},
       medicationCount: analysis?.medicationCount ?? 0,
@@ -185,10 +193,14 @@ export function analyzeLongTermTrends(entries, treatmentPlan, endDateKey, days =
     let medicationCount = 0;
     let takenCount = 0;
     let missedCount = 0;
+    let reliableDays = 0;
 
     for (const day of bucketDays) {
       if (day.hasData) {
         recordedDays += 1;
+      }
+      if (day.quality.isReliable) {
+        reliableDays += 1;
       }
       trackedHours += day.trackedHours;
       medicationCount += day.medicationCount;
@@ -203,6 +215,7 @@ export function analyzeLongTermTrends(entries, treatmentPlan, endDateKey, days =
       toDate: bucketDays.at(-1).dateKey,
       dayCount: bucketDays.length,
       recordedDays,
+      reliableDays,
       trackedHours,
       medicationCount,
       totals,
@@ -234,6 +247,7 @@ export function analyzeLongTermTrends(entries, treatmentPlan, endDateKey, days =
   const firstHalf = summarizeHalf(daily.slice(0, midpoint));
   const secondHalf = summarizeHalf(daily.slice(midpoint));
   const recordedDays = daily.filter((day) => day.hasData).length;
+  const reliableDays = daily.filter((day) => day.quality.isReliable).length;
   const trackedHours = daily.reduce((sum, day) => sum + day.trackedHours, 0);
 
   return {
@@ -241,7 +255,9 @@ export function analyzeLongTermTrends(entries, treatmentPlan, endDateKey, days =
     toDate: dateKeys.at(-1),
     days,
     recordedDays,
+    reliableDays,
     coveragePercent: Math.round((recordedDays / days) * 100),
+    reliableCoveragePercent: Math.round((reliableDays / days) * 100),
     averageTrackedHours: recordedDays > 0 ? trackedHours / recordedDays : 0,
     buckets,
     firstHalf,

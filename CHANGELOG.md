@@ -16,6 +16,7 @@ This project follows Keep a Changelog and Semantic Versioning.
 - Medication reminders for Firefox and Chrome through persistent service-worker notifications.
 - Backend readiness, capability metadata, structured request logging, CI, and deployment smoke tests.
 - Date-ranged treatment-plan versions used by daily and long-term adherence.
+- Day-data quality classification with missing-range guidance and reliable-period coverage.
 
 ### Changed
 

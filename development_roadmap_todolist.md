@@ -47,7 +47,7 @@ Cíl MVP:
 * Dialogové zadávání
 * Přístupnost
 
-### [in_progress] 1.6 Pravidla validace a kvality dat
+### [done] 1.6 Pravidla validace a kvality dat
 
 * validace časů, dávek a povinných polí
 * detekce nekonzistentních denních záznamů
@@ -59,7 +59,9 @@ Aktuální stav:
 * kontrola roku narození, budoucích a neplatných dat
 * ochrana proti duplicitní plánované i skutečně užité dávce
 * audit nekonzistentních záznamů, tombstones a duplicitních identifikátorů
-* zbývá klasifikace chybějících a neúplných dnů pro statistiky a reporty
+* dny jsou klasifikovane jako bez dat, neuplne, dostatecne nebo kompletni
+* dnesni den zohlednuje pouze hodiny, ktere uz nastaly
+* trendy a reporty rozlisuji zaznamenane a spolehlive dny
 
 ### [pending] 1.4 Návrh doménové architektury
 
@@ -181,15 +183,22 @@ Aktuální stav:
 * týdenní rozložení ON / MID / OFF / dyskineze / spánek
 * porovnání podílu ON a OFF mezi první a druhou polovinou období
 * pokrytí dat a průměrný počet zaznamenaných hodin
-* orientační adherence po týdnech s upozorněním na použití aktuálního léčebného plánu
+* orientační adherence po týdnech podle léčebného plánu platného v daném období
 * dlouhodobá adherence respektuje historické verze léčebného plánu
 * zbývá klinické ověření interpretace metrik
 
-### [pending] 3.6 Kvalita dat pro analýzy
+### [done] 3.6 Kvalita dat pro analýzy
 
 * práce s chybějícími dny
 * označení neúplných nebo málo spolehlivých období
 * pravidla pro interpretaci neúplných dat v reportech
+
+Aktualni stav:
+
+* prazdne dny se nepocitaji jako dny s daty ani jako automaticky vynechana medikace
+* souhrn ukazuje chybejici hodinove useky a chybejici denni hodnoty
+* dlouhodobe trendy pouzivaji pokryti spolehlivymi dny
+* lekarsky report uvadi kvalitu a hodinove pokryti dne
 
 ---
 
