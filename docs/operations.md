@@ -86,5 +86,6 @@ overeni uprednostni pred URL vracenou deploy akci.
 
 Workflow nastavuje `--ingress=all` a `--default-url`, protoze verejny Cloud Run endpoint je
 soucasti architektury aplikace a pristup k uzivatelskym datum dale chrani autentizace API.
-Pokud se ingress zamerne omezi pres `CLOUD_RUN_DEPLOY_FLAGS`, musi `CLOUD_RUN_PUBLIC_URL`
-ukazovat na dostupnou adresu pred load balancerem.
+Tyto dva flagy jsou aplikovany az po `CLOUD_RUN_DEPLOY_FLAGS`, aby je volitelna konfigurace
+nemohla omylem prepsat. Workflow pred smoke testem vypise efektivni ingress, stav vychozi URL
+a rozdeleni trafficu.

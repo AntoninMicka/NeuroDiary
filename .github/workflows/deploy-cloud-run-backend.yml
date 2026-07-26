@@ -80,11 +80,24 @@ jobs:
           flags: >-
             --port=8080
             --allow-unauthenticated
-            --ingress=all
-            --default-url
             --startup-probe=httpGet.path=/readyz,httpGet.port=8080,initialDelaySeconds=0,timeoutSeconds=3,periodSeconds=5,failureThreshold=12
             --liveness-probe=httpGet.path=/healthz,httpGet.port=8080,initialDelaySeconds=10,timeoutSeconds=3,periodSeconds=30,failureThreshold=3
             ${{ vars.CLOUD_RUN_DEPLOY_FLAGS }}
+            --ingress=all
+            --default-url
+
+      - name: Show effective Cloud Run configuration
+        run: |
+          gcloud run services describe "${CLOUD_RUN_SERVICE}" \
+            --region="${GCP_REGION}" \
+            --format=json |
+            jq '{
+              ingress: .metadata.annotations["run.googleapis.com/ingress"],
+              defaultUrlDisabled: .metadata.annotations["run.googleapis.com/default-url-disabled"],
+              url: .status.url,
+              addressUrl: .status.address.url,
+              traffic: .status.traffic
+            }'
 
       - name: Verify deployed service
         env:
