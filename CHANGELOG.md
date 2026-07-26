@@ -15,6 +15,7 @@ This project follows Keep a Changelog and Semantic Versioning.
 - Long-term trend view for 30, 90, 180, and 365 day periods.
 - Medication reminders for Firefox and Chrome through persistent service-worker notifications.
 - Backend readiness, capability metadata, structured request logging, CI, and deployment smoke tests.
+- Date-ranged treatment-plan versions used by daily and long-term adherence.
 
 ### Changed
 

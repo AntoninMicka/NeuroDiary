@@ -133,7 +133,7 @@ export function auditDiaryState(inputState) {
     });
   }
 
-  const treatmentPlanKeys = new Set();
+  const treatmentPlanPeriodsByKey = new Map();
   const treatmentPlanIds = new Set();
   for (const medication of state.treatmentPlan ?? []) {
     treatmentPlanIds.add(medication.id);
@@ -144,15 +144,37 @@ export function auditDiaryState(inputState) {
         value: Object.values(validation.errors).join(" "),
       });
     }
+    if (medication.validFrom && !isValidDateKey(medication.validFrom)) {
+      pushIssue(issues, "error", "Polozka planu ma neplatny zacatek platnosti.", {
+        scope: "treatmentPlan",
+        value: medication.validFrom,
+      });
+    }
+    if (medication.validTo && !isValidDateKey(medication.validTo)) {
+      pushIssue(issues, "error", "Polozka planu ma neplatny konec platnosti.", {
+        scope: "treatmentPlan",
+        value: medication.validTo,
+      });
+    }
+    if (medication.validFrom && medication.validTo && medication.validTo < medication.validFrom) {
+      pushIssue(issues, "error", "Polozka planu konci pred zacatkem sve platnosti.", {
+        scope: "treatmentPlan",
+        value: `${medication.validFrom}|${medication.validTo}`,
+      });
+    }
 
     const duplicateKey = buildMedicationDuplicateKey(medication);
-    if (treatmentPlanKeys.has(duplicateKey)) {
+    const periods = treatmentPlanPeriodsByKey.get(duplicateKey) ?? [];
+    const currentStart = medication.validFrom || "0000-01-01";
+    const currentEnd = medication.validTo || "9999-12-31";
+    if (periods.some(({ start, end }) => currentStart <= end && start <= currentEnd)) {
       pushIssue(warnings, "warning", "Plan obsahuje duplicitni davku.", {
         scope: "treatmentPlan",
         value: duplicateKey,
       });
     }
-    treatmentPlanKeys.add(duplicateKey);
+    periods.push({ start: currentStart, end: currentEnd });
+    treatmentPlanPeriodsByKey.set(duplicateKey, periods);
   }
 
   for (const [dateKey, deletedAt] of Object.entries(state.deletedEntryDates ?? {})) {

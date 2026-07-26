@@ -115,7 +115,9 @@ Aktuální stav:
 * starší dávky se párují podle názvu, množství a nejbližšího času
 * den zobrazuje dávky užité včas, dříve, později, čekající a vynechané
 * dostupný je denní souhrn adherence a přehled neplánovaných dávek
-* zbývá verzování léčebného plánu v čase a dlouhodobá adherence analýza
+* léčebný plán je verzovaný pomocí období platnosti `od–do`
+* historická i dlouhodobá adherence používá plán platný v konkrétní den
+* zbývá detailnější dlouhodobá adherence analýza
 
 ### [poc_done] 2.4 Denní záznam
 
@@ -180,7 +182,8 @@ Aktuální stav:
 * porovnání podílu ON a OFF mezi první a druhou polovinou období
 * pokrytí dat a průměrný počet zaznamenaných hodin
 * orientační adherence po týdnech s upozorněním na použití aktuálního léčebného plánu
-* zbývá verzování léčebného plánu a klinické ověření interpretace metrik
+* dlouhodobá adherence respektuje historické verze léčebného plánu
+* zbývá klinické ověření interpretace metrik
 
 ### [pending] 3.6 Kvalita dat pro analýzy
 

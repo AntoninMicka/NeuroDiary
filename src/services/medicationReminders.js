@@ -1,4 +1,5 @@
 import { normalizeSingleLine } from "./validation.js";
+import { getTreatmentPlanForDate } from "../domain/diary.js";
 
 const SETTINGS_STORAGE_KEY = "neurodiary-medication-reminders-v1";
 const FIRED_STORAGE_KEY = "neurodiary-medication-reminders-fired-v1";
@@ -107,7 +108,7 @@ export async function checkMedicationReminders({
   const shownReminderIds = [];
   const registration = await globalThis.navigator.serviceWorker.ready;
 
-  for (const planItem of treatmentPlan) {
+  for (const planItem of getTreatmentPlanForDate(treatmentPlan, todayKey)) {
     const reminderId = `${todayKey}|${planItem.id}|${planItem.time}`;
     const reminderAt = timeToMinutes(planItem.time) - settings.leadMinutes;
     const isDue = nowMinutes >= reminderAt && nowMinutes <= timeToMinutes(planItem.time) + 60;

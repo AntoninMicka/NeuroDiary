@@ -13,7 +13,7 @@ import {
 import { DiaryRepository } from "./DiaryRepository.js";
 
 const STORAGE_KEY = "neurodiary-sqlite-db-v1";
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 6;
 
 const MIGRATIONS = [
   {
@@ -93,6 +93,15 @@ const MIGRATIONS = [
     run(db) {
       db.run(`
         ALTER TABLE medications ADD COLUMN plan_item_id TEXT NOT NULL DEFAULT '';
+      `);
+    },
+  },
+  {
+    version: 6,
+    run(db) {
+      db.run(`
+        ALTER TABLE treatment_plan ADD COLUMN valid_from TEXT NOT NULL DEFAULT '';
+        ALTER TABLE treatment_plan ADD COLUMN valid_to TEXT NOT NULL DEFAULT '';
       `);
     },
   },
@@ -299,10 +308,10 @@ export class SqliteDiaryRepository extends DiaryRepository {
       for (const item of state.treatmentPlan ?? []) {
         this.db.run(
           `
-            INSERT INTO treatment_plan (id, name, dose, time)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO treatment_plan (id, name, dose, time, valid_from, valid_to)
+            VALUES (?, ?, ?, ?, ?, ?)
           `,
-          [item.id, item.name, item.dose, item.time],
+          [item.id, item.name, item.dose, item.time, item.validFrom ?? "", item.validTo ?? ""],
         );
       }
 
@@ -475,7 +484,7 @@ export class SqliteDiaryRepository extends DiaryRepository {
 
   selectTreatmentPlan() {
     const statement = this.db.prepare(`
-      SELECT id, name, dose, time
+      SELECT id, name, dose, time, valid_from, valid_to
       FROM treatment_plan
       ORDER BY time, id
     `);
@@ -489,6 +498,8 @@ export class SqliteDiaryRepository extends DiaryRepository {
           name: row.name,
           dose: row.dose,
           time: row.time,
+          validFrom: row.valid_from,
+          validTo: row.valid_to,
         }));
       }
       return results;

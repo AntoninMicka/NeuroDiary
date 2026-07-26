@@ -119,7 +119,7 @@ function formatShortDate(dateKey) {
         </article>
       </div>
       <p class="panel-tip">
-        Procento vpravo je orientacni adherence podle aktualniho lecebneho planu. Historicke zmeny planu zatim nejsou verzovane.
+        Procento vpravo je orientacni adherence podle lecebneho planu platneho v danem tydnu.
       </p>
     </div>
   </section>

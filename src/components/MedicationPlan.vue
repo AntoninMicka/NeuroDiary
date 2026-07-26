@@ -1,6 +1,6 @@
 <script setup>
-import { computed, reactive, ref } from "vue";
-import { getTodayKey } from "../domain/diary.js";
+import { computed, reactive, ref, watch } from "vue";
+import { getTodayKey, isTreatmentPlanItemActiveOnDate } from "../domain/diary.js";
 import { analyzeMedicationAdherence } from "../services/adherence.js";
 import { buildMedicationDuplicateKey, validateMedicationInput } from "../services/validation.js";
 
@@ -41,7 +41,7 @@ const props = defineProps({
 
 const emit = defineEmits([
   "add-plan-item",
-  "remove-plan-item",
+  "end-plan-item",
   "remove-recorded-medication",
   "update-reminder-enabled",
   "update-reminder-lead-minutes",
@@ -51,6 +51,8 @@ const form = reactive({
   name: "",
   dose: "",
   time: "08:00",
+  validFrom: props.selectedDate,
+  validTo: "",
 });
 const errors = reactive({});
 const formMessage = ref("");
@@ -63,6 +65,29 @@ const adherence = computed(() =>
     now: props.currentTime,
   }),
 );
+const historicalPlanItems = computed(() =>
+  props.treatmentPlan
+    .filter((item) => !isTreatmentPlanItemActiveOnDate(item, props.selectedDate))
+    .sort((left, right) =>
+      (right.validTo || "9999-12-31").localeCompare(left.validTo || "9999-12-31"),
+    ),
+);
+
+watch(
+  () => props.selectedDate,
+  (dateKey) => {
+    form.validFrom = dateKey;
+    form.validTo = "";
+  },
+);
+
+function periodsOverlap(left, right) {
+  const leftStart = left.validFrom || "0000-01-01";
+  const leftEnd = left.validTo || "9999-12-31";
+  const rightStart = right.validFrom || "0000-01-01";
+  const rightEnd = right.validTo || "9999-12-31";
+  return leftStart <= rightEnd && rightStart <= leftEnd;
+}
 
 function submitForm() {
   const validation = validateMedicationInput(form);
@@ -72,17 +97,25 @@ function submitForm() {
   if (!validation.isValid) {
     return;
   }
-
-  const duplicateKey = buildMedicationDuplicateKey(validation.value);
-  if (props.treatmentPlan.some((item) => buildMedicationDuplicateKey(item) === duplicateKey)) {
-    formMessage.value = "Stejna davka se stejnym casem uz v planu existuje.";
+  if (form.validTo && form.validTo < form.validFrom) {
+    formMessage.value = "Konec platnosti nesmi byt pred jejim zacatkem.";
     return;
   }
 
-  emit("add-plan-item", validation.value);
+  const duplicateKey = buildMedicationDuplicateKey(validation.value);
+  const candidate = { ...validation.value, validFrom: form.validFrom, validTo: form.validTo };
+  if (props.treatmentPlan.some(
+    (item) => buildMedicationDuplicateKey(item) === duplicateKey && periodsOverlap(item, candidate),
+  )) {
+    formMessage.value = "Stejna davka se stejnym casem uz v tomto obdobi existuje.";
+    return;
+  }
+
+  emit("add-plan-item", candidate);
   form.name = "";
   form.dose = "";
   form.time = "08:00";
+  form.validTo = "";
 }
 </script>
 
@@ -114,11 +147,21 @@ function submitForm() {
         <small v-if="errors.time" class="form-error">{{ errors.time }}</small>
       </label>
 
-      <button class="primary-button" type="submit">Pridat do planu</button>
+      <label>
+        <span>Platnost od</span>
+        <input v-model="form.validFrom" type="date" required />
+      </label>
+
+      <label>
+        <span>Platnost do (volitelne)</span>
+        <input v-model="form.validTo" type="date" :min="form.validFrom" />
+      </label>
+
+      <button class="primary-button" type="submit">Pridat verzi planu</button>
       <p v-if="formMessage" class="form-error" role="alert">{{ formMessage }}</p>
     </form>
 
-    <p class="panel-tip">Plan slouzi jako sablona. Skutecne uzitou davku zapisete rychlym zapisem s aktualnim casem.</p>
+    <p class="panel-tip">Pro vybrany den se pouziji pouze davky, jejichz obdobi platnosti tento den zahrnuje.</p>
 
     <div class="medication-reminder-card">
       <div>
@@ -184,6 +227,7 @@ function submitForm() {
           <strong>{{ dose.planItem.time }} - {{ dose.planItem.name }}</strong>
           <span>
             {{ dose.planItem.dose }}
+            · platnost {{ dose.planItem.validFrom || "bez zacatku" }} – {{ dose.planItem.validTo || "bez konce" }}
             <template v-if="dose.recordedMedication">
               · skutecne {{ dose.recordedMedication.time }}
             </template>
@@ -193,9 +237,23 @@ function submitForm() {
         <span :class="['adherence-status', `adherence-status-${dose.statusKey}`]">
           {{ dose.statusLabel }}
         </span>
-        <button type="button" @click="emit('remove-plan-item', dose.planItem.id)">Odebrat z planu</button>
+        <button type="button" @click="emit('end-plan-item', dose.planItem.id, selectedDate)">
+          Ukoncit po tomto dni
+        </button>
       </li>
     </ul>
+
+    <details v-if="historicalPlanItems.length" class="plan-history">
+      <summary>Ostatni verze planu ({{ historicalPlanItems.length }})</summary>
+      <ul class="list">
+        <li v-for="item in historicalPlanItems" :key="item.id">
+          <div class="medication-copy">
+            <strong>{{ item.time }} - {{ item.name }}</strong>
+            <span>{{ item.dose }} · {{ item.validFrom || "bez zacatku" }} – {{ item.validTo || "bez konce" }}</span>
+          </div>
+        </li>
+      </ul>
+    </details>
 
     <div class="panel-heading medication-record-heading">
       <div>

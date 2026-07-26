@@ -17,6 +17,7 @@ import {
   ensureEntry,
   formatLongDate,
   getHourRecordCount,
+  getTreatmentPlanForDate,
   getStateDefinition,
   markMedicationDeleted,
   markEntryDeleted,
@@ -175,8 +176,11 @@ const sortedMedications = computed(() =>
 const sortedTreatmentPlan = computed(() =>
   [...(state.treatmentPlan ?? [])].sort((left, right) => left.time.localeCompare(right.time)),
 );
+const activeTodayTreatmentPlan = computed(() =>
+  getTreatmentPlanForDate(state.treatmentPlan, getTodayKey()),
+);
 const selectedTreatmentPlanItem = computed(() =>
-  sortedTreatmentPlan.value.find((item) => item.id === selectedTreatmentPlanId.value) ?? null,
+  activeTodayTreatmentPlan.value.find((item) => item.id === selectedTreatmentPlanId.value) ?? null,
 );
 const PANEL_ITEMS = [
   { id: "sekce-home", label: "Rychly zapis" },
@@ -420,7 +424,7 @@ onMounted(async () => {
   const initialState = repository.loadState();
   setBootstrapStatus("Applying loaded state to the application.");
   Object.assign(state, initialState);
-  selectedTreatmentPlanId.value = state.treatmentPlan?.[0]?.id ?? "";
+  selectedTreatmentPlanId.value = activeTodayTreatmentPlan.value[0]?.id ?? "";
   diaryRepository.value = repository;
   repositoryMode.value = repository.getMode();
   if (authSession.value?.user) {
@@ -868,15 +872,25 @@ function removeMedication(medicationId) {
 function addTreatmentPlanItem(payload) {
   state.treatmentPlan.push(createTreatmentPlanItem(payload));
   state.treatmentPlan.sort((left, right) => left.time.localeCompare(right.time));
-  if (!selectedTreatmentPlanId.value) {
-    selectedTreatmentPlanId.value = state.treatmentPlan[0]?.id ?? "";
+  if (!selectedTreatmentPlanId.value && getTreatmentPlanForDate([payload], getTodayKey()).length) {
+    selectedTreatmentPlanId.value = state.treatmentPlan.find(
+      (item) =>
+        item.name === payload.name
+        && item.dose === payload.dose
+        && item.time === payload.time
+        && item.validFrom === payload.validFrom,
+    )?.id ?? activeTodayTreatmentPlan.value[0]?.id ?? "";
   }
 }
 
-function removeTreatmentPlanItem(planItemId) {
-  state.treatmentPlan = state.treatmentPlan.filter((item) => item.id !== planItemId);
+function endTreatmentPlanItem(planItemId, validTo) {
+  const item = state.treatmentPlan.find((candidate) => candidate.id === planItemId);
+  if (!item) {
+    return;
+  }
+  item.validTo = validTo;
   if (selectedTreatmentPlanId.value === planItemId) {
-    selectedTreatmentPlanId.value = state.treatmentPlan[0]?.id ?? "";
+    selectedTreatmentPlanId.value = activeTodayTreatmentPlan.value[0]?.id ?? "";
   }
 }
 
@@ -1608,8 +1622,8 @@ function applyImportedState(nextState) {
     state.account = nextState.account ?? state.account;
     state.entries = nextState.entries ?? {};
     ensureEntry(state, state.selectedDate);
-    if (!selectedTreatmentPlanId.value || !state.treatmentPlan.some((item) => item.id === selectedTreatmentPlanId.value)) {
-      selectedTreatmentPlanId.value = state.treatmentPlan[0]?.id ?? "";
+    if (!selectedTreatmentPlanId.value || !activeTodayTreatmentPlan.value.some((item) => item.id === selectedTreatmentPlanId.value)) {
+      selectedTreatmentPlanId.value = activeTodayTreatmentPlan.value[0]?.id ?? "";
     }
     diaryRepository.value?.saveState(state);
   } finally {
@@ -2038,7 +2052,7 @@ function syncFloatingMenuHeight() {
           :notification-permission="medicationNotificationPermission"
           :notifications-supported="medicationNotificationsSupported"
           @add-plan-item="addTreatmentPlanItem"
-          @remove-plan-item="removeTreatmentPlanItem"
+          @end-plan-item="endTreatmentPlanItem"
           @remove-recorded-medication="removeMedication"
           @update-reminder-enabled="setMedicationRemindersEnabled"
           @update-reminder-lead-minutes="updateMedicationReminderLeadMinutes"
@@ -2114,11 +2128,11 @@ function syncFloatingMenuHeight() {
                 <span>Davka z planu</span>
                 <select
                   :value="selectedTreatmentPlanId"
-                  :disabled="!isSelectedDateEditable || sortedTreatmentPlan.length === 0"
+                  :disabled="!isSelectedDateEditable || activeTodayTreatmentPlan.length === 0"
                   @input="selectedTreatmentPlanId = $event.target.value"
                 >
                   <option value="">Vyberte planovanou davku</option>
-                  <option v-for="item in sortedTreatmentPlan" :key="item.id" :value="item.id">
+                  <option v-for="item in activeTodayTreatmentPlan" :key="item.id" :value="item.id">
                     {{ item.time }} · {{ item.name }} · {{ item.dose }}
                   </option>
                 </select>

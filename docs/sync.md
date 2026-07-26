@@ -50,7 +50,7 @@ Prakticky dopad:
 - sync po jednotlivych dnech nebo entitach
 - audit historie zmen
 - retry s exponencialnim backoffem
-- verzovani lecebneho planu pro historickou adherence
+- jemnejsi conflict audit zmen lecebneho planu
 
 ## Aktualni klientsky tok
 

@@ -1001,6 +1001,16 @@ textarea {
   grid-template-columns: minmax(0, 1fr) auto auto;
 }
 
+.plan-history {
+  margin-top: 1rem;
+}
+
+.plan-history summary {
+  cursor: pointer;
+  color: var(--accent-strong);
+  font-weight: 700;
+}
+
 .adherence-status {
   padding: 0.35rem 0.6rem;
   border-radius: 999px;

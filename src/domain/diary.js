@@ -110,7 +110,25 @@ export function createMedication(payload) {
 }
 
 export function createTreatmentPlanItem(payload) {
-  return createMedication(payload);
+  const item = createMedication(payload);
+  item.validFrom = typeof payload.validFrom === "string" ? payload.validFrom : "";
+  item.validTo = typeof payload.validTo === "string" ? payload.validTo : "";
+  return item;
+}
+
+export function isTreatmentPlanItemActiveOnDate(item, dateKey) {
+  if (!item || typeof dateKey !== "string") {
+    return false;
+  }
+  const validFrom = typeof item.validFrom === "string" ? item.validFrom : "";
+  const validTo = typeof item.validTo === "string" ? item.validTo : "";
+  return (!validFrom || validFrom <= dateKey) && (!validTo || dateKey <= validTo);
+}
+
+export function getTreatmentPlanForDate(treatmentPlan = [], dateKey) {
+  return treatmentPlan
+    .filter((item) => isTreatmentPlanItemActiveOnDate(item, dateKey))
+    .sort((left, right) => left.time.localeCompare(right.time));
 }
 
 export function createDefaultEntry() {
@@ -611,11 +629,24 @@ function selectPreferredEntryValue(baseValue = UNDEFINED_ENTRY_VALUE, incomingVa
 }
 
 function replaceTreatmentPlan(basePlan = [], incomingPlan = []) {
-  const hasIncomingPlan = Array.isArray(incomingPlan) && incomingPlan.length > 0;
-  const hasBasePlan = Array.isArray(basePlan) && basePlan.length > 0;
-  const sourcePlan = hasIncomingPlan || !hasBasePlan ? incomingPlan : basePlan;
-  return sourcePlan
-    .map((item) => ({ ...item }))
+  const mergedById = new Map();
+  for (const item of [...basePlan, ...incomingPlan]) {
+    const existing = mergedById.get(item.id);
+    if (!existing) {
+      mergedById.set(item.id, { ...item });
+      continue;
+    }
+    mergedById.set(item.id, {
+      ...existing,
+      ...item,
+      validFrom: item.validFrom || existing.validFrom || "",
+      validTo:
+        item.validTo && existing.validTo
+          ? [item.validTo, existing.validTo].sort().at(-1)
+          : item.validTo || existing.validTo || "",
+    });
+  }
+  return [...mergedById.values()]
     .sort((left, right) => left.time.localeCompare(right.time));
 }
 

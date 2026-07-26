@@ -1,4 +1,5 @@
 import { normalizeSingleLine } from "./validation.js";
+import { getTreatmentPlanForDate } from "../domain/diary.js";
 
 export const ADHERENCE_TOLERANCE_MINUTES = 30;
 
@@ -35,8 +36,7 @@ export function analyzeMedicationAdherence({
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
   const todayKey = todayDate;
 
-  const plannedDoses = [...treatmentPlan]
-    .sort((left, right) => left.time.localeCompare(right.time))
+  const plannedDoses = getTreatmentPlanForDate(treatmentPlan, selectedDate)
     .map((planItem) => {
       const directMatch = recordedMedications.find(
         (item) => !usedMedicationIds.has(item.id) && item.planItemId === planItem.id,
