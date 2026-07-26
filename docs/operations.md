@@ -78,3 +78,8 @@ neni produkcni zaloha a muze zmizet s instanci.
 Deploy workflow automaticky vola `/healthz`, `/readyz` a `/api/v1/meta`. Nasazeni je povazovano
 za uspesne az po projiti techto smoke testu. Synchronizaci dvou zarizeni je nadale potreba overit
 manualne, protoze vyzaduje realny ucet a recovery secret.
+
+Smoke test standardne pouziva URL vracenou Cloud Run deploy akci. Pokud je vychozi `run.app`
+URL vypnuta, omezena ingress pravidly nebo aplikace pouziva vlastni domenu, nastav repository
+variable `CLOUD_RUN_PUBLIC_URL` na verejnou zakladni URL aplikace bez cesty. Workflow ji pro
+overeni uprednostni pred URL vracenou deploy akci.
