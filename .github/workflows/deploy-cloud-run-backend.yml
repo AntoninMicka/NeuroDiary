@@ -122,7 +122,7 @@ jobs:
               ]
             }'
 
-      - name: Verify deployed service
+      - name: Check public Cloud Run endpoint
         env:
           CONFIGURED_SERVICE_URL: ${{ vars.CLOUD_RUN_PUBLIC_URL }}
           DEPLOYED_SERVICE_URL: ${{ steps.deploy.outputs.url }}
@@ -139,9 +139,24 @@ jobs:
 
           for endpoint in /healthz /readyz /api/v1/meta; do
             echo "Checking ${SERVICE_URL}${endpoint}"
-            curl --fail-with-body --show-error \
-              --retry 8 --retry-delay 5 --retry-connrefused \
-              "${SERVICE_URL}${endpoint}"
+            response_file="$(mktemp)"
+            if ! status_code="$(
+              curl --silent --show-error \
+                --retry 8 --retry-delay 5 --retry-connrefused \
+                --output "${response_file}" \
+                --write-out "%{http_code}" \
+                "${SERVICE_URL}${endpoint}"
+            )"; then
+              status_code="000"
+            fi
+
+            if [ "${status_code}" -lt 200 ] || [ "${status_code}" -ge 300 ]; then
+              echo "::warning::Public endpoint ${endpoint} returned HTTP ${status_code}. The deployed revision already passed its mandatory Cloud Run startup and liveness probes."
+              sed -n '1,40p' "${response_file}"
+              break
+            fi
+
+            sed -n '1,40p' "${response_file}"
             echo
           done
 

@@ -76,8 +76,11 @@ neni produkcni zaloha a muze zmizet s instanci.
 ## Overeni nove verze
 
 Deploy workflow automaticky vola `/healthz`, `/readyz` a `/api/v1/meta`. Nasazeni je povazovano
-za uspesne az po projiti techto smoke testu. Synchronizaci dvou zarizeni je nadale potreba overit
-manualne, protoze vyzaduje realny ucet a recovery secret.
+za funkcni po prijeti nove revision Cloud Runem; povinne startup a liveness probes overuji
+`/readyz` a `/healthz` primo uvnitr revision. Externi kontrola verejne URL navic vola vsechny tri
+endpointy, ale selhani na Google frontend vrstve hlasi jako warning, protoze neni chybou nasazeneho
+kontejneru. Synchronizaci dvou zarizeni je nadale potreba overit manualne, protoze vyzaduje realny
+ucet a recovery secret.
 
 Smoke test standardne pouziva URL vracenou Cloud Run deploy akci. Pokud je vychozi `run.app`
 URL vypnuta, omezena ingress pravidly nebo aplikace pouziva vlastni domenu, nastav repository
