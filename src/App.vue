@@ -1069,6 +1069,7 @@ function printDoctorReport() {
   try {
     openDoctorReportPrint({
       entries: state.entries,
+      treatmentPlan: state.treatmentPlan,
       selectedDate: state.selectedDate,
       patientName: state.patientName,
       birthYear: state.birthYear,

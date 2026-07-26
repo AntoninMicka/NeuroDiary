@@ -173,7 +173,18 @@ Poznámka:
 
 > Užitečnost a interpretační hodnotu těchto statistik bude potřeba ověřit se specializovaným lékařem, aby se do další fáze neposouvaly metriky, které nejsou klinicky přínosné.
 
-### [pending] 3.4 Wearing-off analýza
+### [done] 3.4 Wearing-off analýza
+
+Aktuální stav:
+
+* zhoršení `MID/OFF` v dvouhodinovém okně před plánovanou dávkou
+* silnější kandidát vyžaduje předchozí `ON` nebo dyskinezi
+* orientační čas do prvního `ON` nebo dyskineze po skutečné dávce
+* agregace podle názvu, dávky a plánovaného času
+* opakující se denní doby se zhoršením
+* pouze dostatečné a kompletní dny, s minimálním doporučeným vzorkem
+* souhrn v dlouhodobých trendech a lékařském reportu
+* výslovné upozornění, že nejde o diagnózu ani doporučení změny léčby
 
 ### [in_progress] 3.5 Dlouhodobé trendy
 

@@ -8,6 +8,7 @@ import {
   TRACKING_HOURS,
 } from "../domain/diary.js";
 import { evaluateDayQuality } from "./dataQuality.js";
+import { analyzeWearingOff } from "./wearingOff.js";
 
 const REPORT_DAYS_PAGE_ONE = 4;
 const ANALYSIS_DAYS = 7;
@@ -351,8 +352,14 @@ function buildWeekBlockHeaders() {
   return Array.from({ length: ANALYSIS_WEEK_BLOCKS }, (_, index) => `<th>W${index + 1}</th>`).join("");
 }
 
-function buildAnalysisPage(entries, selectedDate) {
+function buildAnalysisPage(entries, treatmentPlan, selectedDate) {
   const summary = summarizeWindow(entries, selectedDate, ANALYSIS_DAYS);
+  const wearingOff = analyzeWearingOff({
+    entries,
+    treatmentPlan,
+    endDateKey: selectedDate,
+    days: ANALYSIS_LONG_DAYS,
+  });
 
   return `
     <section class="sheet analysis-page">
@@ -381,6 +388,20 @@ function buildAnalysisPage(entries, selectedDate) {
           <strong>Celkem hodin OFF</strong>
           <span>${escapeHtml(String(summary.offHours))}</span>
         </article>
+      </section>
+
+      <section class="analysis-panel wearing-off-report-note">
+        <h3>Orientační wearing-off pozorování za ${ANALYSIS_LONG_DAYS} dní</h3>
+        <p>
+          ${escapeHtml(String(wearingOff.candidateDoses))} / ${escapeHtml(String(wearingOff.evaluatedDoses))}
+          dávek vykázalo MID/OFF před plánovanou dávkou po předchozím ON/dyskinezi.
+          Medián do dalšího ON/dyskineze:
+          ${escapeHtml(wearingOff.medianResponseMinutes === null ? "bez dat" : `${wearingOff.medianResponseMinutes} min`)}.
+        </p>
+        <p>
+          Zahrnuto ${escapeHtml(String(wearingOff.reliableDays))} spolehlivých dní.
+          Jde o hrubý odhad z hodinových záznamů, nikoli diagnózu ani doporučení ke změně léčby.
+        </p>
       </section>
 
       <section class="analysis-grid">
@@ -427,7 +448,13 @@ function buildAnalysisPage(entries, selectedDate) {
   `;
 }
 
-export function buildDoctorReportHtml({ entries, selectedDate, patientName = "", birthYear = "" }) {
+export function buildDoctorReportHtml({
+  entries,
+  treatmentPlan = [],
+  selectedDate,
+  patientName = "",
+  birthYear = "",
+}) {
   const entry = entries[selectedDate];
   if (!entry) {
     throw new Error(`No diary entry found for ${selectedDate}`);
@@ -937,13 +964,13 @@ export function buildDoctorReportHtml({ entries, selectedDate, patientName = "",
           </section>
         </section>
 
-        ${buildAnalysisPage(entries, selectedDate)}
+        ${buildAnalysisPage(entries, treatmentPlan, selectedDate)}
       </main>
     </body>
   </html>`;
 }
 
-export function openDoctorReportPrint({ entries, selectedDate, patientName, birthYear }) {
+export function openDoctorReportPrint({ entries, treatmentPlan, selectedDate, patientName, birthYear }) {
   const reportWindow = window.open("", "_blank");
   if (!reportWindow) {
     throw new Error("Unable to open report window");
@@ -951,6 +978,7 @@ export function openDoctorReportPrint({ entries, selectedDate, patientName, birt
 
   const html = buildDoctorReportHtml({
     entries,
+    treatmentPlan,
     selectedDate,
     patientName,
     birthYear,

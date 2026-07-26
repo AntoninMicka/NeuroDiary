@@ -17,6 +17,7 @@ This project follows Keep a Changelog and Semantic Versioning.
 - Backend readiness, capability metadata, structured request logging, CI, and deployment smoke tests.
 - Date-ranged treatment-plan versions used by daily and long-term adherence.
 - Day-data quality classification with missing-range guidance and reliable-period coverage.
+- Quality-filtered wearing-off observations by planned dose, response time, and recurring hour.
 
 ### Changed
 

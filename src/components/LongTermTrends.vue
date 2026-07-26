@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref } from "vue";
 import { analyzeLongTermTrends } from "../services/statistics.js";
+import WearingOffAnalysis from "./WearingOffAnalysis.vue";
 
 const props = defineProps({
   entries: {
@@ -122,5 +123,12 @@ function formatShortDate(dateKey) {
         Procento vpravo je orientacni adherence podle lecebneho planu platneho v danem tydnu.
       </p>
     </div>
+
+    <WearingOffAnalysis
+      :entries="entries"
+      :treatment-plan="treatmentPlan"
+      :selected-date="selectedDate"
+      :days="periodDays"
+    />
   </section>
 </template>

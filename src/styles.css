@@ -1336,6 +1336,68 @@ textarea {
   background: rgba(201, 123, 52, 0.13);
 }
 
+.wearing-off-panel {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1.4rem;
+  padding-top: 1.4rem;
+  border-top: 1px solid rgba(31, 41, 51, 0.12);
+}
+
+.wearing-off-table {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1.4fr) repeat(3, minmax(9rem, 1fr));
+  overflow-x: auto;
+  border: 1px solid rgba(31, 41, 51, 0.1);
+  border-radius: 14px;
+}
+
+.wearing-off-table > div {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 9rem;
+  padding: 0.75rem;
+  border-right: 1px solid rgba(31, 41, 51, 0.08);
+  border-top: 1px solid rgba(31, 41, 51, 0.08);
+}
+
+.wearing-off-table > div:nth-child(-n + 4) {
+  border-top: 0;
+}
+
+.wearing-off-table > div:nth-child(4n) {
+  border-right: 0;
+}
+
+.wearing-off-table > div span,
+.wearing-off-patterns li span {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.wearing-off-table-head {
+  color: var(--accent-strong);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  background: rgba(31, 122, 140, 0.07);
+}
+
+.wearing-off-patterns {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.wearing-off-patterns h3 {
+  margin: 0;
+}
+
+.wearing-off-method {
+  padding: 0.8rem;
+  border-radius: 12px;
+  background: rgba(31, 41, 51, 0.04);
+}
+
 .trend-chart {
   display: grid;
   gap: 0.8rem;
