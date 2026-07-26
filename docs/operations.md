@@ -83,3 +83,8 @@ Smoke test standardne pouziva URL vracenou Cloud Run deploy akci. Pokud je vycho
 URL vypnuta, omezena ingress pravidly nebo aplikace pouziva vlastni domenu, nastav repository
 variable `CLOUD_RUN_PUBLIC_URL` na verejnou zakladni URL aplikace bez cesty. Workflow ji pro
 overeni uprednostni pred URL vracenou deploy akci.
+
+Workflow nastavuje `--ingress=all` a `--default-url`, protoze verejny Cloud Run endpoint je
+soucasti architektury aplikace a pristup k uzivatelskym datum dale chrani autentizace API.
+Pokud se ingress zamerne omezi pres `CLOUD_RUN_DEPLOY_FLAGS`, musi `CLOUD_RUN_PUBLIC_URL`
+ukazovat na dostupnou adresu pred load balancerem.
