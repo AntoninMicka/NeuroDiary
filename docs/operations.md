@@ -89,3 +89,7 @@ soucasti architektury aplikace a pristup k uzivatelskym datum dale chrani autent
 Tyto dva flagy jsou aplikovany az po `CLOUD_RUN_DEPLOY_FLAGS`, aby je volitelna konfigurace
 nemohla omylem prepsat. Workflow pred smoke testem vypise efektivni ingress, stav vychozi URL
 a rozdeleni trafficu.
+
+Po deployi workflow explicitne nastavi `allUsers` roli `roles/run.invoker` a overi efektivni
+IAM policy. Jde o verejnou dostupnost HTTP sluzby; sifrovana uzivatelska data a zapisove API
+zustavaji chranene aplikacni autentizaci.

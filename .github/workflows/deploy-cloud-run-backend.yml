@@ -99,6 +99,29 @@ jobs:
               traffic: .status.traffic
             }'
 
+      - name: Ensure public Cloud Run invocation
+        run: |
+          gcloud run services add-iam-policy-binding "${CLOUD_RUN_SERVICE}" \
+            --region="${GCP_REGION}" \
+            --member="allUsers" \
+            --role="roles/run.invoker" \
+            --quiet
+
+          gcloud run services get-iam-policy "${CLOUD_RUN_SERVICE}" \
+            --region="${GCP_REGION}" \
+            --format=json |
+            jq '{
+              publicInvoker: any(
+                .bindings[]?;
+                .role == "roles/run.invoker" and
+                any(.members[]?; . == "allUsers")
+              ),
+              bindings: [
+                .bindings[]? |
+                select(.role == "roles/run.invoker")
+              ]
+            }'
+
       - name: Verify deployed service
         env:
           CONFIGURED_SERVICE_URL: ${{ vars.CLOUD_RUN_PUBLIC_URL }}
