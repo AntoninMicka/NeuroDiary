@@ -137,6 +137,7 @@ const birthYearValidationMessage = ref("");
 const bootstrapStatus = ref("Starting application bootstrap.");
 const quickCaptureNow = ref(new Date());
 const quickCaptureRecordedAt = ref(formatDateTimeLocal(new Date()));
+const quickCaptureUsesCurrentTime = ref(true);
 const selectedStateKey = ref("on");
 const selectedTreatmentPlanId = ref("");
 const reportOptions = reactive({
@@ -204,7 +205,9 @@ const sortedTreatmentPlan = computed(() =>
 const activeTodayTreatmentPlan = computed(() =>
   getTreatmentPlanForDate(state.treatmentPlan, getTodayKey()),
 );
-const quickCaptureDate = computed(() => new Date(quickCaptureRecordedAt.value));
+const quickCaptureDate = computed(() =>
+  quickCaptureUsesCurrentTime.value ? quickCaptureNow.value : new Date(quickCaptureRecordedAt.value),
+);
 const quickCaptureDateKey = computed(() => formatDateKey(quickCaptureDate.value));
 const activeQuickCaptureTreatmentPlan = computed(() =>
   getTreatmentPlanForDate(state.treatmentPlan, quickCaptureDateKey.value),
@@ -583,6 +586,14 @@ function refreshQuickCaptureClock() {
 
 function updateQuickCaptureRecordedAt(value) {
   quickCaptureRecordedAt.value = value;
+}
+
+function setQuickCaptureTimeMode(useCurrentTime) {
+  quickCaptureUsesCurrentTime.value = useCurrentTime;
+  refreshQuickCaptureClock();
+  if (!useCurrentTime) {
+    quickCaptureRecordedAt.value = formatDateTimeLocal(quickCaptureNow.value);
+  }
 }
 
 async function setMedicationRemindersEnabled(enabled) {
@@ -1015,19 +1026,25 @@ function recordMedicationFromPlan() {
     return;
   }
 
-  const planItem = selectedTreatmentPlanItem.value;
+  const recordedAt = quickCaptureUsesCurrentTime.value ? new Date() : quickCaptureDate.value;
+  if (quickCaptureUsesCurrentTime.value) {
+    quickCaptureNow.value = recordedAt;
+  }
+  const dateKey = formatDateKey(recordedAt);
+  const planItem = getTreatmentPlanForDate(state.treatmentPlan, dateKey)
+    .find((item) => item.id === selectedTreatmentPlanId.value);
   if (!planItem) {
     storageMessage.value = "Nejprve vyberte nebo vytvorte davku v planu lecby.";
     return;
   }
 
-  const currentTime = getCurrentTimeLabel(quickCaptureDate.value);
+  const currentTime = getCurrentTimeLabel(recordedAt);
   const wasAdded = addMedication({
     name: planItem.name,
     dose: planItem.dose,
     time: currentTime,
     planItemId: planItem.id,
-  }, quickCaptureDateKey.value);
+  }, dateKey);
   if (!wasAdded) {
     return;
   }
@@ -1035,6 +1052,18 @@ function recordMedicationFromPlan() {
 }
 
 function updateHour({ label, stateKey }) {
+  const hourStart = new Date(`${state.selectedDate}T${String(label).padStart(2, "0")}:00:00`);
+  const timestamp = hourStart.getTime();
+  const oldestAllowed = quickCaptureNow.value.getTime() - 10 * 60 * 60 * 1000;
+  if (
+    !Number.isFinite(timestamp)
+    || timestamp + 60 * 60 * 1000 <= oldestAllowed
+    || timestamp > quickCaptureNow.value.getTime()
+  ) {
+    storageMessage.value = "V hodinove matici lze upravovat pouze poslednich 10 hodin.";
+    return;
+  }
+
   if (!stateKey) {
     clearHourStateRecords(selectedEntry.value, label);
     storageMessage.value = `Zaznam pro hodinu ${label} byl vymazan.`;
@@ -1050,7 +1079,10 @@ function writeCurrentState() {
     storageMessage.value = "Cas rychleho zapisu musi byt v poslednich 10 hodinach.";
     return;
   }
-  const recordedAt = quickCaptureDate.value;
+  const recordedAt = quickCaptureUsesCurrentTime.value ? new Date() : quickCaptureDate.value;
+  if (quickCaptureUsesCurrentTime.value) {
+    quickCaptureNow.value = recordedAt;
+  }
   const hourLabel = getTrackableHourLabel(recordedAt);
   const targetEntry = ensureEntry(state, quickCaptureDateKey.value);
   appendHourStateRecord(targetEntry, hourLabel, selectedStateKey.value, {
@@ -2197,6 +2229,7 @@ function syncFloatingMenuHeight() {
           :hours="selectedEntry.hours"
           :hour-records="selectedEntry.hourRecords"
           :selected-date="state.selectedDate"
+          :current-time="quickCaptureNow"
           @update-hour="updateHour"
           @select-date="updateSelectedDate"
         />
@@ -2270,66 +2303,81 @@ function syncFloatingMenuHeight() {
               </p>
             </div>
             <div class="floating-quick-capture-form">
-              <p class="panel-tip">
-                Cas zapisu: <strong>{{ currentTimeLabel }}</strong> · zapis do hodiny
-                <strong>{{ currentHourLabel }}</strong>
-              </p>
+              <div class="quick-capture-row">
+                <p class="panel-tip">
+                  Cas zapisu: <strong>{{ currentTimeLabel }}</strong> · zapis do hodiny
+                  <strong>{{ currentHourLabel }}</strong>
+                </p>
+                <div class="quick-capture-time-controls">
+                  <label>
+                    <span>Cas zapisu</span>
+                    <select
+                      :value="quickCaptureUsesCurrentTime ? 'current' : 'selected'"
+                      @input="setQuickCaptureTimeMode($event.target.value === 'current')"
+                    >
+                      <option value="current">Aktualni datum a cas</option>
+                      <option value="selected">Vybrany datum a cas</option>
+                    </select>
+                  </label>
+                  <label v-if="!quickCaptureUsesCurrentTime">
+                    <span>Datum a cas</span>
+                    <input
+                      :value="quickCaptureRecordedAt"
+                      type="datetime-local"
+                      :min="quickCaptureMin"
+                      :max="quickCaptureMax"
+                      @input="updateQuickCaptureRecordedAt($event.target.value)"
+                    />
+                  </label>
+                </div>
+              </div>
 
-              <label>
-                <span>Datum a cas zapisu</span>
-                <input
-                  :value="quickCaptureRecordedAt"
-                  type="datetime-local"
-                  :min="quickCaptureMin"
-                  :max="quickCaptureMax"
-                  @input="updateQuickCaptureRecordedAt($event.target.value)"
-                />
-              </label>
-
-              <label>
-                <span>Aktualni stav</span>
-                <select
-                  :value="selectedStateKey"
+              <div class="quick-capture-row">
+                <label>
+                  <span>Aktualni stav</span>
+                  <select
+                    :value="selectedStateKey"
+                    :disabled="!isQuickCaptureTimeValid"
+                    @input="updateSelectedStateKey($event.target.value)"
+                  >
+                    <option v-for="item in HOUR_STATES" :key="item.key" :value="item.key">
+                      {{ item.label }}
+                    </option>
+                  </select>
+                </label>
+                <button
+                  class="primary-button"
+                  type="button"
                   :disabled="!isQuickCaptureTimeValid"
-                  @input="updateSelectedStateKey($event.target.value)"
+                  @click="writeCurrentState"
                 >
-                  <option v-for="item in HOUR_STATES" :key="item.key" :value="item.key">
-                    {{ item.label }}
-                  </option>
-                </select>
-              </label>
+                  Zapsat {{ quickCaptureStateLabel }}
+                </button>
+              </div>
 
-              <button
-                class="primary-button"
-                type="button"
-                :disabled="!isQuickCaptureTimeValid"
-                @click="writeCurrentState"
-              >
-                Zapsat {{ quickCaptureStateLabel }}
-              </button>
-
-              <label>
-                <span>Davka z planu</span>
-                <select
-                  :value="selectedTreatmentPlanId"
-                  :disabled="!isQuickCaptureTimeValid || activeQuickCaptureTreatmentPlan.length === 0"
-                  @input="selectedTreatmentPlanId = $event.target.value"
+              <div class="quick-capture-row">
+                <label>
+                  <span>Davka z planu</span>
+                  <select
+                    :value="selectedTreatmentPlanId"
+                    :disabled="!isQuickCaptureTimeValid || activeQuickCaptureTreatmentPlan.length === 0"
+                    @input="selectedTreatmentPlanId = $event.target.value"
+                  >
+                    <option value="">Vyberte planovanou davku</option>
+                    <option v-for="item in activeQuickCaptureTreatmentPlan" :key="item.id" :value="item.id">
+                      {{ item.time }} · {{ item.name }} · {{ item.dose }}
+                    </option>
+                  </select>
+                </label>
+                <button
+                  class="ghost-button"
+                  type="button"
+                  :disabled="!isQuickCaptureTimeValid || !selectedTreatmentPlanItem"
+                  @click="recordMedicationFromPlan"
                 >
-                  <option value="">Vyberte planovanou davku</option>
-                  <option v-for="item in activeQuickCaptureTreatmentPlan" :key="item.id" :value="item.id">
-                    {{ item.time }} · {{ item.name }} · {{ item.dose }}
-                  </option>
-                </select>
-              </label>
-
-              <button
-                class="ghost-button"
-                type="button"
-                :disabled="!isQuickCaptureTimeValid || !selectedTreatmentPlanItem"
-                @click="recordMedicationFromPlan"
-              >
-                Zapsat {{ quickCaptureMedicationLabel }} ted
-              </button>
+                  Zapsat {{ quickCaptureMedicationLabel }} ted
+                </button>
+              </div>
             </div>
             <p v-if="!isQuickCaptureTimeValid" class="matrix-readonly-note floating-quick-capture-note">
               Zvolte datum a cas v rozmezi poslednich 10 hodin.

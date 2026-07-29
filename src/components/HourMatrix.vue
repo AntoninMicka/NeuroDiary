@@ -21,12 +21,27 @@ const props = defineProps({
     type: String,
     required: true,
   },
+  currentTime: {
+    type: Date,
+    required: true,
+  },
 });
 
 const emit = defineEmits(["update-hour", "select-date"]);
 
 const todayKey = getTodayKey();
-const isEditable = computed(() => props.selectedDate === todayKey);
+const editableHourLabels = computed(() => {
+  const oldestAllowed = props.currentTime.getTime() - 10 * 60 * 60 * 1000;
+  return new Set(Object.keys(props.hours).filter((label) => {
+    const hourStart = new Date(`${props.selectedDate}T${String(label).padStart(2, "0")}:00:00`);
+    const timestamp = hourStart.getTime();
+    return Number.isFinite(timestamp)
+      && timestamp + 60 * 60 * 1000 > oldestAllowed
+      && timestamp <= props.currentTime.getTime();
+  }));
+});
+const isEditable = computed(() => editableHourLabels.value.size > 0);
+const isHourEditable = (label) => editableHourLabels.value.has(label);
 const selectedDateLabel = computed(() => formatLongDate(props.selectedDate));
 const canGoForward = computed(() => props.selectedDate < todayKey);
 </script>
@@ -42,8 +57,8 @@ const canGoForward = computed(() => props.selectedDate < todayKey);
       <p class="panel-tip">
         {{
           isEditable
-            ? "Vyber stav primo v matici a uprav jednotlive hodiny podle potreby."
-            : "Pro jiny den je matice jen pro cteni. Pro upravu se vrat na dnesni datum."
+            ? "Upravit lze hodiny spadajici do poslednich 10 hodin."
+            : "Tento den uz nespadá do desetihodinového okna a je jen pro cteni."
         }}
       </p>
     </div>
@@ -70,7 +85,7 @@ const canGoForward = computed(() => props.selectedDate < todayKey);
     </div>
 
     <p v-if="!isEditable" class="matrix-readonly-note">
-      Zobrazen je historicky den. V tomto rezimu nejsou povolene zmeny.
+      Zobrazeny den nema zadnou hodinu v povolenem desetihodinovem okne.
     </p>
 
     <div class="legend-card">
@@ -87,13 +102,13 @@ const canGoForward = computed(() => props.selectedDate < todayKey);
         v-for="(stateKey, label) in hours"
         :key="label"
         class="hour-card"
-        :class="stateKey ? `state-${stateKey}` : 'is-empty'"
+        :class="[stateKey ? `state-${stateKey}` : 'is-empty', { 'is-readonly': !isHourEditable(label) }]"
       >
         <span class="hour-label">{{ label }}</span>
         <select
           class="hour-select"
           :value="stateKey ?? ''"
-          :disabled="!isEditable"
+          :disabled="!isHourEditable(label)"
           @input="emit('update-hour', { label, stateKey: $event.target.value })"
         >
           <option value="">Bez dat</option>
