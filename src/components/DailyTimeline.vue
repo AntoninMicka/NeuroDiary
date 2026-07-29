@@ -1,6 +1,7 @@
 <script setup>
 import { computed } from "vue";
 import { formatLongDate, getStateDefinition, getTodayKey, TRACKING_HOURS } from "../domain/diary.js";
+import { ADHERENCE_TOLERANCE_MINUTES, analyzeMedicationAdherence } from "../services/adherence.js";
 import { analyzeEntry, getPeriodDateKeys } from "../services/statistics.js";
 
 const props = defineProps({
@@ -20,11 +21,23 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  treatmentPlan: {
+    type: Array,
+    default: () => [],
+  },
+  currentTime: {
+    type: Date,
+    default: () => new Date(),
+  },
 });
 
 const emit = defineEmits(["select-date"]);
 const todayKey = getTodayKey();
 const isTodaySelected = computed(() => props.selectedDate === todayKey);
+const timeToMinutes = (value) => {
+  const [hours, minutes] = String(value ?? "").split(":").map(Number);
+  return hours * 60 + minutes;
+};
 
 const axisLabels = computed(() =>
   TRACKING_HOURS.map((label, index) => ({
@@ -39,6 +52,38 @@ const rows = computed(() =>
     .map((dateKey) => {
       const entry = props.entries[dateKey];
       const analysis = entry ? analyzeEntry(entry) : null;
+      const adherence = analyzeMedicationAdherence({
+        treatmentPlan: props.treatmentPlan,
+        recordedMedications: entry?.medications ?? [],
+        selectedDate: dateKey,
+        todayDate: todayKey,
+        now: props.currentTime,
+      });
+      const medicationMarkers = [
+        ...adherence.plannedDoses.map((dose) => {
+          const medication = dose.recordedMedication ?? dose.planItem;
+          let displayStatus = "taken";
+          if (!dose.recordedMedication && dose.statusKey === "missed") {
+            displayStatus = "missed";
+          } else if (!dose.recordedMedication) {
+            const difference = timeToMinutes(dose.planItem.time)
+              - (props.currentTime.getHours() * 60 + props.currentTime.getMinutes());
+            displayStatus = Math.abs(difference) <= ADHERENCE_TOLERANCE_MINUTES ? "due" : "planned";
+          }
+          return {
+            id: dose.planItem.id,
+            hourLabel: String(Number(medication.time.split(":")[0])),
+            status: displayStatus,
+            title: `${medication.time} · ${medication.name} · ${medication.dose}`,
+          };
+        }),
+        ...adherence.unplannedDoses.map((medication) => ({
+          id: medication.id,
+          hourLabel: String(Number(medication.time.split(":")[0])),
+          status: "taken",
+          title: `${medication.time} · ${medication.name} · ${medication.dose}`,
+        })),
+      ];
 
       return {
         dateKey,
@@ -48,6 +93,10 @@ const rows = computed(() =>
         dominantStateLabel: analysis?.dominantStateLabel ?? "Bez dat",
         medicationSummary: entry?.medications?.map((item) => item.time).join(" · ") ?? "",
         medications: entry?.medications ?? [],
+        medicationHours: TRACKING_HOURS.map((hourLabel) => ({
+          hourLabel,
+          markers: medicationMarkers.filter((marker) => marker.hourLabel === hourLabel),
+        })),
         hours: TRACKING_HOURS.map((hourLabel) => {
           const stateKey = entry?.hours?.[hourLabel] ?? null;
           return {
@@ -77,12 +126,19 @@ const rows = computed(() =>
         </p>
         <button
           :class="['ghost-button', 'timeline-today-button', { 'is-active': isTodaySelected }]"
+          v-if="!compact"
           type="button"
           @click="emit('select-date', todayKey)"
         >
           Dnes
         </button>
       </div>
+    </div>
+    <div v-if="compact" class="timeline-medication-legend" aria-label="Stav planovanych davek">
+      <span><i class="is-taken"></i> Uzito</span>
+      <span><i class="is-due"></i> Vzit nyni</span>
+      <span><i class="is-missed"></i> Zapomenuto</span>
+      <span><i class="is-planned"></i> Planovano</span>
     </div>
 
     <div class="timeline-axis">
@@ -105,9 +161,10 @@ const rows = computed(() =>
         :key="row.dateKey"
         :class="['timeline-row', { 'is-selected': row.isSelected }]"
         type="button"
-        @click="emit('select-date', row.dateKey)"
+        :tabindex="compact ? -1 : 0"
+        @click="!compact && emit('select-date', row.dateKey)"
       >
-        <div class="timeline-date-block">
+        <div v-if="!compact" class="timeline-date-block">
           <strong>{{ row.longDate }}</strong>
           <span>{{ row.dateKey }}</span>
         </div>
@@ -126,6 +183,19 @@ const rows = computed(() =>
             :title="hour.title"
           >
             {{ hour.shortLabel }}
+          </span>
+          <span
+            v-if="compact"
+            v-for="medicationHour in row.medicationHours"
+            :key="`${row.dateKey}-medication-${medicationHour.hourLabel}`"
+            class="timeline-medication-cell"
+          >
+            <span
+              v-for="marker in medicationHour.markers"
+              :key="marker.id"
+              :class="['timeline-medication-marker', `is-${marker.status}`]"
+              :title="marker.title"
+            ></span>
           </span>
         </div>
       </button>

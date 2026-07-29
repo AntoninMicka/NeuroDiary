@@ -1202,10 +1202,77 @@ textarea {
 
 .timeline-compact {
   margin-top: 1rem;
+  background: rgba(245, 248, 250, 0.92);
+  border-color: rgba(49, 89, 121, 0.18);
 }
 
 .timeline-compact .timeline-axis {
   position: static;
+  grid-template-columns: minmax(180px, 1fr) 2.2fr;
+}
+
+.timeline-compact .timeline-axis-spacer:first-child {
+  display: none;
+}
+
+.timeline-compact .timeline-row {
+  grid-template-columns: minmax(180px, 1fr) 2.2fr;
+  cursor: default;
+}
+
+.timeline-medication-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.45rem 0.9rem;
+  margin: -0.3rem 0 0.65rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.timeline-medication-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.timeline-medication-legend i,
+.timeline-medication-marker {
+  width: 0.62rem;
+  height: 0.62rem;
+  border-radius: 999px;
+}
+
+.timeline-medication-cell {
+  min-height: 0.75rem;
+  display: flex;
+  justify-content: center;
+  gap: 2px;
+  align-items: center;
+}
+
+.timeline-medication-marker {
+  display: inline-block;
+}
+
+.timeline-medication-legend .is-taken,
+.timeline-medication-marker.is-taken {
+  background: #2c8c5a;
+}
+
+.timeline-medication-legend .is-due,
+.timeline-medication-marker.is-due {
+  background: #b84a4a;
+}
+
+.timeline-medication-legend .is-missed,
+.timeline-medication-marker.is-missed {
+  background: #8a5728;
+}
+
+.timeline-medication-legend .is-planned,
+.timeline-medication-marker.is-planned {
+  background: #cbd2d8;
 }
 
 .timeline-axis-hour {

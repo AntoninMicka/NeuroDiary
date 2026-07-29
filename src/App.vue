@@ -2388,6 +2388,8 @@ function syncFloatingMenuHeight() {
             :entries="state.entries"
             :selected-date="getTodayKey()"
             :days="1"
+            :treatment-plan="state.treatmentPlan"
+            :current-time="quickCaptureNow"
             compact
             @select-date="updateSelectedDate"
           />
