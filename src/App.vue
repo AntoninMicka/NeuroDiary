@@ -91,6 +91,7 @@ import {
   registerWebPush,
   unregisterWebPush,
 } from "./services/webPushService.js";
+import { isQuickCaptureDateValid, QUICK_CAPTURE_WINDOW_MS } from "./services/quickCapture.js";
 
 const PENDING_SYNC_CHANGES_STORAGE_KEY = "neurodiary-pending-sync-changes-v1";
 
@@ -252,14 +253,11 @@ const installHelpText = computed(() => {
 const showIosInstallGuide = computed(
   () => !isInstalledApp.value && platformInstallMode.value === "ios-share-sheet",
 );
-const quickCaptureMin = computed(() => formatDateTimeLocal(new Date(quickCaptureNow.value.getTime() - 10 * 60 * 60 * 1000)));
+const quickCaptureMin = computed(() => formatDateTimeLocal(new Date(quickCaptureNow.value.getTime() - QUICK_CAPTURE_WINDOW_MS)));
 const quickCaptureMax = computed(() => formatDateTimeLocal(quickCaptureNow.value));
-const isQuickCaptureTimeValid = computed(() => {
-  const timestamp = quickCaptureDate.value.getTime();
-  return Number.isFinite(timestamp)
-    && timestamp >= new Date(quickCaptureMin.value).getTime()
-    && timestamp <= new Date(quickCaptureMax.value).getTime();
-});
+const isQuickCaptureTimeValid = computed(() =>
+  isQuickCaptureDateValid(quickCaptureDate.value, quickCaptureNow.value),
+);
 const quickCaptureStateLabel = computed(() => getStateDefinition(selectedStateKey.value).label);
 const quickCaptureMedicationLabel = computed(() => {
   const item = selectedTreatmentPlanItem.value;
