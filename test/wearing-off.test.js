@@ -91,3 +91,22 @@ test("doctor report includes the quality-filtered wearing-off summary", () => {
   assert.match(html, /Orientační wearing-off pozorování/);
   assert.match(html, /nikoli diagnózu/);
 });
+
+test("doctor report can omit daily trend and wearing-off observations", () => {
+  const entries = { "2026-03-01": createReliableEntry(1) };
+  const html = buildDoctorReportHtml({
+    entries,
+    treatmentPlan,
+    selectedDate: "2026-03-01",
+    includeDailyTrend: false,
+    includeWearingOff: false,
+  });
+  assert.doesNotMatch(html, /<h3>Denni trend<\/h3>/);
+  assert.doesNotMatch(html, /Orientační wearing-off pozorování/);
+  assert.match(html, /<h3>Hodinovy souhrn<\/h3>/);
+});
+
+test("tracking axis ends at hour 23", () => {
+  assert.equal(TRACKING_HOURS.at(-1), "23");
+  assert.equal(TRACKING_HOURS.includes("24"), false);
+});

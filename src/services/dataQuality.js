@@ -37,7 +37,7 @@ function getExpectedHourLabels(dateKey, todayDate, now) {
   if (now.getHours() < 5) {
     return [];
   }
-  const currentHour = Math.min(now.getHours(), 24);
+  const currentHour = Math.min(now.getHours(), 23);
   return TRACKING_HOURS.filter((hourLabel) => Number(hourLabel) <= currentHour);
 }
 

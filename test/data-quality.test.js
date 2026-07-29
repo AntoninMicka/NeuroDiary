@@ -29,7 +29,7 @@ test("requires broad hour coverage and both summaries for a complete historical 
     todayDate: "2026-01-02",
   });
   assert.equal(quality.key, "complete");
-  assert.equal(quality.hourCoveragePercent, 90);
+  assert.equal(quality.hourCoveragePercent, 95);
 });
 
 test("classifies partial but usable coverage as sufficient", () => {

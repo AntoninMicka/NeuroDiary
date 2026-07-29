@@ -6,7 +6,7 @@ export const HOUR_STATES = [
   { key: "sleep", label: "Spanek", shortLabel: "S", description: "spanek" },
 ];
 
-export const TRACKING_HOURS = Array.from({ length: 20 }, (_, index) => {
+export const TRACKING_HOURS = Array.from({ length: 19 }, (_, index) => {
   const hour = index + 5;
   return String(hour);
 });
@@ -84,14 +84,8 @@ export function getStateDefinition(stateKey) {
 
 export function getTrackableHourLabel(date = new Date()) {
   const hour = date.getHours();
-  if (hour === 0) {
-    return "24";
-  }
   if (hour < 5) {
     return "5";
-  }
-  if (hour > 24) {
-    return "24";
   }
   return String(hour);
 }

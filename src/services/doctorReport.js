@@ -352,14 +352,16 @@ function buildWeekBlockHeaders() {
   return Array.from({ length: ANALYSIS_WEEK_BLOCKS }, (_, index) => `<th>W${index + 1}</th>`).join("");
 }
 
-function buildAnalysisPage(entries, treatmentPlan, selectedDate) {
+function buildAnalysisPage(entries, treatmentPlan, selectedDate, { includeDailyTrend, includeWearingOff }) {
   const summary = summarizeWindow(entries, selectedDate, ANALYSIS_DAYS);
-  const wearingOff = analyzeWearingOff({
-    entries,
-    treatmentPlan,
-    endDateKey: selectedDate,
-    days: ANALYSIS_LONG_DAYS,
-  });
+  const wearingOff = includeWearingOff
+    ? analyzeWearingOff({
+        entries,
+        treatmentPlan,
+        endDateKey: selectedDate,
+        days: ANALYSIS_LONG_DAYS,
+      })
+    : null;
 
   return `
     <section class="sheet analysis-page">
@@ -390,7 +392,7 @@ function buildAnalysisPage(entries, treatmentPlan, selectedDate) {
         </article>
       </section>
 
-      <section class="analysis-panel wearing-off-report-note">
+      ${includeWearingOff ? `<section class="analysis-panel wearing-off-report-note">
         <h3>Orientační wearing-off pozorování za ${ANALYSIS_LONG_DAYS} dní</h3>
         <p>
           ${escapeHtml(String(wearingOff.candidateDoses))} / ${escapeHtml(String(wearingOff.evaluatedDoses))}
@@ -402,10 +404,10 @@ function buildAnalysisPage(entries, treatmentPlan, selectedDate) {
           Zahrnuto ${escapeHtml(String(wearingOff.reliableDays))} spolehlivých dní.
           Jde o hrubý odhad z hodinových záznamů, nikoli diagnózu ani doporučení ke změně léčby.
         </p>
-      </section>
+      </section>` : ""}
 
       <section class="analysis-grid">
-        <article class="analysis-panel">
+        ${includeDailyTrend ? `<article class="analysis-panel">
           <h3>Denni trend</h3>
           <table class="trend-table">
             <thead>
@@ -419,7 +421,7 @@ function buildAnalysisPage(entries, treatmentPlan, selectedDate) {
             </thead>
             <tbody>${buildTrendRows(entries, selectedDate)}</tbody>
           </table>
-        </article>
+        </article>` : ""}
 
         <article class="analysis-panel">
           <h3>Hodinovy souhrn</h3>
@@ -454,6 +456,8 @@ export function buildDoctorReportHtml({
   selectedDate,
   patientName = "",
   birthYear = "",
+  includeDailyTrend = true,
+  includeWearingOff = true,
 }) {
   const entry = entries[selectedDate];
   if (!entry) {
@@ -964,13 +968,21 @@ export function buildDoctorReportHtml({
           </section>
         </section>
 
-        ${buildAnalysisPage(entries, treatmentPlan, selectedDate)}
+        ${buildAnalysisPage(entries, treatmentPlan, selectedDate, { includeDailyTrend, includeWearingOff })}
       </main>
     </body>
   </html>`;
 }
 
-export function openDoctorReportPrint({ entries, treatmentPlan, selectedDate, patientName, birthYear }) {
+export function openDoctorReportPrint({
+  entries,
+  treatmentPlan,
+  selectedDate,
+  patientName,
+  birthYear,
+  includeDailyTrend = true,
+  includeWearingOff = true,
+}) {
   const reportWindow = window.open("", "_blank");
   if (!reportWindow) {
     throw new Error("Unable to open report window");
@@ -982,6 +994,8 @@ export function openDoctorReportPrint({ entries, treatmentPlan, selectedDate, pa
     selectedDate,
     patientName,
     birthYear,
+    includeDailyTrend,
+    includeWearingOff,
   });
   reportWindow.document.open();
   reportWindow.document.write(html);

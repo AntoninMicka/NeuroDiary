@@ -12,6 +12,14 @@ const props = defineProps({
     type: String,
     required: true,
   },
+  days: {
+    type: Number,
+    default: 7,
+  },
+  compact: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 const emit = defineEmits(["select-date"]);
@@ -26,7 +34,7 @@ const axisLabels = computed(() =>
 );
 
 const rows = computed(() =>
-  getPeriodDateKeys(props.selectedDate, 7)
+  getPeriodDateKeys(props.selectedDate, props.days)
     .reverse()
     .map((dateKey) => {
       const entry = props.entries[dateKey];
@@ -57,14 +65,16 @@ const rows = computed(() =>
 </script>
 
 <template>
-  <section class="panel panel-wide">
+  <section :class="['panel', 'panel-wide', { 'timeline-compact': compact }]">
     <div class="panel-heading">
       <div>
         <p class="section-kicker">Casova osa</p>
         <h2>Denni casova osa</h2>
       </div>
       <div class="timeline-toolbar">
-        <p class="panel-tip">Poslednich 7 dni vcetne vybraneho dne. Klik na radek prepne denik.</p>
+        <p class="panel-tip">
+          {{ days === 1 ? "Aktualni den." : `Poslednich ${days} dni vcetne vybraneho dne. Klik na radek prepne denik.` }}
+        </p>
         <button
           :class="['ghost-button', 'timeline-today-button', { 'is-active': isTodaySelected }]"
           type="button"
