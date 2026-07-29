@@ -110,3 +110,20 @@ test("tracking axis ends at hour 23", () => {
   assert.equal(TRACKING_HOURS.at(-1), "23");
   assert.equal(TRACKING_HOURS.includes("24"), false);
 });
+
+test("doctor report renders 25-week hourly charts and marks treatment-plan changes", () => {
+  const entries = { "2026-03-07": createReliableEntry(7) };
+  const html = buildDoctorReportHtml({
+    entries,
+    treatmentPlan: [{
+      ...treatmentPlan[0],
+      validFrom: "2026-02-15",
+    }],
+    selectedDate: "2026-03-07",
+  });
+  assert.doesNotMatch(html, /Nejcastejsi hodnota/);
+  assert.match(html, /25x7 dni/);
+  assert.match(html, /class="chart-plan-change"/);
+  assert.match(html, /Od 15\. 02\. 2026: Levodopa 100 mg/);
+  assert.equal((html.match(/class="weekly-hour-chart"/g) ?? []).length, TRACKING_HOURS.length);
+});

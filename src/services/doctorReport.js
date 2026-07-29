@@ -13,7 +13,15 @@ import { analyzeWearingOff } from "./wearingOff.js";
 const REPORT_DAYS_PAGE_ONE = 4;
 const ANALYSIS_DAYS = 7;
 const ANALYSIS_LONG_DAYS = 30;
-const ANALYSIS_WEEK_BLOCKS = 4;
+const ANALYSIS_WEEK_BLOCKS = 25;
+const CHARTS_PER_PAGE = 5;
+const STATE_CHART_COLORS = {
+  dyskinesia: "#8d55b5",
+  on: "#2c8c5a",
+  partial: "#c97b34",
+  off: "#b84a4a",
+  sleep: "#7d8e9e",
+};
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -226,6 +234,50 @@ function summarizeHourWindowInterval(entries, selectedDate, hourLabel, offsetDay
   return summarizeHourWindow(entries, intervalEndDate, hourLabel, count);
 }
 
+function getTreatmentPlanChangeDates(treatmentPlan = []) {
+  const changes = new Map();
+  const addChange = (dateKey, label) => {
+    if (!dateKey) {
+      return;
+    }
+    const labels = changes.get(dateKey) ?? [];
+    labels.push(label);
+    changes.set(dateKey, labels);
+  };
+
+  for (const item of treatmentPlan) {
+    const medication = `${item.name} ${item.dose}`.trim();
+    if (item.validFrom) {
+      addChange(item.validFrom, `Od ${formatNumericDate(item.validFrom)}: ${medication}`);
+    }
+    if (item.validTo) {
+      const nextDate = shiftDateKey(item.validTo, 1);
+      addChange(nextDate, `Od ${formatNumericDate(nextDate)} ukonceno: ${medication}`);
+    }
+  }
+  return changes;
+}
+
+function buildWeekIntervals(selectedDate, treatmentPlan = []) {
+  const changes = getTreatmentPlanChangeDates(treatmentPlan);
+  return Array.from({ length: ANALYSIS_WEEK_BLOCKS }, (_, index) => {
+    const offsetDays = (ANALYSIS_WEEK_BLOCKS - index - 1) * ANALYSIS_DAYS;
+    const endDate = shiftDateKey(selectedDate, -offsetDays);
+    const startDate = shiftDateKey(endDate, -(ANALYSIS_DAYS - 1));
+    const planChanges = [...changes.entries()]
+      .filter(([dateKey]) => dateKey >= startDate && dateKey <= endDate)
+      .flatMap(([, labels]) => labels);
+    return {
+      index,
+      label: `W${index + 1}`,
+      startDate,
+      endDate,
+      offsetDays,
+      planChanges,
+    };
+  });
+}
+
 function buildHistogramCells(counts, totalDays) {
   const maxValue = HOUR_STATES.reduce((currentMax, state) => {
     const value = counts[state.key] ?? 0;
@@ -252,7 +304,7 @@ function buildHistogramCells(counts, totalDays) {
   }).join("");
 }
 
-function buildCompactHistogramCell(counts, totalDays, title) {
+function buildCompactHistogramCell(counts, totalDays, title, hasPlanChange = false) {
   const maxValue = HOUR_STATES.reduce((currentMax, state) => {
     const value = counts[state.key] ?? 0;
     return Math.max(currentMax, value);
@@ -276,7 +328,7 @@ function buildCompactHistogramCell(counts, totalDays, title) {
   }).join("");
 
   return `
-    <td class="compact-week-cell" title="${escapeHtml(title)}">
+    <td class="compact-week-cell ${hasPlanChange ? "has-plan-change" : ""}" title="${escapeHtml(title)}">
       <div class="compact-week-inner">
         ${bars}
       </div>
@@ -314,30 +366,27 @@ function buildTrendRows(entries, selectedDate) {
     .join("");
 }
 
-function buildHourSummaryRows(entries, selectedDate) {
+function buildHourSummaryRows(entries, selectedDate, weekIntervals) {
   return TRACKING_HOURS.map((hourLabel) => {
     const weeklyCounts = summarizeHourWindow(entries, selectedDate, hourLabel, ANALYSIS_DAYS);
     const monthlyCounts = summarizeHourWindow(entries, selectedDate, hourLabel, ANALYSIS_LONG_DAYS);
-    const monthByWeeks = Array.from({ length: ANALYSIS_WEEK_BLOCKS }, (_, index) => {
-      const offsetDays = (ANALYSIS_WEEK_BLOCKS - index - 1) * ANALYSIS_DAYS;
-      const intervalEndDate = shiftDateKey(selectedDate, -offsetDays);
-      const intervalStartDate = shiftDateKey(intervalEndDate, -(ANALYSIS_DAYS - 1));
-      const counts = summarizeHourWindowInterval(entries, selectedDate, hourLabel, offsetDays, ANALYSIS_DAYS);
+    const monthByWeeks = weekIntervals.map((week) => {
+      const counts = summarizeHourWindowInterval(entries, selectedDate, hourLabel, week.offsetDays, ANALYSIS_DAYS);
 
       return buildCompactHistogramCell(
         counts,
         ANALYSIS_DAYS,
-        `${hourLabel}:00 · ${formatNumericDate(intervalStartDate)} - ${formatNumericDate(intervalEndDate)}`,
+        [
+          `${hourLabel}:00 · ${formatNumericDate(week.startDate)} - ${formatNumericDate(week.endDate)}`,
+          ...week.planChanges,
+        ].join(" · "),
+        week.planChanges.length > 0,
       );
     }).join("");
-    const dominantStateKey =
-      Object.entries(weeklyCounts).sort((left, right) => right[1] - left[1])[0]?.[0] ?? "on";
-    const dominantState = getStateDefinition(dominantStateKey);
 
     return `
       <tr>
         <td>${escapeHtml(hourLabel)}:00</td>
-        <td>${escapeHtml(dominantState.shortLabel)}</td>
         ${buildHistogramCells(weeklyCounts, ANALYSIS_DAYS)}
         <td class="histogram-spacer-cell"></td>
         ${buildHistogramCells(monthlyCounts, ANALYSIS_LONG_DAYS)}
@@ -348,12 +397,103 @@ function buildHourSummaryRows(entries, selectedDate) {
   }).join("");
 }
 
-function buildWeekBlockHeaders() {
-  return Array.from({ length: ANALYSIS_WEEK_BLOCKS }, (_, index) => `<th>W${index + 1}</th>`).join("");
+function buildWeekBlockHeaders(weekIntervals) {
+  return weekIntervals.map((week) => `
+    <th
+      class="${week.planChanges.length ? "has-plan-change" : ""}"
+      title="${escapeHtml([
+        `${formatNumericDate(week.startDate)} - ${formatNumericDate(week.endDate)}`,
+        ...week.planChanges,
+      ].join(" · "))}"
+    >${week.label}${week.planChanges.length ? '<span class="plan-change-symbol">◆</span>' : ""}</th>
+  `).join("");
+}
+
+function buildHourWeeklyChart(entries, selectedDate, hourLabel, weekIntervals) {
+  const plot = { left: 48, right: 985, top: 12, bottom: 122 };
+  const width = plot.right - plot.left;
+  const height = plot.bottom - plot.top;
+  const xForIndex = (index) =>
+    plot.left + (weekIntervals.length === 1 ? width / 2 : (index / (weekIntervals.length - 1)) * width);
+  const yForValue = (value) => plot.bottom - (value / ANALYSIS_DAYS) * height;
+  const weeklyCounts = weekIntervals.map((week) =>
+    summarizeHourWindowInterval(entries, selectedDate, hourLabel, week.offsetDays, ANALYSIS_DAYS),
+  );
+
+  const horizontalGrid = [0, 2, 4, 6, 7].map((value) => {
+    const y = yForValue(value);
+    return `
+      <line x1="${plot.left}" y1="${y}" x2="${plot.right}" y2="${y}" class="chart-grid-line" />
+      <text x="${plot.left - 8}" y="${y + 3}" class="chart-axis-label" text-anchor="end">${value}</text>
+    `;
+  }).join("");
+  const xLabels = weekIntervals.map((week, index) => {
+    if (index % 4 !== 0 && index !== weekIntervals.length - 1) {
+      return "";
+    }
+    return `<text x="${xForIndex(index)}" y="140" class="chart-axis-label" text-anchor="middle">${week.label}</text>`;
+  }).join("");
+  const planChangeLines = weekIntervals
+    .map((week, index) => week.planChanges.length ? `
+      <line x1="${xForIndex(index)}" y1="${plot.top}" x2="${xForIndex(index)}" y2="${plot.bottom}" class="chart-plan-change" />
+    ` : "")
+    .join("");
+  const stateLines = HOUR_STATES.map((state) => {
+    const points = weeklyCounts
+      .map((counts, index) => `${xForIndex(index)},${yForValue(counts[state.key] ?? 0)}`)
+      .join(" ");
+    return `<polyline points="${points}" fill="none" stroke="${STATE_CHART_COLORS[state.key]}" class="chart-state-line" />`;
+  }).join("");
+
+  return `
+    <article class="weekly-hour-chart">
+      <h3>${escapeHtml(hourLabel)}:00</h3>
+      <svg viewBox="0 0 1000 146" role="img" aria-label="Tydenni pocty stavu pro hodinu ${escapeHtml(hourLabel)}">
+        ${horizontalGrid}
+        ${planChangeLines}
+        ${stateLines}
+        ${xLabels}
+      </svg>
+    </article>
+  `;
+}
+
+function buildChartLegend() {
+  return `
+    <div class="chart-legend">
+      ${HOUR_STATES.map((state) => `
+        <span><i style="background:${STATE_CHART_COLORS[state.key]}"></i>${escapeHtml(state.shortLabel)}</span>
+      `).join("")}
+      <span><i class="plan-change-line"></i>Zmena lecebneho planu</span>
+    </div>
+  `;
+}
+
+function buildWeeklyChartsPages(entries, selectedDate, weekIntervals) {
+  const charts = TRACKING_HOURS.map((hourLabel) =>
+    buildHourWeeklyChart(entries, selectedDate, hourLabel, weekIntervals),
+  );
+  const pages = [];
+  for (let index = 0; index < charts.length; index += CHARTS_PER_PAGE) {
+    pages.push(`
+      <section class="sheet charts-page">
+        <header class="charts-header">
+          <div>
+            <p class="section-label">Tydenni grafy · ${index + 1}-${Math.min(index + CHARTS_PER_PAGE, charts.length)} / ${charts.length}</p>
+            <h2>Vyskyt stavu po hodinach za ${ANALYSIS_WEEK_BLOCKS} tydnu</h2>
+          </div>
+          ${buildChartLegend()}
+        </header>
+        <div class="weekly-charts">${charts.slice(index, index + CHARTS_PER_PAGE).join("")}</div>
+      </section>
+    `);
+  }
+  return pages.join("");
 }
 
 function buildAnalysisPage(entries, treatmentPlan, selectedDate, { includeDailyTrend, includeWearingOff }) {
   const summary = summarizeWindow(entries, selectedDate, ANALYSIS_DAYS);
+  const weekIntervals = buildWeekIntervals(selectedDate, treatmentPlan);
   const wearingOff = includeWearingOff
     ? analyzeWearingOff({
         entries,
@@ -429,7 +569,6 @@ function buildAnalysisPage(entries, treatmentPlan, selectedDate, { includeDailyT
             <thead>
               <tr>
                 <th rowspan="2">Cas</th>
-                <th rowspan="2">Nejcastejsi hodnota</th>
                 <th colspan="5">7 dni</th>
                 <th rowspan="2" class="histogram-spacer-head"></th>
                 <th colspan="5">30 dni</th>
@@ -439,14 +578,15 @@ function buildAnalysisPage(entries, treatmentPlan, selectedDate, { includeDailyT
               <tr>
                 ${HOUR_STATES.map((state) => `<th>${escapeHtml(state.shortLabel)}</th>`).join("")}
                 ${HOUR_STATES.map((state) => `<th>${escapeHtml(state.shortLabel)}</th>`).join("")}
-                ${buildWeekBlockHeaders()}
+                ${buildWeekBlockHeaders(weekIntervals)}
               </tr>
             </thead>
-            <tbody>${buildHourSummaryRows(entries, selectedDate)}</tbody>
+            <tbody>${buildHourSummaryRows(entries, selectedDate, weekIntervals)}</tbody>
           </table>
         </article>
       </section>
     </section>
+    ${buildWeeklyChartsPages(entries, selectedDate, weekIntervals)}
   `;
 }
 
@@ -824,18 +964,12 @@ export function buildDoctorReportHtml({
           text-align: left;
           padding-left: 4px;
         }
-        .hour-summary-table td:nth-child(2) {
-          text-align: center;
-          font-weight: 700;
-          color: var(--blue);
-        }
         .hour-summary-table thead th {
           text-align: center;
           padding-left: 0;
           vertical-align: middle;
         }
-        .hour-summary-table th:nth-child(1) { width: 10%; }
-        .hour-summary-table th:nth-child(2) { width: 20%; }
+        .hour-summary-table th:nth-child(1) { width: 5%; }
         .histogram-spacer-head,
         .histogram-spacer-cell {
           width: 8px;
@@ -884,6 +1018,17 @@ export function buildDoctorReportHtml({
           text-align: center;
           vertical-align: bottom;
         }
+        .compact-week-cell.has-plan-change,
+        .hour-summary-table th.has-plan-change {
+          border-left: 2px solid #a45d25;
+          background: #fff5e9;
+        }
+        .plan-change-symbol {
+          display: block;
+          color: #a45d25;
+          font-size: 5px;
+          line-height: 1;
+        }
         .compact-week-inner {
           display: grid;
           grid-template-columns: repeat(5, 1fr);
@@ -906,6 +1051,82 @@ export function buildDoctorReportHtml({
         .compact-week-bar {
           display: block;
           width: 100%;
+        }
+        .charts-page {
+          padding: 7px 9px;
+        }
+        .charts-header {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 12px;
+          margin-bottom: 3px;
+        }
+        .charts-header h2 {
+          margin: 0;
+          font-size: 13px;
+          color: var(--blue);
+        }
+        .chart-legend {
+          display: flex;
+          flex-wrap: wrap;
+          justify-content: flex-end;
+          gap: 3px 8px;
+          max-width: 62%;
+          font-size: 7px;
+          color: var(--muted);
+        }
+        .chart-legend span {
+          display: inline-flex;
+          align-items: center;
+          gap: 3px;
+        }
+        .chart-legend i {
+          display: inline-block;
+          width: 10px;
+          height: 2px;
+        }
+        .chart-legend .plan-change-line {
+          width: 2px;
+          height: 9px;
+          background: #a45d25;
+        }
+        .weekly-charts {
+          display: grid;
+          gap: 2px;
+        }
+        .weekly-hour-chart {
+          border: 1px solid var(--line-soft);
+          page-break-inside: avoid;
+          padding: 2px 4px 0;
+        }
+        .weekly-hour-chart h3 {
+          margin: 0;
+          font-size: 8px;
+          color: var(--blue);
+        }
+        .weekly-hour-chart svg {
+          display: block;
+          width: 100%;
+          height: 29mm;
+        }
+        .chart-grid-line {
+          stroke: #dce5ec;
+          stroke-width: 1;
+        }
+        .chart-axis-label {
+          fill: var(--muted);
+          font-size: 10px;
+        }
+        .chart-plan-change {
+          stroke: #a45d25;
+          stroke-width: 2;
+          stroke-dasharray: 5 3;
+        }
+        .chart-state-line {
+          stroke-width: 2.5;
+          stroke-linejoin: round;
+          stroke-linecap: round;
         }
         .state-on { background: #d9ebf8; }
         .state-partial { background: #f8e7b7; }
