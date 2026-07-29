@@ -143,6 +143,7 @@ const selectedTreatmentPlanId = ref("");
 const reportOptions = reactive({
   dailyTrend: true,
   wearingOff: true,
+  weeklyCharts: true,
 });
 const deferredInstallPrompt = ref(null);
 const canInstallApp = ref(false);
@@ -1227,6 +1228,7 @@ function printDoctorReport() {
       birthYear: state.birthYear,
       includeDailyTrend: reportOptions.dailyTrend,
       includeWearingOff: reportOptions.wearingOff,
+      includeWeeklyCharts: reportOptions.weeklyCharts,
     });
     storageMessage.value = "Doctor report opened for print.";
   } catch (error) {
@@ -1942,6 +1944,10 @@ function syncFloatingMenuHeight() {
                   <label>
                     <input v-model="reportOptions.wearingOff" type="checkbox" />
                     Tisknout orientacni wearing-off pozorovani
+                  </label>
+                  <label>
+                    <input v-model="reportOptions.weeklyCharts" type="checkbox" />
+                    Tisknout tydenni grafy
                   </label>
                   <button class="primary-button" type="button" @click="printDoctorReport">
                     Otevrit tisk

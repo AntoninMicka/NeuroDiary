@@ -491,7 +491,12 @@ function buildWeeklyChartsPages(entries, selectedDate, weekIntervals) {
   return pages.join("");
 }
 
-function buildAnalysisPage(entries, treatmentPlan, selectedDate, { includeDailyTrend, includeWearingOff }) {
+function buildAnalysisPage(
+  entries,
+  treatmentPlan,
+  selectedDate,
+  { includeDailyTrend, includeWearingOff, includeWeeklyCharts },
+) {
   const summary = summarizeWindow(entries, selectedDate, ANALYSIS_DAYS);
   const weekIntervals = buildWeekIntervals(selectedDate, treatmentPlan);
   const wearingOff = includeWearingOff
@@ -586,7 +591,7 @@ function buildAnalysisPage(entries, treatmentPlan, selectedDate, { includeDailyT
         </article>
       </section>
     </section>
-    ${buildWeeklyChartsPages(entries, selectedDate, weekIntervals)}
+    ${includeWeeklyCharts ? buildWeeklyChartsPages(entries, selectedDate, weekIntervals) : ""}
   `;
 }
 
@@ -598,6 +603,7 @@ export function buildDoctorReportHtml({
   birthYear = "",
   includeDailyTrend = true,
   includeWearingOff = true,
+  includeWeeklyCharts = true,
 }) {
   const entry = entries[selectedDate];
   if (!entry) {
@@ -1189,7 +1195,11 @@ export function buildDoctorReportHtml({
           </section>
         </section>
 
-        ${buildAnalysisPage(entries, treatmentPlan, selectedDate, { includeDailyTrend, includeWearingOff })}
+        ${buildAnalysisPage(entries, treatmentPlan, selectedDate, {
+          includeDailyTrend,
+          includeWearingOff,
+          includeWeeklyCharts,
+        })}
       </main>
     </body>
   </html>`;
@@ -1203,6 +1213,7 @@ export function openDoctorReportPrint({
   birthYear,
   includeDailyTrend = true,
   includeWearingOff = true,
+  includeWeeklyCharts = true,
 }) {
   const reportWindow = window.open("", "_blank");
   if (!reportWindow) {
@@ -1217,6 +1228,7 @@ export function openDoctorReportPrint({
     birthYear,
     includeDailyTrend,
     includeWearingOff,
+    includeWeeklyCharts,
   });
   reportWindow.document.open();
   reportWindow.document.write(html);

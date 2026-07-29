@@ -100,9 +100,11 @@ test("doctor report can omit daily trend and wearing-off observations", () => {
     selectedDate: "2026-03-01",
     includeDailyTrend: false,
     includeWearingOff: false,
+    includeWeeklyCharts: false,
   });
   assert.doesNotMatch(html, /<h3>Denni trend<\/h3>/);
   assert.doesNotMatch(html, /Orientační wearing-off pozorování/);
+  assert.doesNotMatch(html, /class="weekly-hour-chart"/);
   assert.match(html, /<h3>Hodinovy souhrn<\/h3>/);
 });
 
