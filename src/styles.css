@@ -1959,6 +1959,27 @@ textarea {
     grid-template-columns: 1fr;
   }
 
+  .timeline-compact .timeline-axis,
+  .timeline-compact .timeline-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .timeline-compact .timeline-meta {
+    margin-bottom: 0.45rem;
+  }
+
+  .timeline-compact .timeline-axis,
+  .timeline-compact .timeline-row {
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .timeline-compact .timeline-axis-hours,
+  .timeline-compact .timeline-hours {
+    width: 100%;
+    min-width: 0;
+  }
+
   .floating-quick-capture-form {
     grid-template-columns: 1fr;
   }
