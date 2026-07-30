@@ -249,6 +249,7 @@ const PANEL_ITEMS = [
   { id: "sekce-souhrn", label: "Souhrn" },
   { id: "sekce-manualy", label: "Manualy" },
 ];
+const PRIMARY_PANEL_ITEMS = PANEL_ITEMS.filter((item) => item.id !== "sekce-matice");
 const DATE_NAV_PANEL_IDS = new Set([
   "sekce-udaje",
   "sekce-matice",
@@ -1940,7 +1941,7 @@ function syncFloatingMenuHeight() {
           <div class="panel-switcher-toolbar">
             <div class="panel-switcher-pills" aria-label="Vyber panelu">
               <button
-                v-for="item in PANEL_ITEMS"
+                v-for="item in PRIMARY_PANEL_ITEMS"
                 :key="item.id"
                 class="panel-pill"
                 :class="{ 'panel-pill-active': item.id === activePanelId }"
@@ -1984,7 +1985,16 @@ function syncFloatingMenuHeight() {
                 <span>Vice</span>
               </button>
 
-              <div v-if="isUtilityMenuOpen" class="utility-menu-panel" role="menu" aria-label="Export a zalohy">
+              <div v-if="isUtilityMenuOpen" class="utility-menu-panel" role="menu" aria-label="Dalsi sekce, export a zalohy">
+                <button
+                  class="utility-menu-item"
+                  type="button"
+                  role="menuitem"
+                  :aria-current="activePanelId === 'sekce-matice' ? 'page' : undefined"
+                  @click="handleUtilityAction(() => selectPanel('sekce-matice'))"
+                >
+                  Hodinova matice
+                </button>
                 <button class="utility-menu-item" type="button" role="menuitem" @click="handleUtilityAction(() => selectPanel('sekce-udaje'))">
                   Udaje
                 </button>
