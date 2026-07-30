@@ -11,7 +11,7 @@ hlavni navigace.
 Rychly zapis stavu vzdy pouzije systemovy cas v okamziku kliknuti. Zobrazuje pouze nezapsane
 planovane davky v intervalu od 10 minut pred planem do 60 minut po nem, vcetne odpoctu nebo
 zpozdeni. Zapis davky vytvori vazbu `planItemId` a oddelene uchova skutecny cas uziti a cas
-vytvoreni zaznamu.
+vytvoreni zaznamu. Po zapisu stavu nebo davky nabidne aplikace vratnou akci pro posledni zaznam.
 
 Petiminutovy casovy karusel umoznuje zapsat stav nejvyse 10 hodin zpet; stav se vztahuje na celou
 zvolenou hodinu. Tlacitko `Ted` vraci vyber k soucasnosti. Dosud nezapsanou davku lze v karuselu

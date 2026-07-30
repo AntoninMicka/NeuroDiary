@@ -21,7 +21,7 @@
             Na uvodni obrazovce vyberte aktualni stav. Zapis vzdy pouzije skutecny systemovy cas
             v okamziku stisknuti tlacitka. Planovana davka se zobrazi pouze od 10 minut pred jejim
             casem do 60 minut po nem, vcetne odpoctu nebo informace o zpozdeni. Po zapsani z nabidky
-            zmizi.
+            zmizi. Pokud se spletete, pouzijte nabidnutou akci <strong>Vratit posledni zapis</strong>.
           </p>
         </div>
 

@@ -119,6 +119,7 @@ Aktuální stav:
 * dostupný je denní souhrn adherence a přehled neplánovaných dávek
 * léčebný plán je verzovaný pomocí období platnosti `od–do`
 * historická i dlouhodobá adherence používá plán platný v konkrétní den
+* [pending] v detailu dávky zobrazit plánovaný čas, skutečný čas užití a čas vytvoření zápisu
 * zbývá detailnější dlouhodobá adherence analýza
 
 ### [poc_done] 2.4 Denní záznam

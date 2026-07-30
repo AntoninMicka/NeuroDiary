@@ -23,6 +23,7 @@ import {
   markMedicationDeleted,
   markEntryDeleted,
   mergeDiaryStatesAppendOnly,
+  reconcileEntryHourState,
   shiftDateKey,
   getTodayKey,
   getTrackableHourLabel,
@@ -140,6 +141,7 @@ const recoveryQrVideo = ref(null);
 const isReady = ref(false);
 const repositoryMode = ref("loading");
 const storageMessage = ref("");
+const lastCaptureUndo = ref(null);
 const birthYearValidationMessage = ref("");
 const bootstrapStatus = ref("Starting application bootstrap.");
 const quickCaptureNow = ref(new Date());
@@ -1059,7 +1061,21 @@ function recordMedicationFromPlan(planItem, takenAt = new Date(), source = "quic
   if (!wasAdded) {
     return;
   }
+  const medication = state.entries[dateKey]?.medications
+    ?.find((item) => item.planItemId === activePlanItem.id && item.recordedAt === recordedAt.toISOString());
+  if (medication) {
+    lastCaptureUndo.value = {
+      run() {
+        markMedicationDeleted(state, medication.id);
+        state.entries[dateKey].updatedAt = new Date().toISOString();
+        void refreshWebPushRegistration();
+      },
+    };
+  }
   storageMessage.value = `Davka ${activePlanItem.name} ${activePlanItem.dose} byla zapsana jako uzita v ${currentTime}.`;
+  if (lastCaptureUndo.value) {
+    lastCaptureUndo.value.message = storageMessage.value;
+  }
 }
 
 function updateHour({ label, stateKey }) {
@@ -1094,7 +1110,21 @@ function writeCurrentState() {
     source: "quick-capture",
     recordedAt: recordedAt.toISOString(),
   });
+  const recordId = targetEntry.hourRecords[hourLabel]?.at(-1)?.id;
+  if (recordId) {
+    lastCaptureUndo.value = {
+      run() {
+        targetEntry.hourRecords[hourLabel] =
+          targetEntry.hourRecords[hourLabel].filter((record) => record.id !== recordId);
+        reconcileEntryHourState(targetEntry, "latest", { hydrateFromHours: false });
+        targetEntry.updatedAt = new Date().toISOString();
+      },
+    };
+  }
   storageMessage.value = `Stav ${getStateDefinition(selectedStateKey.value).label} zapsan v ${getCurrentTimeLabel(recordedAt)} pro hodinu ${hourLabel}.`;
+  if (lastCaptureUndo.value) {
+    lastCaptureUndo.value.message = storageMessage.value;
+  }
 }
 
 function writeTimelineState() {
@@ -1109,7 +1139,31 @@ function writeTimelineState() {
     source: "timeline",
     recordedAt: new Date().toISOString(),
   });
+  const recordId = targetEntry.hourRecords[hourLabel]?.at(-1)?.id;
+  if (recordId) {
+    lastCaptureUndo.value = {
+      run() {
+        targetEntry.hourRecords[hourLabel] =
+          targetEntry.hourRecords[hourLabel].filter((record) => record.id !== recordId);
+        reconcileEntryHourState(targetEntry, "latest", { hydrateFromHours: false });
+        targetEntry.updatedAt = new Date().toISOString();
+      },
+    };
+  }
   storageMessage.value = `Stav ${getStateDefinition(selectedStateKey.value).label} zapsan pro hodinu ${hourLabel}:00–${hourLabel}:59.`;
+  if (lastCaptureUndo.value) {
+    lastCaptureUndo.value.message = storageMessage.value;
+  }
+}
+
+function undoLastCapture() {
+  const action = lastCaptureUndo.value;
+  if (!action) {
+    return;
+  }
+  action.run();
+  lastCaptureUndo.value = null;
+  storageMessage.value = "Posledni zapis byl vracen.";
 }
 
 async function resetSelectedDateEverywhere() {
@@ -2060,7 +2114,17 @@ function syncFloatingMenuHeight() {
           <button class="primary-button" type="button" @click="applyAppUpdate">Aktualizovat ted</button>
         </div>
 
-        <p v-if="storageMessage" class="storage-message floating-menu-message">{{ storageMessage }}</p>
+        <div v-if="storageMessage" class="storage-message floating-menu-message">
+          <span>{{ storageMessage }}</span>
+          <button
+            v-if="lastCaptureUndo?.message === storageMessage"
+            class="ghost-button storage-message-action"
+            type="button"
+            @click="undoLastCapture"
+          >
+            Vratit posledni zapis
+          </button>
+        </div>
       </section>
 
       <main

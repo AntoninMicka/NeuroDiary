@@ -20,10 +20,17 @@ test("rounds timeline selections down to five minutes", () => {
   );
 });
 
+test("rounds correctly across the midnight boundary", () => {
+  const rounded = roundDownToTimelineStep(new Date("2026-07-30T00:02:59"));
+  assert.equal(rounded.getDate(), 30);
+  assert.equal(rounded.toTimeString().slice(0, 5), "00:00");
+});
+
 test("offers medication from ten minutes early through sixty minutes late", () => {
   const scheduled = new Date("2026-07-29T14:00:00");
   assert.equal(getMedicationWindowStatus(scheduled, new Date("2026-07-29T13:50:00")).isAvailable, true);
   assert.equal(getMedicationWindowStatus(scheduled, new Date("2026-07-29T15:00:00")).isAvailable, true);
+  assert.equal(getMedicationWindowStatus(scheduled, new Date("2026-07-29T15:00:00.001")).isAvailable, false);
   assert.equal(getMedicationWindowStatus(scheduled, new Date("2026-07-29T13:49:59")).isAvailable, false);
   assert.equal(getMedicationWindowStatus(scheduled, new Date("2026-07-29T15:01:00")).isAvailable, false);
 });

@@ -55,6 +55,41 @@ test("daily adherence uses the historical plan version", () => {
   assert.equal(result.plannedDoses[0].planItem.id, "old");
 });
 
+test("keeps an unrecorded dose available for sixty minutes but retains thirty-minute adherence tolerance", () => {
+  const waiting = analyzeMedicationAdherence({
+    treatmentPlan: [newDose],
+    recordedMedications: [],
+    selectedDate: "2026-02-15",
+    todayDate: "2026-02-15",
+    now: new Date("2026-02-15T08:31:00"),
+  });
+  assert.equal(waiting.plannedDoses[0].statusKey, "upcoming");
+
+  const missed = analyzeMedicationAdherence({
+    treatmentPlan: [newDose],
+    recordedMedications: [],
+    selectedDate: "2026-02-15",
+    todayDate: "2026-02-15",
+    now: new Date("2026-02-15T09:01:00"),
+  });
+  assert.equal(missed.plannedDoses[0].statusKey, "missed");
+
+  const late = analyzeMedicationAdherence({
+    treatmentPlan: [newDose],
+    recordedMedications: [{
+      id: "late",
+      name: "Levodopa",
+      dose: "150 mg",
+      time: "08:31",
+      planItemId: "new",
+    }],
+    selectedDate: "2026-02-15",
+    todayDate: "2026-02-15",
+    now: new Date("2026-02-15T08:31:00"),
+  });
+  assert.equal(late.plannedDoses[0].statusKey, "late");
+});
+
 test("long-term adherence switches plans at their validity boundary", () => {
   const entries = {
     "2026-01-31": {

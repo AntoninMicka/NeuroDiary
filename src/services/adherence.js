@@ -1,5 +1,6 @@
 import { normalizeSingleLine } from "./validation.js";
 import { getTreatmentPlanForDate } from "../domain/diary.js";
+import { MEDICATION_LATE_MINUTES } from "./quickCapture.js";
 
 export const ADHERENCE_TOLERANCE_MINUTES = 30;
 
@@ -71,7 +72,7 @@ export function analyzeMedicationAdherence({
       const isPastDate = selectedDate < todayKey;
       const isPastDueToday =
         selectedDate === todayKey
-        && nowMinutes > timeToMinutes(planItem.time) + ADHERENCE_TOLERANCE_MINUTES;
+        && nowMinutes > timeToMinutes(planItem.time) + MEDICATION_LATE_MINUTES;
       const isMissed = isPastDate || isPastDueToday;
       return {
         planItem,

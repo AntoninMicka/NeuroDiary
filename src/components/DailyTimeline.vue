@@ -1,7 +1,11 @@
 <script setup>
 import { computed } from "vue";
 import { formatLongDate, getStateDefinition, getTodayKey, TRACKING_HOURS } from "../domain/diary.js";
-import { ADHERENCE_TOLERANCE_MINUTES, analyzeMedicationAdherence } from "../services/adherence.js";
+import { analyzeMedicationAdherence } from "../services/adherence.js";
+import {
+  MEDICATION_EARLY_MINUTES,
+  MEDICATION_LATE_MINUTES,
+} from "../services/quickCapture.js";
 import { analyzeEntry, getPeriodDateKeys } from "../services/statistics.js";
 
 const props = defineProps({
@@ -68,7 +72,11 @@ const rows = computed(() =>
           } else if (!dose.recordedMedication) {
             const difference = timeToMinutes(dose.planItem.time)
               - (props.currentTime.getHours() * 60 + props.currentTime.getMinutes());
-            displayStatus = Math.abs(difference) <= ADHERENCE_TOLERANCE_MINUTES ? "due" : "planned";
+            displayStatus =
+              difference <= MEDICATION_EARLY_MINUTES
+              && difference >= -MEDICATION_LATE_MINUTES
+                ? "due"
+                : "planned";
           }
           return {
             id: dose.planItem.id,

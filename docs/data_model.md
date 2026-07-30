@@ -16,3 +16,17 @@ plan platny pro datum konkretniho denniho zaznamu.
 
 SQLite schema v6 pridava sloupce `valid_from` a `valid_to` do tabulky
 `treatment_plan`.
+
+## Skutecne uzite davky
+
+Zaznam v `medications` zachovava zpetnou kompatibilitu pres pole `time`, ktere obsahuje lokalni
+cas uziti ve formatu `HH:MM`. Nove zaznamy mohou obsahovat take:
+
+- `planItemId`: vazba na konkretni verzi planovane davky,
+- `takenAt`: skutecny cas uziti jako ISO datum a cas,
+- `recordedAt`: automaticky cas vytvoreni zaznamu jako ISO datum a cas,
+- `source`: misto vzniku zaznamu, napriklad `quick-capture` nebo `timeline`.
+
+Zpozdeni a adherence se pocitaji podle skutecneho casu uziti, nikoli podle `recordedAt`.
+SQLite schema v7 pridava do tabulky `medications` sloupce `taken_at`, `recorded_at` a `source`.
+Starsi zaznamy maji tyto hodnoty prazdne a nadale pouzivaji `time`.
