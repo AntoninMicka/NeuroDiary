@@ -3,12 +3,20 @@
 ## Hlavni navigace
 
 Plovouci hlavicka obsahuje prepinani panelu, stav online/offline, priznak lokalnich zmen a rychlou
-synchronizaci. Hodinova hlavicka casove osy je sticky a pouziva stejny grid jako datove bunky.
+synchronizaci. Hodinova matice je zachovana jako doplnkovy pohled v nabidce `Vice` a neni soucasti
+hlavni navigace.
 
 ## Rychly zapis
 
-Rychly zapis stavu vzdy pouzije systemovy cas v okamziku kliknuti. Rucni opravy patri do hodinove
-matice. Zapis davky z lecebneho planu vytvori vazbu `planItemId`.
+Rychly zapis stavu vzdy pouzije systemovy cas v okamziku kliknuti. Zobrazuje pouze nezapsane
+planovane davky v intervalu od 10 minut pred planem do 60 minut po nem, vcetne odpoctu nebo
+zpozdeni. Zapis davky vytvori vazbu `planItemId` a oddelene uchova skutecny cas uziti a cas
+vytvoreni zaznamu.
+
+Petiminutovy casovy karusel umoznuje zapsat stav nejvyse 10 hodin zpet; stav se vztahuje na celou
+zvolenou hodinu. Tlacitko `Ted` vraci vyber k soucasnosti. Dosud nezapsanou davku lze v karuselu
+doplnit se zvolenym casem uziti pouze do 60 minut od planu. Vynechana davka po teto lhute zustane
+viditelna, ale uz ji nelze zapsat.
 
 ## Lecba
 

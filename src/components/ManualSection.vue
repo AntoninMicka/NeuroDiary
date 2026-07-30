@@ -18,25 +18,29 @@
         <div class="manual-block">
           <h4>1. Rychly zapis</h4>
           <p>
-            Na uvodni obrazovce vyberte aktualni stav nebo davku z planu. Zapis pouzije skutecny
-            systemovy cas v okamziku stisknuti tlacitka. Rucni opravu provedete v hodinove matici.
+            Na uvodni obrazovce vyberte aktualni stav. Zapis vzdy pouzije skutecny systemovy cas
+            v okamziku stisknuti tlacitka. Planovana davka se zobrazi pouze od 10 minut pred jejim
+            casem do 60 minut po nem, vcetne odpoctu nebo informace o zpozdeni. Po zapsani z nabidky
+            zmizi.
           </p>
         </div>
 
         <div class="manual-block">
-          <h4>2. Vyber dne a hodinova matice</h4>
+          <h4>2. Zpetny zapis v casovem karuselu</h4>
           <p>
-            V horni casti vyberte datum. Aktualni den lze upravovat, historicke dny slouzi hlavne ke
-            kontrole. V matici pouzivejte stavy <strong>D</strong>, <strong>ON</strong>,
-            <strong>MID</strong>, <strong>OFF</strong> a <strong>S</strong>.
+            Karusel na uvodni obrazovce se posouva po 5 minutach a umoznuje zapsat stav nejvyse
+            10 hodin zpet. Stav plati pro celou hodinu obsahujici vybrany cas. Tlacitko
+            <strong>Ted</strong> vrati karusel k aktualnimu casu. Dosud nezapsanou davku lze doplnit
+            se zvolenym casem uziti, ale jen do 60 minut od jejiho planovaneho casu.
           </p>
         </div>
 
         <div class="manual-block">
-          <h4>3. Denni zapis</h4>
+          <h4>3. Hodinova matice a denni zapis</h4>
           <p>
-            Doplnte kvalitu spanku, celkovy dojem ze dne a kratkou poznamku. Tato cast je vhodna pro
-            zachyceni souvislosti mezi priznaky, aktivitou a medikaci.
+            Hodinova matice zustava jako doplnkovy pohled v nabidce <strong>Vice</strong>. Pro bezne
+            a zpetne zapisy pouzivejte prednostne rychly zapis a jeho karusel. V Dennim zapisu
+            doplnte kvalitu spanku, celkovy dojem ze dne a kratkou poznamku.
           </p>
         </div>
 
@@ -44,8 +48,10 @@
           <h4>4. Lecba</h4>
           <p>
             Nejprve vytvorte pravidelny plan. Skutecne uzitou davku zapisujte pres rychly zapis.
+            Pokud jste zapis zapomneli, pouzijte v povolene hodinove lhute casovy karusel.
             Sekce Lecba ukazuje, zda byla davka uzita vcas, drive, pozdeji, ceka na uziti nebo byla
-            vynechana. Hodnoceni „vcas“ pouziva toleranci plus/minus 30 minut.
+            vynechana. Po uplynuti 60 minut uz vynechanou davku dodatecne zapsat nelze. Hodnoceni
+            „vcas“ pouziva toleranci plus/minus 30 minut.
           </p>
         </div>
 
@@ -53,17 +59,19 @@
           <h4>5. Pripomenuti leku</h4>
           <p>
             V Lecbe lze zapnout systemova upozorneni a zvolit pripomenuti v case davky nebo 5–30
-            minut predem. Prohlizec musi mit povolene notifikace a aplikace musi byt otevrena nebo
-            bezet na pozadi. Po uplnem ukonceni prohlizece zatim neni doruceni garantovano.
+            minut predem. Prohlizec musi mit povolene notifikace. Aktivni Web Push umi upozorneni
+            dorucit i po zavreni aplikace; bez nej funguje lokalni pripomenuti pouze pri otevrene
+            nebo bezici aplikaci.
           </p>
         </div>
 
         <div class="manual-block">
           <h4>6. Casova osa, souhrn a trendy</h4>
           <p>
-            Casova osa prepina mezi dny a jeji hodinova hlavicka zustava pri posunu viditelna.
-            Souhrn ukazuje 7 a 30 dni. Trendy nabizeji 30–365 dni, pokryti dat a vyvoj ON/OFF.
-            Vysledky jsou orientacni a nenahrazuji lekarske hodnoceni.
+            Denni casova osa zobrazuje zaznamenane stavy a stav planovanych davek. Nejde o stejny
+            prvek jako petiminutovy karusel pro zpetny zapis. Souhrn ukazuje 7 a 30 dni. Trendy
+            nabizeji 30–365 dni, pokryti dat a vyvoj ON/OFF. Vysledky jsou orientacni a nenahrazuji
+            lekarske hodnoceni.
           </p>
         </div>
 
