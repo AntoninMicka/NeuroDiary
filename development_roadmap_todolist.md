@@ -663,9 +663,82 @@ Výstup:
 
 ### [pending] 11.4 Integrace s wearables
 
-* chytré hodinky
-* krokoměry
-* sledování spánku
+Wearable data mají sloužit jako podklad pro návrh stavu k potvrzení, nikoli jako diagnóza
+nebo doporučení změny léčby. Ručně potvrzené záznamy se nesmí automaticky přepisovat.
+
+#### [pending] 11.4.1 Vymezit produkt, regulatorní hranici a podporované platformy
+
+* potvrdit metriky pro první verzi: tep, aktivita, kroky a případně spánek
+* posoudit dopad MDR před veřejným zdravotnickým nasazením
+* stanovit minimální Wear OS a Android API, podporované modely a režim bez telefonu
+* detekovat capabilities za běhu a zobrazit skutečně dostupné funkce
+
+#### [pending] 11.4.2 Zvolit architekturu přenosu
+
+* porovnat přímý přenos `Wear OS → backend → PWA` s Android companion vrstvou
+* rozhodnout mezi samostatným Wear OS modulem a balením PWA pomocí Capacitoru
+* Health Connect a vlastní Capacitor plugin přidat pouze tehdy, pokud budou potřeba data uložená v telefonu
+* pro wearable klienta znovu použít existující identitu, E2E sync kontrakt a conflict strategii z fází 5 a 6
+
+#### [pending] 11.4.3 Implementovat sběr na Wear OS
+
+* vytvořit Kotlin modul s Health Services (`PassiveMonitoringClient`, `PassiveListenerService`)
+* registrovat pouze podporované datové typy a minimální nutná oprávnění
+* vysvětlit uživateli účel, rozsah, odesílání a vypnutí sběru
+* obnovit registraci po restartu hodinek
+* vytvořit offline Room frontu s dávkovým uploadem a bezpečným odstraněním potvrzených položek
+* změřit spotřebu baterie při běžném provozu, v noci, offline a při opakovaném selhání přenosu
+
+#### [pending] 11.4.4 Rozšířit datový model wearable měření
+
+* oddělit `source_measurement`, agregovaný `interval_feature`, `state_suggestion` a potvrzený `user_entry`
+* evidovat čas měření a přijetí, UTC, původní offset, zdroj, zařízení, pokrytí a výpadky
+* u návrhu uložit stav, confidence, coverage, důvody, verzi pravidel a vstupní období
+* navázat potvrzení nebo opravu na původní návrh a zachovat auditní historii
+* pro měření použít existující UUID, append-only slučování a tombstones; doplnit pouze ingest pozdě doručených dat
+
+#### [pending] 11.4.5 Implementovat agregaci a návrhy stavu
+
+* normalizovat jednotky a původ tepu, kroků, vzdálenosti, aktivity a dostupných údajů o spánku
+* agregovat měření do časových intervalů včetně minima, maxima, průměru, počtu vzorků a mezer
+* vyhodnotit pokrytí, pravděpodobné nošení hodinek, nabíjení a konfliktní zdroje
+* vytvořit osobní baseline podle denní doby, aktivity, tepu, spánku a odezvy po léku
+* používat léčebný plán pouze jako kontext
+* verzovat pravidla, podporovat zpětný přepočet a nikdy nepřepsat potvrzený stav
+
+#### [pending] 11.4.6 Doplnit human-in-the-loop UX
+
+* vizuálně odlišit návrh, potvrzený stav, ruční záznam a chybějící data
+* samostatně zobrazit confidence, coverage a hlavní důvody návrhu
+* umožnit potvrdit, opravit, zamítnout nebo označit „nevím“
+* hromadně potvrzovat pouze jednoznačné návrhy a nabídnout vrácení změny
+* zpřístupnit všechny akce také tlačítky, klávesnicí a dotykovým ovládáním
+* zobrazit poslední data z hodinek, poslední upload, čekající data a chybějící oprávnění
+
+#### [pending] 11.4.7 Doplnit wearable souhlas, soukromí a provoz
+
+* umožnit vypnout sběr, odebrat jednotlivé datové typy a odpojit zařízení
+* rozšířit existující export a odstranění dat o zdrojová wearable měření a retenční pravidla
+* připravit Google Play Health Apps declaration, Data Safety a veřejnou privacy policy
+* monitorovat stáří posledních dat, chybovost syncu a verzi pravidel bez citlivých hodnot v logách
+* bezpečnost přenosu, tokenů a zdravotních dat řešit společně s existujícími body 5.2, 5.4 a 6.5
+
+#### [pending] 11.4.8 Ověřit integraci a kalibrovat návrhy
+
+* přidat wearable scénáře do testovací fáze 10 místo vytváření paralelního obecného testovacího plánu
+* testovat syntetická data, alespoň dva modely hodinek a více verzí Wear OS
+* ověřit restart, aktualizaci, force stop, změnu oprávnění, dlouhý offline režim a přerušený upload
+* ověřit změny časového pásma, letní čas, změnu času zařízení a pozdní doručení
+* kalibrovat návrhy proti ručnímu deníku podle uživatele i modelu zařízení
+* měřit shody, opravy, záměny `ON/OFF` a záměny klidu s `OFF`
+
+Doporučené pořadí prvního wearable MVP:
+
+1. Nativní Wear OS modul a Health Services.
+2. Room fronta a dávkový upload přes existující sync infrastrukturu.
+3. Zdrojová měření s provenance a kontrolou kvality.
+4. Intervalová agregace a jednoduché vysvětlitelné návrhy.
+5. Potvrzení nebo oprava v PWA a sběr oprav pro kalibraci.
 
 ### [pending] 11.5 Anonymizovaný export dat pro výzkum
 
