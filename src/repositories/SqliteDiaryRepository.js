@@ -13,7 +13,7 @@ import {
 import { DiaryRepository } from "./DiaryRepository.js";
 
 const STORAGE_KEY = "neurodiary-sqlite-db-v1";
-const SCHEMA_VERSION = 6;
+const SCHEMA_VERSION = 7;
 
 const MIGRATIONS = [
   {
@@ -102,6 +102,16 @@ const MIGRATIONS = [
       db.run(`
         ALTER TABLE treatment_plan ADD COLUMN valid_from TEXT NOT NULL DEFAULT '';
         ALTER TABLE treatment_plan ADD COLUMN valid_to TEXT NOT NULL DEFAULT '';
+      `);
+    },
+  },
+  {
+    version: 7,
+    run(db) {
+      db.run(`
+        ALTER TABLE medications ADD COLUMN taken_at TEXT NOT NULL DEFAULT '';
+        ALTER TABLE medications ADD COLUMN recorded_at TEXT NOT NULL DEFAULT '';
+        ALTER TABLE medications ADD COLUMN source TEXT NOT NULL DEFAULT '';
       `);
     },
   },
@@ -334,8 +344,10 @@ export class SqliteDiaryRepository extends DiaryRepository {
         for (const medication of normalizedEntry.medications) {
           this.db.run(
             `
-              INSERT INTO medications (id, entry_date, name, dose, time, plan_item_id)
-              VALUES (?, ?, ?, ?, ?, ?)
+              INSERT INTO medications (
+                id, entry_date, name, dose, time, plan_item_id, taken_at, recorded_at, source
+              )
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             `,
             [
               medication.id,
@@ -344,6 +356,9 @@ export class SqliteDiaryRepository extends DiaryRepository {
               medication.dose,
               medication.time,
               medication.planItemId ?? "",
+              medication.takenAt ?? "",
+              medication.recordedAt ?? "",
+              medication.source ?? "",
             ],
           );
         }
@@ -454,7 +469,7 @@ export class SqliteDiaryRepository extends DiaryRepository {
 
   selectMedications(entryDate) {
     const statement = this.db.prepare(`
-      SELECT id, name, dose, time, plan_item_id
+      SELECT id, name, dose, time, plan_item_id, taken_at, recorded_at, source
       FROM medications
       WHERE entry_date = ?
       ORDER BY time, id
@@ -473,6 +488,15 @@ export class SqliteDiaryRepository extends DiaryRepository {
         };
         if (row.plan_item_id) {
           medication.planItemId = row.plan_item_id;
+        }
+        if (row.taken_at) {
+          medication.takenAt = row.taken_at;
+        }
+        if (row.recorded_at) {
+          medication.recordedAt = row.recorded_at;
+        }
+        if (row.source) {
+          medication.source = row.source;
         }
         results.push(medication);
       }

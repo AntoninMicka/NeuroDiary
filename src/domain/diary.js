@@ -97,6 +97,15 @@ export function createMedication(payload) {
     dose: payload.dose.trim(),
     time: payload.time,
   };
+  if (typeof payload.takenAt === "string" && payload.takenAt) {
+    medication.takenAt = payload.takenAt;
+  }
+  if (typeof payload.recordedAt === "string" && payload.recordedAt) {
+    medication.recordedAt = payload.recordedAt;
+  }
+  if (typeof payload.source === "string" && payload.source) {
+    medication.source = payload.source;
+  }
   if (typeof payload.planItemId === "string" && payload.planItemId) {
     medication.planItemId = payload.planItemId;
   }

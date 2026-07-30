@@ -5,6 +5,7 @@ import MedicationPlan from "./components/MedicationPlan.vue";
 import HourMatrix from "./components/HourMatrix.vue";
 import DaySummary from "./components/DaySummary.vue";
 import DailyTimeline from "./components/DailyTimeline.vue";
+import QuickCaptureTimeline from "./components/QuickCaptureTimeline.vue";
 import LongTermTrends from "./components/LongTermTrends.vue";
 import ManualSection from "./components/ManualSection.vue";
 import {
@@ -91,7 +92,12 @@ import {
   registerWebPush,
   unregisterWebPush,
 } from "./services/webPushService.js";
-import { isQuickCaptureDateValid, QUICK_CAPTURE_WINDOW_MS } from "./services/quickCapture.js";
+import {
+  getMedicationWindowStatus,
+  getPlannedDoseDate,
+  isQuickCaptureDateValid,
+  roundDownToTimelineStep,
+} from "./services/quickCapture.js";
 
 const PENDING_SYNC_CHANGES_STORAGE_KEY = "neurodiary-pending-sync-changes-v1";
 
@@ -137,8 +143,7 @@ const storageMessage = ref("");
 const birthYearValidationMessage = ref("");
 const bootstrapStatus = ref("Starting application bootstrap.");
 const quickCaptureNow = ref(new Date());
-const quickCaptureRecordedAt = ref(formatDateTimeLocal(new Date()));
-const quickCaptureUsesCurrentTime = ref(true);
+const timelineSelectedTime = ref(roundDownToTimelineStep(new Date()));
 const selectedStateKey = ref("on");
 const selectedTreatmentPlanId = ref("");
 const reportOptions = reactive({
@@ -207,15 +212,33 @@ const sortedTreatmentPlan = computed(() =>
 const activeTodayTreatmentPlan = computed(() =>
   getTreatmentPlanForDate(state.treatmentPlan, getTodayKey()),
 );
-const quickCaptureDate = computed(() =>
-  quickCaptureUsesCurrentTime.value ? quickCaptureNow.value : new Date(quickCaptureRecordedAt.value),
-);
+const quickCaptureDate = computed(() => quickCaptureNow.value);
 const quickCaptureDateKey = computed(() => formatDateKey(quickCaptureDate.value));
 const activeQuickCaptureTreatmentPlan = computed(() =>
   getTreatmentPlanForDate(state.treatmentPlan, quickCaptureDateKey.value),
 );
 const selectedTreatmentPlanItem = computed(() =>
   activeQuickCaptureTreatmentPlan.value.find((item) => item.id === selectedTreatmentPlanId.value) ?? null,
+);
+const availablePlannedDoses = computed(() => {
+  const dateKey = getTodayKey();
+  const recorded = state.entries[dateKey]?.medications ?? [];
+  return getTreatmentPlanForDate(state.treatmentPlan, dateKey)
+    .filter((item) => !recorded.some((medication) => medication.planItemId === item.id))
+    .map((item) => ({
+      item,
+      scheduledAt: getPlannedDoseDate(dateKey, item.time),
+      status: getMedicationWindowStatus(getPlannedDoseDate(dateKey, item.time), quickCaptureNow.value),
+    }))
+    .filter((dose) => dose.status.isAvailable);
+});
+const timelineMedicationDoses = computed(() =>
+  availablePlannedDoses.value.filter((dose) => {
+    const selected = timelineSelectedTime.value.getTime();
+    return selected >= dose.scheduledAt.getTime() - 10 * 60_000
+      && selected <= dose.scheduledAt.getTime() + 60 * 60_000
+      && selected <= quickCaptureNow.value.getTime();
+  }),
 );
 const PANEL_ITEMS = [
   { id: "sekce-home", label: "Rychly zapis" },
@@ -253,25 +276,21 @@ const installHelpText = computed(() => {
 const showIosInstallGuide = computed(
   () => !isInstalledApp.value && platformInstallMode.value === "ios-share-sheet",
 );
-const quickCaptureMin = computed(() => formatDateTimeLocal(new Date(quickCaptureNow.value.getTime() - QUICK_CAPTURE_WINDOW_MS)));
-const quickCaptureMax = computed(() => formatDateTimeLocal(quickCaptureNow.value));
-const isQuickCaptureTimeValid = computed(() =>
-  isQuickCaptureDateValid(quickCaptureDate.value, quickCaptureNow.value),
-);
+const isQuickCaptureTimeValid = computed(() => isQuickCaptureDateValid(timelineSelectedTime.value, quickCaptureNow.value));
 const quickCaptureStateLabel = computed(() => getStateDefinition(selectedStateKey.value).label);
 const quickCaptureMedicationLabel = computed(() => {
   const item = selectedTreatmentPlanItem.value;
   return item ? `${item.name} ${item.dose}` : "Davku z planu";
 });
-const currentHourLabel = computed(() => getTrackableHourLabel(quickCaptureDate.value));
+const currentHourLabel = computed(() => getTrackableHourLabel(quickCaptureNow.value));
 const currentTimeLabel = computed(() =>
   new Intl.DateTimeFormat("cs-CZ", {
     hour: "2-digit",
     minute: "2-digit",
-  }).format(quickCaptureDate.value),
+  }).format(quickCaptureNow.value),
 );
 const currentHourRecordCount = computed(() =>
-  getHourRecordCount(state.entries[quickCaptureDateKey.value], currentHourLabel.value),
+  getHourRecordCount(state.entries[getTodayKey()], currentHourLabel.value),
 );
 const canGoToNextDate = computed(() => state.selectedDate < getTodayKey());
 const showDateSwitcher = computed(() => DATE_NAV_PANEL_IDS.has(activePanelId.value));
@@ -581,18 +600,6 @@ function updateSyncSetting(field, value) {
 function refreshQuickCaptureClock() {
   quickCaptureNow.value = new Date();
   void checkDueMedicationReminders();
-}
-
-function updateQuickCaptureRecordedAt(value) {
-  quickCaptureRecordedAt.value = value;
-}
-
-function setQuickCaptureTimeMode(useCurrentTime) {
-  quickCaptureUsesCurrentTime.value = useCurrentTime;
-  refreshQuickCaptureClock();
-  if (!useCurrentTime) {
-    quickCaptureRecordedAt.value = formatDateTimeLocal(quickCaptureNow.value);
-  }
 }
 
 async function setMedicationRemindersEnabled(enabled) {
@@ -981,6 +988,9 @@ function addMedication(payload, dateKey = state.selectedDate) {
   targetEntry.medications.push(createMedication({
     ...validation.value,
     planItemId: payload.planItemId,
+    takenAt: payload.takenAt,
+    recordedAt: payload.recordedAt,
+    source: payload.source,
   }));
   targetEntry.updatedAt = new Date().toISOString();
   void refreshWebPushRegistration();
@@ -1019,35 +1029,36 @@ function endTreatmentPlanItem(planItemId, validTo) {
   void refreshWebPushRegistration();
 }
 
-function recordMedicationFromPlan() {
-  if (!isQuickCaptureTimeValid.value) {
-    storageMessage.value = "Cas rychleho zapisu musi byt v poslednich 10 hodinach.";
+function recordMedicationFromPlan(planItem, takenAt = new Date(), source = "quick-capture") {
+  refreshQuickCaptureClock();
+  const dateKey = formatDateKey(takenAt);
+  const activePlanItem = getTreatmentPlanForDate(state.treatmentPlan, dateKey)
+    .find((item) => item.id === planItem?.id);
+  if (!activePlanItem) {
+    storageMessage.value = "Planovana davka uz neni dostupna.";
     return;
   }
-
-  const recordedAt = quickCaptureUsesCurrentTime.value ? new Date() : quickCaptureDate.value;
-  if (quickCaptureUsesCurrentTime.value) {
-    quickCaptureNow.value = recordedAt;
-  }
-  const dateKey = formatDateKey(recordedAt);
-  const planItem = getTreatmentPlanForDate(state.treatmentPlan, dateKey)
-    .find((item) => item.id === selectedTreatmentPlanId.value);
-  if (!planItem) {
-    storageMessage.value = "Nejprve vyberte nebo vytvorte davku v planu lecby.";
+  const scheduledAt = getPlannedDoseDate(dateKey, activePlanItem.time);
+  const status = getMedicationWindowStatus(scheduledAt, quickCaptureNow.value);
+  if (!status.isAvailable) {
+    storageMessage.value = "Davku lze zapsat nejdrive 10 minut pred planem a nejpozdeji hodinu po planu.";
     return;
   }
-
-  const currentTime = getCurrentTimeLabel(recordedAt);
+  const currentTime = getCurrentTimeLabel(takenAt);
+  const recordedAt = new Date();
   const wasAdded = addMedication({
-    name: planItem.name,
-    dose: planItem.dose,
+    name: activePlanItem.name,
+    dose: activePlanItem.dose,
     time: currentTime,
-    planItemId: planItem.id,
+    planItemId: activePlanItem.id,
+    takenAt: takenAt.toISOString(),
+    recordedAt: recordedAt.toISOString(),
+    source,
   }, dateKey);
   if (!wasAdded) {
     return;
   }
-  storageMessage.value = `Davka ${planItem.name} ${planItem.dose} byla zapsana na ${currentTime}.`;
+  storageMessage.value = `Davka ${activePlanItem.name} ${activePlanItem.dose} byla zapsana jako uzita v ${currentTime}.`;
 }
 
 function updateHour({ label, stateKey }) {
@@ -1074,21 +1085,30 @@ function updateHour({ label, stateKey }) {
 }
 
 function writeCurrentState() {
-  if (!isQuickCaptureTimeValid.value) {
-    storageMessage.value = "Cas rychleho zapisu musi byt v poslednich 10 hodinach.";
-    return;
-  }
-  const recordedAt = quickCaptureUsesCurrentTime.value ? new Date() : quickCaptureDate.value;
-  if (quickCaptureUsesCurrentTime.value) {
-    quickCaptureNow.value = recordedAt;
-  }
+  const recordedAt = new Date();
+  quickCaptureNow.value = recordedAt;
   const hourLabel = getTrackableHourLabel(recordedAt);
-  const targetEntry = ensureEntry(state, quickCaptureDateKey.value);
+  const targetEntry = ensureEntry(state, formatDateKey(recordedAt));
   appendHourStateRecord(targetEntry, hourLabel, selectedStateKey.value, {
     source: "quick-capture",
     recordedAt: recordedAt.toISOString(),
   });
   storageMessage.value = `Stav ${getStateDefinition(selectedStateKey.value).label} zapsan v ${getCurrentTimeLabel(recordedAt)} pro hodinu ${hourLabel}.`;
+}
+
+function writeTimelineState() {
+  if (!isQuickCaptureTimeValid.value) {
+    storageMessage.value = "V casove ose lze zapisovat pouze poslednich 10 hodin.";
+    return;
+  }
+  const selectedAt = timelineSelectedTime.value;
+  const hourLabel = getTrackableHourLabel(selectedAt);
+  const targetEntry = ensureEntry(state, formatDateKey(selectedAt));
+  appendHourStateRecord(targetEntry, hourLabel, selectedStateKey.value, {
+    source: "timeline",
+    recordedAt: new Date().toISOString(),
+  });
+  storageMessage.value = `Stav ${getStateDefinition(selectedStateKey.value).label} zapsan pro hodinu ${hourLabel}:00–${hourLabel}:59.`;
 }
 
 async function resetSelectedDateEverywhere() {
@@ -2300,7 +2320,7 @@ function syncFloatingMenuHeight() {
           <div class="floating-quick-capture quick-capture-panel">
             <div class="floating-quick-capture-copy">
               <p class="panel-tip">
-                Vyberte cas z poslednich 10 hodin, stav nebo davku z planu lecby. Pro detailni upravy pak muzete prejit do hodinove matice.
+                Rychly zapis vzdy zaznamena aktualni okamzik.
               </p>
               <p v-if="currentHourRecordCount > 1" class="panel-tip">
                 Pro tuto hodinu uz existuje {{ currentHourRecordCount }} zaznamu. Zobrazuje se posledni.
@@ -2312,28 +2332,6 @@ function syncFloatingMenuHeight() {
                   Cas zapisu: <strong>{{ currentTimeLabel }}</strong> · zapis do hodiny
                   <strong>{{ currentHourLabel }}</strong>
                 </p>
-                <div class="quick-capture-time-controls">
-                  <label>
-                    <span>Cas zapisu</span>
-                    <select
-                      :value="quickCaptureUsesCurrentTime ? 'current' : 'selected'"
-                      @input="setQuickCaptureTimeMode($event.target.value === 'current')"
-                    >
-                      <option value="current">Aktualni datum a cas</option>
-                      <option value="selected">Vybrany datum a cas</option>
-                    </select>
-                  </label>
-                  <label v-if="!quickCaptureUsesCurrentTime">
-                    <span>Datum a cas</span>
-                    <input
-                      :value="quickCaptureRecordedAt"
-                      type="datetime-local"
-                      :min="quickCaptureMin"
-                      :max="quickCaptureMax"
-                      @input="updateQuickCaptureRecordedAt($event.target.value)"
-                    />
-                  </label>
-                </div>
               </div>
 
               <div class="quick-capture-row">
@@ -2341,7 +2339,6 @@ function syncFloatingMenuHeight() {
                   <span>Aktualni stav</span>
                   <select
                     :value="selectedStateKey"
-                    :disabled="!isQuickCaptureTimeValid"
                     @input="updateSelectedStateKey($event.target.value)"
                   >
                     <option v-for="item in HOUR_STATES" :key="item.key" :value="item.key">
@@ -2352,40 +2349,68 @@ function syncFloatingMenuHeight() {
                 <button
                   class="primary-button"
                   type="button"
-                  :disabled="!isQuickCaptureTimeValid"
                   @click="writeCurrentState"
                 >
                   Zapsat {{ quickCaptureStateLabel }}
                 </button>
               </div>
 
-              <div class="quick-capture-row">
-                <label>
+              <div v-for="dose in availablePlannedDoses" :key="dose.item.id" class="quick-capture-row">
+                <p class="quick-dose-copy">
                   <span>Davka z planu</span>
-                  <select
-                    :value="selectedTreatmentPlanId"
-                    :disabled="!isQuickCaptureTimeValid || activeQuickCaptureTreatmentPlan.length === 0"
-                    @input="selectedTreatmentPlanId = $event.target.value"
-                  >
-                    <option value="">Vyberte planovanou davku</option>
-                    <option v-for="item in activeQuickCaptureTreatmentPlan" :key="item.id" :value="item.id">
-                      {{ item.time }} · {{ item.name }} · {{ item.dose }}
-                    </option>
-                  </select>
-                </label>
+                  <strong>{{ dose.item.time }} · {{ dose.item.name }} · {{ dose.item.dose }}</strong>
+                  <small>{{ dose.status.label }}</small>
+                </p>
                 <button
                   class="ghost-button"
                   type="button"
-                  :disabled="!isQuickCaptureTimeValid || !selectedTreatmentPlanItem"
-                  @click="recordMedicationFromPlan"
+                  @click="recordMedicationFromPlan(dose.item)"
                 >
-                  Zapsat {{ quickCaptureMedicationLabel }} ted
+                  Zapsat {{ dose.item.name }} {{ dose.item.dose }} ted
+                </button>
+              </div>
+              <p v-if="availablePlannedDoses.length === 0" class="panel-tip">
+                Nyni neni k zapisu zadna planovana davka.
+              </p>
+            </div>
+          </div>
+          <div class="timeline-capture-panel">
+            <QuickCaptureTimeline
+              v-model="timelineSelectedTime"
+              :current-time="quickCaptureNow"
+            />
+            <div class="floating-quick-capture-form">
+              <p class="panel-tip">
+                Zpetny zapis pro hodinu
+                <strong>{{ getTrackableHourLabel(timelineSelectedTime) }}:00–{{ getTrackableHourLabel(timelineSelectedTime) }}:59</strong>
+              </p>
+              <div class="quick-capture-row">
+                <label>
+                  <span>Stav pro celou hodinu</span>
+                  <select :value="selectedStateKey" @input="updateSelectedStateKey($event.target.value)">
+                    <option v-for="item in HOUR_STATES" :key="item.key" :value="item.key">
+                      {{ item.label }}
+                    </option>
+                  </select>
+                </label>
+                <button class="primary-button" type="button" @click="writeTimelineState">
+                  Zapsat stav pro hodinu
+                </button>
+              </div>
+              <div v-for="dose in timelineMedicationDoses" :key="`timeline-${dose.item.id}`" class="quick-capture-row">
+                <p class="quick-dose-copy">
+                  <span>Chybejici davka z planu</span>
+                  <strong>{{ dose.item.time }} · {{ dose.item.name }} · {{ dose.item.dose }}</strong>
+                </p>
+                <button
+                  class="ghost-button"
+                  type="button"
+                  @click="recordMedicationFromPlan(dose.item, timelineSelectedTime, 'timeline')"
+                >
+                  Zapsat uziti v {{ timelineSelectedTime.toTimeString().slice(0, 5) }}
                 </button>
               </div>
             </div>
-            <p v-if="!isQuickCaptureTimeValid" class="matrix-readonly-note floating-quick-capture-note">
-              Zvolte datum a cas v rozmezi poslednich 10 hodin.
-            </p>
           </div>
           <DailyTimeline
             class="layout-timeline"
