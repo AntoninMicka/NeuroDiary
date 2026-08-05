@@ -313,13 +313,22 @@ Navazující kroky:
 * fallback strategie pro zařízení bez Apple / Google přihlášení
 * později zvážit passkeys jako doplňkovou nebo pokročilejší variantu
 
-### [pending] 5.2 Šifrování dat
+### [in_progress] 5.2 Šifrování dat
+
+Aktualni stav:
+
+* diary snapshot se pred odeslanim sifruje v klientovi pomoci `AES-GCM-256`
+* nahodny account master key se bali klicem odvozenym z recovery secretu pomoci `PBKDF2`
+* backend uklada pouze sifrovany payload, zabaleny klic a synchronizacni metadata
+* nove zarizeni umi lokalne obnovit klic a desifrovat snapshot pomoci recovery secretu
+* automaticke testy pokryvaji sifrovany round-trip, chybny recovery secret, obnovu noveho zarizeni a konflikt revizi
 
 Poznamka k recovery flow:
 
 * recovery secret se da vygenerovat v klientovi
 * novy prenosovy flow umi zobrazit secret jako QR a nacist jej z QR obrazku
-* dalsi vhodny krok je live kamera scan a bezpecnejsi multi-device onboarding flow
+* QR lze nacist ze souboru i live kamerou
+* zbyva navrhnout rotaci klicu, spravu duveryhodnych zarizeni a bezpecnejsi multi-device onboarding flow
 
 ### [in_progress] 5.3 Cloud deploy a sync infrastruktura
 
@@ -350,11 +359,11 @@ Navazující kroky:
 * řešení rotace klíčů
 * rozhodnout, která metadata mohou zůstat mimo šifrovaný obsah
 
-### [pending] 5.3 Audit log
+### [pending] 5.4 Audit log
 
-### [pending] 5.4 GDPR
+### [pending] 5.5 GDPR
 
-### [pending] 5.5 Bezpečné sdílení a souhlas
+### [pending] 5.6 Bezpečné sdílení a souhlas
 
 * potvrzení uživatele před sdílením reportu nebo exportu
 * možnost anonymizace vybraných výstupů
@@ -392,7 +401,7 @@ Navazující kroky:
 * doplnit endpoint pro zjištění verze a capability discovery
 * oddělit interní a veřejné API modely
 
-### [pending] 6.3 Napojení frontendu na synchronizaci
+### [done] 6.3 Napojení frontendu na synchronizaci
 
 * Sync settings v klientovi
 * ruční `pull` a `push`
@@ -401,7 +410,14 @@ Navazující kroky:
 * bezpečné chování při offline režimu
 * příprava pro sync šifrovaného payloadu místo otevřeného JSON snapshotu
 
-### [pending] 6.4 Automatická synchronizace
+Aktualni stav:
+
+* klient podporuje inicializaci, rucni pull, push a rychly sync
+* zobrazuje revizi, posledni synchronizaci, cekajici zmeny a chybovy stav
+* offline rezim sitove akce nespousti a lokalni zmeny zustavaji zachovane
+* klient synchronizuje pouze E2E sifrovany snapshot
+
+### [in_progress] 6.4 Automatická synchronizace
 
 * sync při startu aplikace
 * debounce po lokálních změnách
@@ -409,13 +425,27 @@ Navazující kroky:
 * strategie retry a backoff
 * ochrana proti paralelním zápisům
 
-### [pending] 6.5 Konflikty a verzování
+Aktualni stav:
+
+* automaticky pull a push se spousti pri dostupnem pripojeni
+* lokalni zmeny jsou oznacene jako cekajici a nasledne odeslane
+* soubezne synchronizaci brani klientsky busy stav
+* zbyva formalizovat retry/backoff a doplnit integracni testy preruseneho spojeni
+
+### [in_progress] 6.5 Konflikty a verzování
 
 * snapshot conflict flow
 * rozhodnutí lokalní vs. serverová verze
 * pozdější jemnější merge po dnech nebo entitách
 * audit posledních konfliktů
 * ověřit, jak bude conflict workflow fungovat nad end-to-end šifrovanými daty
+
+Aktualni stav:
+
+* backend kontroluje `baseRevision` a vraci aktualni sifrovany snapshot pri konfliktu
+* klient konflikt desifruje, provede append-only merge a odesle slouceny snapshot s novou revizi
+* automaticky test overuje desifrovani vzdaleneho stavu pri konfliktu
+* zbyva uzivatelsky audit konfliktu a pozdejsi jemnejsi merge po entitach
 
 ### [ready_for_external_setup] 6.6 Deploy backendu
 
@@ -504,7 +534,7 @@ Výstup:
 
 ## Doporučené pořadí dalších implementací
 
-### [recommended] R1 Klientský sync základ
+### [done] R1 Klientský sync základ
 
 Nejbližší praktický krok po backend scaffoldingu:
 
@@ -516,6 +546,7 @@ Nejbližší praktický krok po backend scaffoldingu:
 Poznámka:
 
 * implementace by už měla počítat s budoucím end-to-end šifrováním, aby se sync kontrakt nemusel znovu zásadně lámat
+* splneno sifrovanym snapshot kontraktem a klientskym recovery flow
 
 ### [recommended] R2 První nasazení backendu
 
@@ -544,7 +575,7 @@ Jakmile bude první sync end-to-end funkční:
 * ověření identity tokenů na backendu
 * mapování uživatele na serverový sync prostor
 
-### [recommended] R0 Návrh E2E šifrování
+### [in_progress] R0 Návrh E2E šifrování
 
 Ještě před plným napojením klienta na produkční sync:
 
@@ -552,6 +583,11 @@ Ještě před plným napojením klienta na produkční sync:
 * určit hranici mezi šifrovanými daty a synchronizačními metadaty
 * rozhodnout recovery flow pro nové zařízení
 * potvrdit, co backend smí a nesmí být schopen přečíst
+
+Aktualni stav:
+
+* prvni model klicu, hranice sifrovaneho payloadu a recovery flow jsou navrzene i implementovane
+* pred produkcnim provozem zbyva rozhodnout rotaci klicu a spravu duveryhodnych zarizeni
 
 ---
 
@@ -722,7 +758,7 @@ nebo doporučení změny léčby. Ručně potvrzené záznamy se nesmí automati
 * rozšířit existující export a odstranění dat o zdrojová wearable měření a retenční pravidla
 * připravit Google Play Health Apps declaration, Data Safety a veřejnou privacy policy
 * monitorovat stáří posledních dat, chybovost syncu a verzi pravidel bez citlivých hodnot v logách
-* bezpečnost přenosu, tokenů a zdravotních dat řešit společně s existujícími body 5.2, 5.4 a 6.5
+* bezpečnost přenosu, tokenů a zdravotních dat řešit společně s existujícími body 5.2, 5.5 a 6.5
 
 #### [pending] 11.4.8 Ověřit integraci a kalibrovat návrhy
 
