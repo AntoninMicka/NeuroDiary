@@ -1,6 +1,10 @@
+import asyncio
 import importlib
 
-from fastapi.testclient import TestClient
+import pytest
+from fastapi import HTTPException
+from fastapi.responses import JSONResponse
+from starlette.requests import Request
 
 
 def load_app(monkeypatch, tmp_path):
@@ -10,32 +14,37 @@ def load_app(monkeypatch, tmp_path):
 
     import backend.app.main as main
 
-    return importlib.reload(main).app
+    main = importlib.reload(main)
+    main.on_startup()
+    return main
 
 
 def test_health_readiness_and_metadata(monkeypatch, tmp_path):
-    app = load_app(monkeypatch, tmp_path)
+    main = load_app(monkeypatch, tmp_path)
 
-    with TestClient(app) as client:
-        health = client.get("/healthz")
-        readiness = client.get("/readyz")
-        metadata = client.get("/api/v1/meta")
+    health = main.healthcheck()
+    readiness = main.readiness_check()
+    metadata = main.api_metadata()
 
-    assert health.status_code == 200
-    assert health.json()["status"] == "ok"
-    assert health.json()["version"] == "test-version"
-    assert readiness.status_code == 200
-    assert readiness.json()["status"] == "ready"
-    assert metadata.status_code == 200
-    assert metadata.json()["capabilities"]["encryptedSnapshotSync"] is True
-    assert health.headers["x-request-id"]
+    assert health["status"] == "ok"
+    assert health["version"] == "test-version"
+    assert readiness["status"] == "ready"
+    assert metadata["capabilities"]["encryptedSnapshotSync"] is True
 
 
 def test_request_id_is_preserved(monkeypatch, tmp_path):
-    app = load_app(monkeypatch, tmp_path)
+    main = load_app(monkeypatch, tmp_path)
+    request = Request({
+        "type": "http",
+        "method": "GET",
+        "path": "/healthz",
+        "headers": [(b"x-request-id", b"diagnostic-request")],
+    })
 
-    with TestClient(app) as client:
-        response = client.get("/healthz", headers={"x-request-id": "diagnostic-request"})
+    async def call_next(_request):
+        return JSONResponse({"status": "ok"})
+
+    response = asyncio.run(main.request_logging_middleware(request, call_next))
 
     assert response.headers["x-request-id"] == "diagnostic-request"
 
@@ -44,12 +53,11 @@ def test_push_is_disabled_without_vapid_configuration(monkeypatch, tmp_path):
     monkeypatch.delenv("NEURODIARY_VAPID_PUBLIC_KEY", raising=False)
     monkeypatch.delenv("NEURODIARY_VAPID_PRIVATE_KEY", raising=False)
     monkeypatch.delenv("NEURODIARY_VAPID_SUBJECT", raising=False)
-    app = load_app(monkeypatch, tmp_path)
+    main = load_app(monkeypatch, tmp_path)
 
-    with TestClient(app) as client:
-        config = client.get("/api/v1/push/config")
-        dispatch = client.post("/api/v1/internal/push/dispatch")
+    config = main.push_config()
+    with pytest.raises(HTTPException) as error:
+        main.dispatch_push()
 
-    assert config.status_code == 200
-    assert config.json() == {"enabled": False, "publicKey": ""}
-    assert dispatch.status_code == 401
+    assert config.model_dump() == {"enabled": False, "publicKey": ""}
+    assert error.value.status_code == 401

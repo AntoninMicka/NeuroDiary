@@ -417,7 +417,7 @@ Aktualni stav:
 * offline rezim sitove akce nespousti a lokalni zmeny zustavaji zachovane
 * klient synchronizuje pouze E2E sifrovany snapshot
 
-### [in_progress] 6.4 Automatická synchronizace
+### [done] 6.4 Automatická synchronizace
 
 * sync při startu aplikace
 * debounce po lokálních změnách
@@ -428,9 +428,10 @@ Aktualni stav:
 Aktualni stav:
 
 * automaticky pull a push se spousti pri dostupnem pripojeni
-* lokalni zmeny jsou oznacene jako cekajici a nasledne odeslane
+* lokalni zmeny jsou oznacene jako cekajici a po kratkem debounce nasledne odeslane
 * soubezne synchronizaci brani klientsky busy stav
-* zbyva formalizovat retry/backoff a doplnit integracni testy preruseneho spojeni
+* prerusene spojeni spousti omezeny exponencialni retry/backoff od 5 sekund do 5 minut
+* automaticky test overuje opakovani po vypadku, rust prodlevy a reset po uspesnem syncu
 
 ### [in_progress] 6.5 Konflikty a verzování
 
@@ -444,7 +445,8 @@ Aktualni stav:
 
 * backend kontroluje `baseRevision` a vraci aktualni sifrovany snapshot pri konfliktu
 * klient konflikt desifruje, provede append-only merge a odesle slouceny snapshot s novou revizi
-* automaticky test overuje desifrovani vzdaleneho stavu pri konfliktu
+* automaticke testy overuji desifrovani vzdaleneho stavu a serverovy tok push, pull, konflikt a reset
+* izolace snapshotu dvou prihlasenych uzivatelu je overena integracnim testem
 * zbyva uzivatelsky audit konfliktu a pozdejsi jemnejsi merge po entitach
 
 ### [ready_for_external_setup] 6.6 Deploy backendu

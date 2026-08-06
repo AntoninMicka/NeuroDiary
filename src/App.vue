@@ -99,6 +99,7 @@ import {
   isQuickCaptureDateValid,
   roundDownToTimelineStep,
 } from "./services/quickCapture.js";
+import { createSyncRetryScheduler } from "./services/syncRetry.js";
 
 const PENDING_SYNC_CHANGES_STORAGE_KEY = "neurodiary-pending-sync-changes-v1";
 
@@ -390,10 +391,12 @@ let panelSwipePointerType = "";
 let menuResizeObserver = null;
 let mediaQueryList = null;
 let quickCaptureClockIntervalId = 0;
-let automaticPushIntervalId = 0;
 let localChangeVersion = 0;
 let isUpdatingSyncMetadata = false;
 const SERVICE_WORKER_RELOAD_GUARD_KEY = "neurodiary-sw-reload-guard-v1";
+const automaticSyncScheduler = createSyncRetryScheduler({
+  task: runAutomaticSynchronization,
+});
 
 function setBootstrapStatus(message, level = "info") {
   if (!isCapturingBootstrapProgress.value) {
@@ -447,6 +450,7 @@ watch(
     localChangeVersion += 1;
     hasPendingSyncChanges.value = true;
     savePendingSyncChanges(true);
+    automaticSyncScheduler.schedule(2_000);
   },
   { deep: true, flush: "sync" },
 );
@@ -454,7 +458,6 @@ watch(
 onMounted(async () => {
   refreshQuickCaptureClock();
   quickCaptureClockIntervalId = globalThis.setInterval(refreshQuickCaptureClock, 30_000);
-  automaticPushIntervalId = globalThis.setInterval(pushPendingChanges, 60_000);
   globalThis.addEventListener("focus", refreshQuickCaptureClock);
   globalThis.document?.addEventListener("visibilitychange", refreshQuickCaptureClock);
   globalThis.addEventListener(BOOTSTRAP_LOG_EVENT, syncBootstrapLogEntries);
@@ -510,7 +513,7 @@ onMounted(async () => {
   }
   await tryAutoRecoverLocalSyncKey();
   if (isQuickSyncAvailable.value) {
-    void quickSync({ automatic: true });
+    automaticSyncScheduler.schedule(0);
   }
 
   await nextTick();
@@ -550,7 +553,7 @@ watchEffect(() => {
 
 onUnmounted(() => {
   globalThis.clearInterval(quickCaptureClockIntervalId);
-  globalThis.clearInterval(automaticPushIntervalId);
+  automaticSyncScheduler.cancel();
   globalThis.removeEventListener("focus", refreshQuickCaptureClock);
   globalThis.document?.removeEventListener("visibilitychange", refreshQuickCaptureClock);
   closeRecoveryCameraScanner();
@@ -775,6 +778,9 @@ function handleAppInstalled() {
 
 function handleConnectionChange() {
   isOnline.value = globalThis.navigator?.onLine ?? true;
+  if (isOnline.value && isQuickSyncAvailable.value) {
+    automaticSyncScheduler.schedule(0);
+  }
 }
 
 function handleOfflineReady() {
@@ -1753,6 +1759,18 @@ async function pushPendingChanges() {
 
   storageMessage.value = "Byly zjisteny lokalni zmeny. Spoustim automaticky push.";
   return pushSync();
+}
+
+async function runAutomaticSynchronization() {
+  if (!isQuickSyncAvailable.value) {
+    return false;
+  }
+
+  if (hasPendingSyncChanges.value) {
+    return pushPendingChanges();
+  }
+
+  return quickSync({ automatic: true });
 }
 
 async function quickSync(options = {}) {
