@@ -640,6 +640,11 @@ export function buildDoctorReportHtml({
           --off: #f6c9c9;
           --dyskinesia: #ead8ff;
           --sleep: #e7edf2;
+          --on-border: #2c6f99;
+          --partial-border: #a96325;
+          --off-border: #9e3f3f;
+          --dyskinesia-border: #744797;
+          --sleep-border: #657786;
         }
         * { box-sizing: border-box; }
         body {
@@ -994,7 +999,7 @@ export function buildDoctorReportHtml({
           align-items: end;
           justify-content: center;
           width: calc(100% - 2px);
-          height: 16px;
+          height: 20px;
           margin: 1px 0;
           background: #f7fafc;
           border: 1px solid var(--line-soft);
@@ -1041,7 +1046,7 @@ export function buildDoctorReportHtml({
           align-items: end;
           gap: 1px;
           width: calc(100% - 2px);
-          height: 16px;
+          height: 20px;
           margin: 1px 0;
           padding: 0 1px;
           background: #f7fafc;
@@ -1057,6 +1062,28 @@ export function buildDoctorReportHtml({
         .compact-week-bar {
           display: block;
           width: 100%;
+          border: 1px solid currentColor;
+          border-bottom: 0;
+        }
+        .compact-week-bar.state-on {
+          color: var(--on-border);
+          background: var(--on-border);
+        }
+        .compact-week-bar.state-partial {
+          color: var(--partial-border);
+          background: var(--partial-border);
+        }
+        .compact-week-bar.state-off {
+          color: var(--off-border);
+          background: var(--off-border);
+        }
+        .compact-week-bar.state-dyskinesia {
+          color: var(--dyskinesia-border);
+          background: var(--dyskinesia-border);
+        }
+        .compact-week-bar.state-sleep {
+          color: var(--sleep-border);
+          background: var(--sleep-border);
         }
         .charts-page {
           padding: 7px 9px;
