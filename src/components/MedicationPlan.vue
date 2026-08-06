@@ -129,6 +129,23 @@ function submitForm() {
   form.time = "08:00";
   form.validTo = "";
 }
+
+function getRecordedMedicationDetail(medication) {
+  const plannedDose = adherence.value.plannedDoses.find(
+    (dose) => dose.recordedMedication?.id === medication.id,
+  );
+  return {
+    plannedTime: plannedDose?.planItem.time ?? "neplanovana",
+    actualTime: medication.takenAt
+      ? new Intl.DateTimeFormat("cs-CZ", { hour: "2-digit", minute: "2-digit" }).format(new Date(medication.takenAt))
+      : medication.time,
+    recordedAt: medication.recordedAt
+      ? new Intl.DateTimeFormat("cs-CZ", { dateStyle: "short", timeStyle: "short" }).format(new Date(medication.recordedAt))
+      : "neznamy",
+    statusKey: plannedDose?.statusKey ?? "unplanned",
+    statusLabel: plannedDose?.statusLabel ?? "Neplanovana davka",
+  };
+}
 </script>
 
 <template>
@@ -288,8 +305,16 @@ function submitForm() {
         <div class="medication-copy">
           <strong>{{ medication.time }} - {{ medication.name }}</strong>
           <span>{{ medication.dose }}</span>
+          <span>
+            Plan {{ getRecordedMedicationDetail(medication).plannedTime }}
+            · skutecne {{ getRecordedMedicationDetail(medication).actualTime }}
+            · zapsano {{ getRecordedMedicationDetail(medication).recordedAt }}
+          </span>
         </div>
 
+        <span :class="['adherence-status', `adherence-status-${getRecordedMedicationDetail(medication).statusKey}`]">
+          {{ getRecordedMedicationDetail(medication).statusLabel }}
+        </span>
         <button type="button" @click="emit('remove-recorded-medication', medication.id)">Odebrat</button>
       </li>
     </ul>

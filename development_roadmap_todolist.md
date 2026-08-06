@@ -119,7 +119,8 @@ Aktuální stav:
 * dostupný je denní souhrn adherence a přehled neplánovaných dávek
 * léčebný plán je verzovaný pomocí období platnosti `od–do`
 * historická i dlouhodobá adherence používá plán platný v konkrétní den
-* [pending] v detailu dávky zobrazit plánovaný čas, skutečný čas užití a čas vytvoření zápisu
+* [done] v detailu dávky zobrazit plánovaný čas, skutečný čas užití a čas vytvoření zápisu
+* detail dávky barevne rozlišuje užití včas, dříve, později a neplánovanou dávku
 * zbývá detailnější dlouhodobá adherence analýza
 
 ### [poc_done] 2.4 Denní záznam
@@ -216,7 +217,10 @@ Aktualni stav:
 
 ## Fáze 4 – Export a zálohy
 
-### [pending] 4.1 PDF engine
+### [done] 4.1 PDF engine
+
+Report lze vedle tiskoveho dialogu primo ulozit jako vice-strankove A4 PDF. Vykresleni probiha
+lokalne v prohlizeci pomoci lazy-loaded PDF knihovny a zdravotni data se nikam neodesilaji.
 
 ### [done] 4.2 Lékařský report
 
@@ -236,7 +240,11 @@ Ruční export JSON zálohy z aplikace.
 
 Import JSON zálohy s potvrzením a nouzovým předimportním exportem.
 
-### [pending] 4.5 Automatické lokální zálohy
+### [done] 4.5 Automatické lokální zálohy
+
+* jedna automaticka zaloha denne v IndexedDB
+* historie poslednich 7 verzi a rucni zaloha
+* potvrzena obnova s bezpecnostni zalohou aktualniho stavu pred obnovou
 
 ### [pending] 4.6 Mobilní cloudové zálohy
 
@@ -613,7 +621,12 @@ Aktuální stav:
 * zbývá nastavit produkční VAPID klíče a Cloud Scheduler job
 * Apple platformy jsou pro tuto fázi vědomě odloženy; kompatibilita se vyhodnotí později
 
-### [pending] 7.2 Připomenutí vyplnění deníku
+### [done] 7.2 Připomenutí vyplnění deníku
+
+* uzivatelsky nastavitelny cas
+* upozorneni pouze pri chybejicich ocekavanych hodinach nebo dennim hodnoceni
+* ochrana proti opakovanemu upozorneni ve stejnem dni
+* lokalni rezim vyzaduje otevrenou nebo bezici aplikaci
 
 ### [pending] 7.3 Chytré notifikace
 

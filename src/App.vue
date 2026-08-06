@@ -30,7 +30,7 @@ import {
 } from "./domain/diary.js";
 import { createDiaryRepository } from "./repositories/index.js";
 import { parseJsonBackup, serializeJsonBackup } from "./services/jsonTransfer.js";
-import { openDoctorReportPrint } from "./services/doctorReport.js";
+import { downloadDoctorReportPdf, openDoctorReportPrint } from "./services/doctorReport.js";
 import { auditDiaryState } from "./services/dataIntegrity.js";
 import { activateServiceWorkerUpdate, OFFLINE_READY_EVENT, UPDATE_READY_EVENT } from "./pwa.js";
 import {
@@ -100,6 +100,17 @@ import {
   roundDownToTimelineStep,
 } from "./services/quickCapture.js";
 import { createSyncRetryScheduler } from "./services/syncRetry.js";
+import {
+  createLocalBackup,
+  listLocalBackups,
+  restoreLocalBackup,
+  shouldCreateAutomaticBackup,
+} from "./services/localBackups.js";
+import {
+  checkDiaryCompletionReminder,
+  loadDiaryReminderSettings,
+  saveDiaryReminderSettings,
+} from "./services/diaryReminders.js";
 import {
   clearConflictAudit,
   loadConflictAudit,
@@ -176,6 +187,8 @@ const isRecoveryTransferOpen = ref(false);
 const isRecoveryCameraOpen = ref(false);
 const syncSettings = reactive(loadSyncSettings());
 const medicationReminderSettings = reactive(loadMedicationReminderSettings());
+const diaryReminderSettings = reactive(loadDiaryReminderSettings());
+const localBackupItems = ref([]);
 const webPushConfig = reactive({ enabled: false, publicKey: "" });
 const authConfig = reactive(createDefaultAuthConfig());
 const authSession = ref(loadStoredAuthSession());
@@ -399,6 +412,7 @@ let panelSwipePointerType = "";
 let menuResizeObserver = null;
 let mediaQueryList = null;
 let quickCaptureClockIntervalId = 0;
+let localBackupTimeoutId = 0;
 let localChangeVersion = 0;
 let isUpdatingSyncMetadata = false;
 const SERVICE_WORKER_RELOAD_GUARD_KEY = "neurodiary-sw-reload-guard-v1";
@@ -445,6 +459,7 @@ watch(
       return;
     }
     diaryRepository.value.saveState(state);
+    scheduleAutomaticLocalBackup();
   },
   { deep: true },
 );
@@ -515,6 +530,8 @@ onMounted(async () => {
   }
   setBootstrapStatus("Initialization completed.");
   isReady.value = true;
+  await refreshLocalBackups();
+  await createAutomaticLocalBackupIfDue();
   await checkDueMedicationReminders();
   if (medicationReminderSettings.enabled) {
     void refreshWebPushRegistration();
@@ -561,6 +578,7 @@ watchEffect(() => {
 
 onUnmounted(() => {
   globalThis.clearInterval(quickCaptureClockIntervalId);
+  globalThis.clearTimeout(localBackupTimeoutId);
   automaticSyncScheduler.cancel();
   globalThis.removeEventListener("focus", refreshQuickCaptureClock);
   globalThis.document?.removeEventListener("visibilitychange", refreshQuickCaptureClock);
@@ -615,6 +633,87 @@ function updateSyncSetting(field, value) {
 function refreshQuickCaptureClock() {
   quickCaptureNow.value = new Date();
   void checkDueMedicationReminders();
+  void checkDueDiaryReminder();
+}
+
+function scheduleAutomaticLocalBackup() {
+  globalThis.clearTimeout(localBackupTimeoutId);
+  localBackupTimeoutId = globalThis.setTimeout(() => void createAutomaticLocalBackupIfDue(), 10_000);
+}
+
+async function refreshLocalBackups() {
+  try {
+    localBackupItems.value = await listLocalBackups();
+  } catch (error) {
+    console.error("Unable to list local backups", error);
+  }
+}
+
+async function createAutomaticLocalBackupIfDue() {
+  if (!isReady.value || !shouldCreateAutomaticBackup(localBackupItems.value)) return false;
+  try {
+    await createLocalBackup(state, { reason: "automatic" });
+    await refreshLocalBackups();
+    return true;
+  } catch (error) {
+    console.error("Automatic local backup failed", error);
+    return false;
+  }
+}
+
+async function createManualLocalBackup() {
+  try {
+    await createLocalBackup(state, { reason: "manual" });
+    await refreshLocalBackups();
+    storageMessage.value = "Lokalni zaloha byla vytvorena.";
+  } catch (error) {
+    storageMessage.value = `Lokalni zalohu se nepodarilo vytvorit: ${error.message}`;
+  }
+}
+
+async function restoreSelectedLocalBackup(backup) {
+  if (!globalThis.confirm(`Obnovit lokalni zalohu z ${formatBackupTimestamp(backup.createdAt)}? Aktualni stav bude nejprve zazalohovan.`)) return;
+  try {
+    await createLocalBackup(state, { reason: "before-restore" });
+    applyImportedState(await restoreLocalBackup(backup.id));
+    await refreshLocalBackups();
+    storageMessage.value = "Lokalni zaloha byla obnovena.";
+  } catch (error) {
+    storageMessage.value = `Obnova zalohy selhala: ${error.message}`;
+  }
+}
+
+function formatBackupTimestamp(value) {
+  return new Intl.DateTimeFormat("cs-CZ", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+}
+
+async function updateDiaryReminderEnabled(enabled) {
+  let nextEnabled = enabled;
+  if (enabled) {
+    const permission = await requestMedicationNotificationPermission();
+    medicationNotificationPermission.value = permission;
+    nextEnabled = permission === "granted";
+  }
+  Object.assign(diaryReminderSettings, saveDiaryReminderSettings({ ...diaryReminderSettings, enabled: nextEnabled }));
+  storageMessage.value = nextEnabled ? "Pripomenuti vyplneni deniku je zapnute." : "Pripomenuti vyplneni deniku je vypnute.";
+}
+
+function updateDiaryReminderTime(time) {
+  Object.assign(diaryReminderSettings, saveDiaryReminderSettings({ ...diaryReminderSettings, time }));
+}
+
+async function checkDueDiaryReminder() {
+  if (!isReady.value) return;
+  try {
+    await checkDiaryCompletionReminder({
+      entry: state.entries[getTodayKey()],
+      dateKey: getTodayKey(),
+      settings: diaryReminderSettings,
+      now: quickCaptureNow.value,
+    });
+  } catch (error) {
+    console.error("Diary completion reminder failed", error);
+  }
 }
 
 async function setMedicationRemindersEnabled(enabled) {
@@ -1336,6 +1435,27 @@ function printDoctorReport() {
   } catch (error) {
     console.error("Doctor report print failed", error);
     storageMessage.value = "Unable to open the printable doctor report.";
+  }
+}
+
+async function saveDoctorReportPdf() {
+  try {
+    storageMessage.value = "Pripravuji PDF report v tomto zarizeni.";
+    await downloadDoctorReportPdf({
+      entries: state.entries,
+      treatmentPlan: state.treatmentPlan,
+      selectedDate: state.selectedDate,
+      patientName: state.patientName,
+      birthYear: state.birthYear,
+      includeToday: reportOptions.includeToday,
+      includeDailyTrend: reportOptions.dailyTrend,
+      includeWearingOff: reportOptions.wearingOff,
+      includeWeeklyCharts: reportOptions.weeklyCharts,
+    });
+    storageMessage.value = "PDF report byl ulozen.";
+  } catch (error) {
+    console.error("Doctor report PDF failed", error);
+    storageMessage.value = `PDF report se nepodarilo vytvorit: ${error.message}`;
   }
 }
 
@@ -2086,6 +2206,9 @@ function syncFloatingMenuHeight() {
                   <button class="primary-button" type="button" @click="printDoctorReport">
                     Otevrit tisk
                   </button>
+                  <button class="ghost-button" type="button" @click="saveDoctorReportPdf">
+                    Ulozit PDF
+                  </button>
                 </div>
               </details>
 
@@ -2236,6 +2359,54 @@ function syncFloatingMenuHeight() {
               <small v-if="birthYearValidationMessage" class="form-error">{{ birthYearValidationMessage }}</small>
             </label>
           </form>
+
+          <div class="backup-settings-card">
+            <div class="panel-heading sync-settings-heading">
+              <div>
+                <p class="section-kicker">Zalohy</p>
+                <h3>Automaticke lokalni zalohy</h3>
+              </div>
+              <button class="ghost-button" type="button" @click="createManualLocalBackup">Vytvorit ted</button>
+            </div>
+            <p class="panel-tip">Jedna automaticka zaloha denne, uchovava se poslednich 7 verzi pouze v tomto zarizeni.</p>
+            <ul v-if="localBackupItems.length" class="backup-history-list">
+              <li v-for="backup in localBackupItems" :key="backup.id">
+                <span>{{ formatBackupTimestamp(backup.createdAt) }} · {{ backup.reason === "automatic" ? "automaticka" : backup.reason === "before-restore" ? "pred obnovou" : "rucni" }}</span>
+                <button class="ghost-button" type="button" @click="restoreSelectedLocalBackup(backup)">Obnovit</button>
+              </li>
+            </ul>
+            <p v-else class="panel-tip">Zatim neni ulozena zadna lokalni zaloha.</p>
+          </div>
+
+          <div class="backup-settings-card">
+            <div class="panel-heading sync-settings-heading">
+              <div>
+                <p class="section-kicker">Upozorneni</p>
+                <h3>Pripomenuti vyplneni deniku</h3>
+              </div>
+            </div>
+            <div class="reminder-settings-row">
+              <label class="reminder-toggle">
+                <input
+                  :checked="diaryReminderSettings.enabled"
+                  :disabled="!medicationNotificationsSupported"
+                  type="checkbox"
+                  @change="updateDiaryReminderEnabled($event.target.checked)"
+                />
+                <span>Zapnout</span>
+              </label>
+              <label>
+                <span>Cas pripomenuti</span>
+                <input
+                  :value="diaryReminderSettings.time"
+                  :disabled="!diaryReminderSettings.enabled"
+                  type="time"
+                  @input="updateDiaryReminderTime($event.target.value)"
+                />
+              </label>
+            </div>
+            <p class="panel-tip">Upozorneni se zobrazi jen tehdy, kdyz chybi ocekavane hodiny, kvalita spanku nebo hodnoceni dne. Lokalni rezim vyzaduje bezici aplikaci.</p>
+          </div>
 
           <div class="sync-warning-card">
             <strong>Uplny reset lokalnich dat</strong>

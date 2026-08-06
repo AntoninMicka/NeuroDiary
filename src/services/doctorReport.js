@@ -1343,3 +1343,52 @@ export function openDoctorReportPrint({
     { once: true },
   );
 }
+
+export async function downloadDoctorReportPdf(options) {
+  const [{ jsPDF }, { default: html2canvas }] = await Promise.all([
+    import("jspdf"),
+    import("html2canvas"),
+  ]);
+  const html = buildDoctorReportHtml(options);
+  const frame = document.createElement("iframe");
+  frame.setAttribute("aria-hidden", "true");
+  frame.style.position = "fixed";
+  frame.style.left = "-12000px";
+  frame.style.top = "0";
+  frame.style.width = "1123px";
+  frame.style.height = "794px";
+  document.body.appendChild(frame);
+
+  try {
+    frame.contentDocument.open();
+    frame.contentDocument.write(html);
+    frame.contentDocument.close();
+    await frame.contentDocument.fonts?.ready;
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+    const sheets = [...frame.contentDocument.querySelectorAll("main.page > .sheet")];
+    if (!sheets.length) {
+      throw new Error("Report neobsahuje zadne strany.");
+    }
+    const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4", compress: true });
+    for (let index = 0; index < sheets.length; index += 1) {
+      const canvas = await html2canvas(sheets[index], {
+        backgroundColor: "#ffffff",
+        scale: 1.35,
+        logging: false,
+        useCORS: true,
+      });
+      if (index > 0) pdf.addPage("a4", "landscape");
+      const maxWidth = 281;
+      const maxHeight = 194;
+      const ratio = Math.min(maxWidth / canvas.width, maxHeight / canvas.height);
+      const width = canvas.width * ratio;
+      const height = canvas.height * ratio;
+      pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", (297 - width) / 2, 8, width, height);
+    }
+    const suffix = options.selectedDate || "report";
+    pdf.save(`neurodiary-report-${suffix}.pdf`);
+  } finally {
+    frame.remove();
+  }
+}
