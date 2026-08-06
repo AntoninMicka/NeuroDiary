@@ -64,9 +64,23 @@ import {
   pushCloudState,
   recoverLocalSyncKey,
   resetCloudState,
+  rotateCloudEncryption,
   saveRecoverySecret,
   saveSyncSettings,
 } from "./services/syncService.js";
+import {
+  fetchTrustedDevices,
+  getCurrentDeviceId,
+  registerCurrentDevice,
+  revokeOtherTrustedDevices,
+  revokeTrustedDevice,
+} from "./services/trustedDevices.js";
+import {
+  generateReportPassword,
+  loadDoctorContact,
+  saveDoctorContact,
+  shareEncryptedReport,
+} from "./services/secureReportShare.js";
 import { generateRecoverySecret } from "./services/e2eCrypto.js";
 import {
   appendBootstrapLog,
@@ -172,6 +186,9 @@ const reportOptions = reactive({
   wearingOff: true,
   weeklyCharts: true,
 });
+const doctorContact = reactive(loadDoctorContact());
+const reportSharePassword = ref("");
+const trustedDevices = ref([]);
 const deferredInstallPrompt = ref(null);
 const canInstallApp = ref(false);
 const isInstalledApp = ref(false);
@@ -781,6 +798,7 @@ async function refreshWebPushRegistration() {
   }
   try {
     webPushStatus.value = "registering";
+    await ensureCurrentDeviceRegistered();
     const result = await registerWebPush({
       endpoint: effectiveSyncEndpoint.value,
       apiToken: syncSettings.apiToken,
@@ -1351,6 +1369,7 @@ async function resetCloudData() {
 
   isSyncBusy.value = true;
   try {
+    await ensureCurrentDeviceRegistered();
     await resetCloudState(syncSettings);
     Object.assign(syncSettings, clearSyncState(syncSettings));
     clearSyncKeyMaterial();
@@ -1459,6 +1478,85 @@ async function saveDoctorReportPdf() {
   }
 }
 
+function buildCurrentReportOptions() {
+  return {
+    entries: state.entries,
+    treatmentPlan: state.treatmentPlan,
+    selectedDate: state.selectedDate,
+    patientName: state.patientName,
+    birthYear: state.birthYear,
+    includeToday: reportOptions.includeToday,
+    includeDailyTrend: reportOptions.dailyTrend,
+    includeWearingOff: reportOptions.wearingOff,
+    includeWeeklyCharts: reportOptions.weeklyCharts,
+  };
+}
+
+async function shareDoctorReportSecurely() {
+  try {
+    Object.assign(doctorContact, saveDoctorContact(doctorContact));
+    const password = generateReportPassword();
+    const result = await shareEncryptedReport({
+      reportOptions: buildCurrentReportOptions(),
+      contact: doctorContact,
+      password,
+    });
+    reportSharePassword.value = result.password;
+    storageMessage.value = result.method === "native-share"
+      ? "Sifrovana priloha byla predana systemovemu sdileni. Heslo predejte jinym kanalem."
+      : "Sifrovana priloha byla stazena a e-mail pripraven. Prilohu rucne pridejte; heslo predejte jinym kanalem.";
+  } catch (error) {
+    if (error?.name === "AbortError") return;
+    storageMessage.value = `Sifrovany report se nepodarilo pripravit: ${error.message}`;
+  }
+}
+
+async function ensureCurrentDeviceRegistered() {
+  await registerCurrentDevice(syncSettings);
+  trustedDevices.value = await fetchTrustedDevices(syncSettings);
+}
+
+async function refreshTrustedDevices() {
+  try {
+    if (!hasSyncIdentity.value) return;
+    await ensureCurrentDeviceRegistered();
+  } catch (error) {
+    console.error("Trusted device refresh failed", error);
+  }
+}
+
+async function removeTrustedDevice(device) {
+  if (device.current || !globalThis.confirm(`Odpojit zarizeni ${device.name}?`)) return;
+  try {
+    await revokeTrustedDevice(syncSettings, device.deviceId);
+    trustedDevices.value = await fetchTrustedDevices(syncSettings);
+    storageMessage.value = "Zarizeni bylo odvolano.";
+  } catch (error) {
+    storageMessage.value = `Zarizeni se nepodarilo odvolat: ${error.message}`;
+  }
+}
+
+async function rotateEncryptionKey() {
+  if (!globalThis.confirm("Rotace vytvori novy recovery secret a odpoji vsechna ostatni zarizeni. Pokracovat?")) return;
+  isSyncBusy.value = true;
+  try {
+    await ensureCurrentDeviceRegistered();
+    const result = await rotateCloudEncryption({ state, settings: syncSettings, baseRevision: Number(syncSettings.revision ?? 0) });
+    await revokeOtherTrustedDevices(syncSettings);
+    Object.assign(syncSettings, saveSyncSettings({ ...syncSettings, revision: result.revision, lastSyncAt: result.updatedAt }));
+    recoverySecretInput.value = result.recoverySecret;
+    generatedRecoverySecret.value = result.recoverySecret;
+    reportSharePassword.value = "";
+    refreshSyncKeyMaterialStatus();
+    await refreshTrustedDevices();
+    storageMessage.value = `Sifrovaci klic byl rotovan na verzi ${result.keyVersion}. Ulozte novy recovery secret.`;
+  } catch (error) {
+    storageMessage.value = `Rotace sifrovaciho klice selhala: ${error.message}`;
+  } finally {
+    isSyncBusy.value = false;
+  }
+}
+
 async function signInWithGoogleCredential(credential) {
   isAuthBusy.value = true;
   try {
@@ -1468,6 +1566,7 @@ async function signInWithGoogleCredential(credential) {
     });
     authSession.value = session;
     applyAuthenticatedAccount(session.user);
+    await ensureCurrentDeviceRegistered();
     await tryAutoRecoverLocalSyncKey();
     storageMessage.value = `Prihlaseni pres Google uspesne: ${session.user.email || session.user.name}.`;
   } catch (error) {
@@ -1493,6 +1592,7 @@ async function signInWithApple() {
     });
     authSession.value = session;
     applyAuthenticatedAccount(session.user);
+    await ensureCurrentDeviceRegistered();
     await tryAutoRecoverLocalSyncKey();
     storageMessage.value = `Prihlaseni pres Apple uspesne: ${session.user.email || session.user.name}.`;
   } catch (error) {
@@ -1534,6 +1634,7 @@ async function tryAutoRecoverLocalSyncKey() {
 
   isAutoRecoveringSyncKey.value = true;
   try {
+    await ensureCurrentDeviceRegistered();
     const result = await recoverLocalSyncKey({
       ...syncSettings,
       userId: authSession.value.user.userId ?? syncSettings.userId,
@@ -1732,6 +1833,7 @@ async function initializeSync() {
   isSyncBusy.value = true;
   generatedRecoverySecret.value = "";
   try {
+    await ensureCurrentDeviceRegistered();
     const result = await initializeCloudSync({
       state,
       settings: syncSettings,
@@ -1774,6 +1876,7 @@ async function pullSync() {
 
   isSyncBusy.value = true;
   try {
+    await ensureCurrentDeviceRegistered();
     storageMessage.value = "Nacitam sifrovany stav ze serveru.";
     const result = await pullCloudState(syncSettings);
     refreshSyncKeyMaterialStatus();
@@ -1822,6 +1925,7 @@ async function pushSync(force = false) {
   isSyncBusy.value = true;
   const pushedChangeVersion = localChangeVersion;
   try {
+    await ensureCurrentDeviceRegistered();
     storageMessage.value = "Pripravuji lokalni stav pro odeslani do cloud syncu.";
     const result = await pushCloudState({
       state,
@@ -2064,6 +2168,7 @@ watch(
   () => authSession.value?.user?.userId ?? "",
   (nextUserId, previousUserId) => {
     previousAuthUserId.value = nextUserId;
+    trustedDevices.value = [];
     if (nextUserId) {
       void refreshWebPushRegistration();
     }
@@ -2203,12 +2308,28 @@ function syncFloatingMenuHeight() {
                     <input v-model="reportOptions.weeklyCharts" type="checkbox" />
                     Tisknout tydenni grafy
                   </label>
+                  <label>
+                    <span>Jmeno lekare</span>
+                    <input v-model="doctorContact.name" type="text" maxlength="120" placeholder="MUDr. Novak" />
+                  </label>
+                  <label>
+                    <span>E-mail lekare</span>
+                    <input v-model="doctorContact.email" type="email" maxlength="254" placeholder="lekar@example.cz" />
+                  </label>
                   <button class="primary-button" type="button" @click="printDoctorReport">
                     Otevrit tisk
                   </button>
                   <button class="ghost-button" type="button" @click="saveDoctorReportPdf">
                     Ulozit PDF
                   </button>
+                  <button class="ghost-button" type="button" @click="shareDoctorReportSecurely">
+                    Sdilet sifrovane
+                  </button>
+                  <div v-if="reportSharePassword" class="report-share-password">
+                    <strong>Heslo k priloze</strong>
+                    <code>{{ reportSharePassword }}</code>
+                    <span>Predejte jinym kanalem, nikdy ve stejnem e-mailu.</span>
+                  </div>
                 </div>
               </details>
 
@@ -2544,6 +2665,33 @@ function syncFloatingMenuHeight() {
               <p class="panel-tip">Recovery secret: {{ hasRecoverySecretStored ? "ulozen" : "chybi" }}</p>
               <p v-if="syncSettings.lastSyncMessage" class="panel-tip">{{ syncSettings.lastSyncMessage }}</p>
             </div>
+
+            <section v-if="hasSyncIdentity" class="trusted-devices-card">
+              <div class="conflict-audit-heading">
+                <div>
+                  <strong>Duveryhodna zarizeni</strong>
+                  <p class="panel-tip">Aktualni zarizeni {{ getCurrentDeviceId().slice(0, 8) }}.</p>
+                </div>
+                <button class="ghost-button" type="button" :disabled="isSyncBusy" @click="refreshTrustedDevices">Obnovit</button>
+              </div>
+              <ul v-if="trustedDevices.length" class="backup-history-list">
+                <li v-for="device in trustedDevices" :key="device.deviceId">
+                  <span>
+                    {{ device.name }}
+                    · {{ device.current ? "toto zarizeni" : device.revokedAt ? "odvolano" : "aktivni" }}
+                  </span>
+                  <button
+                    v-if="!device.current && !device.revokedAt"
+                    class="ghost-button utility-menu-item-danger"
+                    type="button"
+                    @click="removeTrustedDevice(device)"
+                  >Odpojit</button>
+                </li>
+              </ul>
+              <button class="ghost-button utility-menu-item-danger" type="button" :disabled="isSyncBusy" @click="rotateEncryptionKey">
+                Rotovat klic a odpojit ostatni zarizeni
+              </button>
+            </section>
 
             <section v-if="conflictAuditItems.length" class="conflict-audit">
               <div class="conflict-audit-heading">

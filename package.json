@@ -10,6 +10,7 @@
     "test": "node --test"
   },
   "dependencies": {
+    "@zip.js/zip.js": "^2.8.34",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",
     "qrcode": "^1.5.4",

@@ -41,6 +41,10 @@ def encrypted_payload(cipher_text):
     }
 
 
+def encrypted_payload_version(cipher_text, key_version):
+    return {**encrypted_payload(cipher_text), "keyVersion": key_version}
+
+
 def test_sync_push_pull_conflict_and_reset(monkeypatch, tmp_path):
     main = load_app(monkeypatch, tmp_path)
     user_id = authenticated_user_id(main)
@@ -98,3 +102,20 @@ def test_sync_snapshots_are_isolated_by_authenticated_user(monkeypatch, tmp_path
     assert user_b_reset.deleted is True
     assert user_a_pull.revision == 1
     assert user_a_pull.payload.cipherText == "user-a-secret"
+
+
+def test_force_push_cannot_downgrade_encryption_key_version(monkeypatch, tmp_path):
+    main = load_app(monkeypatch, tmp_path)
+    user_id = authenticated_user_id(main)
+    rotated = main.push_state(
+        SyncPushRequestModel(baseRevision=0, payload=encrypted_payload_version("new-key", 2), force=True),
+        user_id,
+    )
+    stale = main.push_state(
+        SyncPushRequestModel(baseRevision=rotated.revision, payload=encrypted_payload_version("old-key", 1), force=True),
+        user_id,
+    )
+
+    assert stale.status == "conflict"
+    assert stale.payload.keyVersion == 2
+    assert stale.payload.cipherText == "new-key"

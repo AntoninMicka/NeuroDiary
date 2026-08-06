@@ -29,7 +29,12 @@ from .models import (
     PushRegistrationRequestModel,
     PushRegistrationResponseModel,
     PushUnsubscribeRequestModel,
+    DeviceActionResponseModel,
+    DeviceRegistrationRequestModel,
+    TrustedDeviceListResponseModel,
+    TrustedDeviceModel,
 )
+from .device_store import create_device_store
 from .push_service import PushService, WebPushException
 from .push_store import create_push_store
 from .store import RevisionConflictError, create_sync_store
@@ -54,6 +59,7 @@ CORS_ORIGINS = [
 PUSH_SCHEDULER_TOKEN = os.getenv("NEURODIARY_PUSH_SCHEDULER_TOKEN", "").strip()
 
 store = create_sync_store(database_url=DATABASE_URL or None, database_path=DATABASE_PATH)
+device_store = create_device_store(database_url=DATABASE_URL or None, database_path=DATABASE_PATH)
 push_store = create_push_store(database_url=DATABASE_URL or None, database_path=DATABASE_PATH)
 push_service = PushService()
 auth_manager = AuthManager()
@@ -121,6 +127,7 @@ async def request_logging_middleware(request: Request, call_next):
 @app.on_event("startup")
 def on_startup() -> None:
     store.initialize()
+    device_store.initialize()
     push_store.initialize()
     log_event(
         "INFO",
@@ -134,6 +141,15 @@ def verify_bearer_token(
     authorization: Annotated[str | None, Header()] = None,
 ) -> str:
     return auth_manager.resolve_authorization(authorization)
+
+
+def verify_trusted_device(
+    user_id: Annotated[str, Depends(verify_bearer_token)],
+    x_device_id: Annotated[str | None, Header(alias="X-Device-ID")] = None,
+) -> str:
+    if not x_device_id or not device_store.is_active(user_id, x_device_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Device is not trusted for this account.")
+    return user_id
 
 
 @app.get("/healthz")
@@ -168,6 +184,8 @@ def api_metadata() -> dict[str, object]:
         "capabilities": {
             "encryptedSnapshotSync": True,
             "wrappedRecoveryKey": True,
+            "trustedDevices": True,
+            "keyRotation": True,
             "federatedAuth": auth_manager.federated_auth_enabled,
             "legacyToken": bool(API_TOKEN),
             "webPush": push_service.enabled,
@@ -199,7 +217,7 @@ def push_config() -> PushConfigResponseModel:
 @app.put("/api/v1/push/registration", response_model=PushRegistrationResponseModel)
 def register_push(
     payload: PushRegistrationRequestModel,
-    user_id: Annotated[str, Depends(verify_bearer_token)],
+    user_id: Annotated[str, Depends(verify_trusted_device)],
 ) -> PushRegistrationResponseModel:
     if not push_service.enabled:
         raise HTTPException(
@@ -225,7 +243,7 @@ def register_push(
 @app.delete("/api/v1/push/registration", response_model=PushRegistrationResponseModel)
 def unregister_push(
     payload: PushUnsubscribeRequestModel,
-    user_id: Annotated[str, Depends(verify_bearer_token)],
+    user_id: Annotated[str, Depends(verify_trusted_device)],
 ) -> PushRegistrationResponseModel:
     push_store.delete_subscription(user_id, payload.endpoint)
     return PushRegistrationResponseModel(status="ok", scheduledCount=0)
@@ -344,8 +362,63 @@ def serve_frontend(path: str) -> FileResponse:
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Frontend bundle is missing index.html.")
 
 
+@app.put("/api/v1/devices/current", response_model=TrustedDeviceModel)
+def register_current_device(
+    payload: DeviceRegistrationRequestModel,
+    user_id: Annotated[str, Depends(verify_bearer_token)],
+) -> TrustedDeviceModel:
+    record = device_store.upsert(user_id, payload.deviceId, payload.name)
+    if record.revoked_at is not None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Device has been revoked.")
+    return TrustedDeviceModel(
+        deviceId=record.device_id, name=record.name, createdAt=record.created_at,
+        lastSeenAt=record.last_seen_at, revokedAt=record.revoked_at, current=True,
+    )
+
+
+@app.get("/api/v1/devices", response_model=TrustedDeviceListResponseModel)
+def list_trusted_devices(
+    user_id: Annotated[str, Depends(verify_bearer_token)],
+    x_device_id: Annotated[str | None, Header(alias="X-Device-ID")] = None,
+) -> TrustedDeviceListResponseModel:
+    if not x_device_id or not device_store.is_active(user_id, x_device_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Current device is not trusted.")
+    return TrustedDeviceListResponseModel(devices=[
+        TrustedDeviceModel(
+            deviceId=item.device_id, name=item.name, createdAt=item.created_at,
+            lastSeenAt=item.last_seen_at, revokedAt=item.revoked_at,
+            current=item.device_id == x_device_id,
+        )
+        for item in device_store.list(user_id)
+    ])
+
+
+@app.delete("/api/v1/devices/{device_id}", response_model=DeviceActionResponseModel)
+def revoke_trusted_device(
+    device_id: str,
+    user_id: Annotated[str, Depends(verify_bearer_token)],
+    x_device_id: Annotated[str | None, Header(alias="X-Device-ID")] = None,
+) -> DeviceActionResponseModel:
+    if not x_device_id or not device_store.is_active(user_id, x_device_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Current device is not trusted.")
+    if device_id == x_device_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current device cannot revoke itself.")
+    device_store.revoke(user_id, device_id)
+    return DeviceActionResponseModel(status="ok", affected=1)
+
+
+@app.post("/api/v1/devices/revoke-others", response_model=DeviceActionResponseModel)
+def revoke_other_devices(
+    user_id: Annotated[str, Depends(verify_bearer_token)],
+    x_device_id: Annotated[str | None, Header(alias="X-Device-ID")] = None,
+) -> DeviceActionResponseModel:
+    if not x_device_id or not device_store.is_active(user_id, x_device_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Current device is not trusted.")
+    return DeviceActionResponseModel(status="ok", affected=device_store.revoke_others(user_id, x_device_id))
+
+
 @app.get("/api/v1/sync/pull", response_model=SyncPullResponseModel)
-def pull_state(user_id: Annotated[str, Depends(verify_bearer_token)]) -> SyncPullResponseModel:
+def pull_state(user_id: Annotated[str, Depends(verify_trusted_device)]) -> SyncPullResponseModel:
     snapshot = store.load_latest(user_id)
     if snapshot is None:
         return SyncPullResponseModel(revision=0, updatedAt=None, payload=None, wrappedKey=None)
@@ -361,7 +434,7 @@ def pull_state(user_id: Annotated[str, Depends(verify_bearer_token)]) -> SyncPul
 @app.post("/api/v1/sync/push", response_model=SyncPushResponseModel)
 def push_state(
     payload: SyncPushRequestModel,
-    user_id: Annotated[str, Depends(verify_bearer_token)],
+    user_id: Annotated[str, Depends(verify_trusted_device)],
 ) -> SyncPushResponseModel:
     try:
         result = store.save_state(
@@ -396,7 +469,7 @@ def push_state(
 
 
 @app.delete("/api/v1/sync/reset", response_model=SyncResetResponseModel)
-def reset_state(user_id: Annotated[str, Depends(verify_bearer_token)]) -> SyncResetResponseModel:
+def reset_state(user_id: Annotated[str, Depends(verify_trusted_device)]) -> SyncResetResponseModel:
     deleted_at = store.delete_state(user_id)
     return SyncResetResponseModel(status="ok", deleted=True, updatedAt=deleted_at)
 

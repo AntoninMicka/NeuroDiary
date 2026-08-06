@@ -368,6 +368,19 @@ textarea {
   font-size: 0.9rem;
 }
 
+.report-share-password {
+  display: grid;
+  gap: 0.3rem;
+  padding: 0.65rem;
+  border-radius: 12px;
+  background: rgba(201, 123, 52, 0.14);
+  overflow-wrap: anywhere;
+}
+
+.report-share-password code {
+  user-select: all;
+}
+
 .utility-menu-trigger {
   display: inline-flex;
   align-items: center;
@@ -833,6 +846,16 @@ select[aria-invalid="true"] {
 }
 
 .conflict-audit {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid rgba(31, 41, 51, 0.1);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.42);
+}
+
+.trusted-devices-card {
   display: grid;
   gap: 0.75rem;
   margin-top: 1rem;

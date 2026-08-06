@@ -116,6 +116,9 @@ class SqliteSyncStore:
             current = self.load_latest(user_id)
             current_revision = current.revision if current else 0
 
+            if current and payload.keyVersion < current.payload.keyVersion:
+                raise RevisionConflictError
+
             if not force and current_revision != base_revision:
                 raise RevisionConflictError
 
@@ -248,6 +251,15 @@ class PostgresSyncStore:
                     )
                     row = cursor.fetchone()
                     current_revision = row["revision"] if row else 0
+
+                    if row:
+                        cursor.execute(
+                            "SELECT payload_json FROM sync_snapshots WHERE user_id = %s",
+                            (user_id,),
+                        )
+                        current_payload = _parse_payload(cursor.fetchone()["payload_json"])
+                        if payload.keyVersion < current_payload.keyVersion:
+                            raise RevisionConflictError
 
                     if not force and current_revision != base_revision:
                         raise RevisionConflictError

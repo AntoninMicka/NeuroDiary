@@ -79,17 +79,19 @@
           <h4>7. Synchronizace</h4>
           <p>
             Tlacitko <strong>Synchronizovat</strong> v hlavni liste provede nejprve pull a potom
-            push. Po lokalni zmene se zobrazi „Zmeny cekaji na sync“ a aplikace kontroluje automaticky
-            push jednou za minutu. Pri konfliktu se zaznamy slouci; smazane dny a davky maji mazaci
-            znacky, aby se ze starsiho zarizeni nevratily.
+            push. Po lokalni zmene se zobrazi „Zmeny cekaji na sync“ a aplikace ji po kratkem odkladu
+            automaticky odesle. Pri konfliktu se zaznamy slouci; smazane dny a davky maji mazaci
+            znacky, aby se ze starsiho zarizeni nevratily. V nastaveni lze kontrolovat a odpojovat
+            duveryhodna zarizeni nebo rotovat sifrovaci klic.
           </p>
         </div>
 
         <div class="manual-block">
           <h4>8. Tisk reportu</h4>
           <p>
-            Tlacitkem <strong>Print report</strong> otevrite tiskovy report pro lekare. Pred tiskem je
-            vhodne zkontrolovat jmeno pacienta, rok narozeni a vybrany den.
+            Tlacitkem <strong>Print report</strong> otevrite tiskovy report pro lekare. Report lze take
+            ulozit jako PDF nebo predat e-mailove aplikaci v AES-256 sifrovanem ZIP. Heslo k priloze
+            vzdy predejte jinym kanalem. Pred sdilenim zkontrolujte udaje pacienta a cilovy e-mail.
           </p>
         </div>
       </article>
@@ -134,7 +136,8 @@
           <p>
             Sync snapshot je pred odeslanim sifrovan na zarizeni. Recovery secret uchovavejte mimo
             aplikaci; pro druhe zarizeni lze pouzit QR prenos. Pri zmene cloudoveho uctu se lokalni
-            sync klic odpoji a musi se znovu obnovit.
+            sync klic odpoji a musi se znovu obnovit. Rotace klice odpoji ostatni zarizeni a vytvori
+            novy recovery secret, ktery je nutne znovu bezpečne ulozit.
           </p>
         </div>
 

@@ -1350,7 +1350,7 @@ export function openDoctorReportPrint({
   );
 }
 
-export async function downloadDoctorReportPdf(options) {
+export async function createDoctorReportPdfBlob(options) {
   const [{ jsPDF }, { default: html2canvas }] = await Promise.all([
     import("jspdf"),
     import("html2canvas"),
@@ -1392,9 +1392,18 @@ export async function downloadDoctorReportPdf(options) {
       const height = canvas.height * ratio;
       pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", (297 - width) / 2, 8, width, height);
     }
-    const suffix = options.selectedDate || "report";
-    pdf.save(`neurodiary-report-${suffix}.pdf`);
+    return pdf.output("blob");
   } finally {
     frame.remove();
   }
+}
+
+export async function downloadDoctorReportPdf(options) {
+  const blob = await createDoctorReportPdfBlob(options);
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `neurodiary-report-${options.selectedDate || "report"}.pdf`;
+  link.click();
+  URL.revokeObjectURL(url);
 }

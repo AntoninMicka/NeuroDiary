@@ -87,6 +87,29 @@ class SyncResetResponseModel(BaseModel):
     updatedAt: datetime
 
 
+class DeviceRegistrationRequestModel(BaseModel):
+    deviceId: str = Field(pattern=r"^[A-Za-z0-9_-]{16,128}$")
+    name: str = Field(min_length=1, max_length=80)
+
+
+class TrustedDeviceModel(BaseModel):
+    deviceId: str
+    name: str
+    createdAt: datetime
+    lastSeenAt: datetime
+    revokedAt: datetime | None = None
+    current: bool = False
+
+
+class TrustedDeviceListResponseModel(BaseModel):
+    devices: list[TrustedDeviceModel]
+
+
+class DeviceActionResponseModel(BaseModel):
+    status: Literal["ok"]
+    affected: int = Field(ge=0)
+
+
 class AuthConfigResponseModel(BaseModel):
     googleEnabled: bool = False
     googleClientId: str = ""

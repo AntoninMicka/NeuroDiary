@@ -1,5 +1,6 @@
 import { getTreatmentPlanForDate, shiftDateKey } from "../domain/diary.js";
 import { getAuthorizationHeaderValue } from "./authService.js";
+import { getCurrentDeviceId } from "./trustedDevices.js";
 
 function trimTrailingSlash(value) {
   return String(value ?? "").trim().replace(/\/+$/, "");
@@ -13,7 +14,7 @@ function urlBase64ToUint8Array(value) {
 }
 
 function buildHeaders(apiToken = "") {
-  const headers = { "Content-Type": "application/json" };
+  const headers = { "Content-Type": "application/json", "X-Device-ID": getCurrentDeviceId() };
   const authorization = getAuthorizationHeaderValue()
     || (apiToken.trim() ? `Bearer ${apiToken.trim()}` : "");
   if (authorization) {

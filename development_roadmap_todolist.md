@@ -270,7 +270,7 @@ Import JSON zálohy s potvrzením a nouzovým předimportním exportem.
 * přiložení verze aplikace a stavu databáze
 * bezpečné sdílení technických podkladů při řešení chyb
 
-### [pending] 4.10 Odeslání reportu e-mailem
+### [done] 4.10 Odeslání reportu e-mailem
 
 * možnost odeslat lékařský report e-mailem přímo z aplikace
 * možnost uložit a spravovat cílový e-mailový kontakt pro odeslání
@@ -280,6 +280,14 @@ Import JSON zálohy s potvrzením a nouzovým předimportním exportem.
 * zvážit efektivnější formát přenosu podle scénáře:
   PDF pro rychlé čtení a tisk
   JSON report pro strojové načtení, import a další zpracování
+
+Aktualni stav:
+
+* aplikace uklada lokalni kontakt lekare a vytvari PDF v zarizeni
+* PDF se bali do AES-256 sifrovaneho ZIP s nahodne generovanym heslem
+* mobilni/systemovy share dialog umi predat prilohu e-mailove aplikaci
+* fallback stahne prilohu a otevre predvyplneny e-mail pro rucni prilozeni
+* heslo se nezapisuje do e-mailu a musi byt predano jinym kanalem
 
 ---
 
@@ -321,7 +329,7 @@ Navazující kroky:
 * fallback strategie pro zařízení bez Apple / Google přihlášení
 * později zvážit passkeys jako doplňkovou nebo pokročilejší variantu
 
-### [in_progress] 5.2 Šifrování dat
+### [done] 5.2 Šifrování dat
 
 Aktualni stav:
 
@@ -336,7 +344,10 @@ Poznamka k recovery flow:
 * recovery secret se da vygenerovat v klientovi
 * novy prenosovy flow umi zobrazit secret jako QR a nacist jej z QR obrazku
 * QR lze nacist ze souboru i live kamerou
-* zbyva navrhnout rotaci klicu, spravu duveryhodnych zarizeni a bezpecnejsi multi-device onboarding flow
+* backend vede registr duveryhodnych zarizeni a umoznuje jejich odvolani
+* rotace vytvori novy master key i recovery secret, zvysi `keyVersion` a odpoji ostatni zarizeni
+* backend ani pri vynucenem pushi nepovoli navrat na starsi `keyVersion`
+* nove zarizeni se registruje po prihlaseni a klic obnovuje pomoci recovery secretu nebo QR
 
 ### [in_progress] 5.3 Cloud deploy a sync infrastruktura
 
@@ -371,7 +382,11 @@ Navazující kroky:
 
 ### [pending] 5.5 GDPR
 
-### [pending] 5.6 Bezpečné sdílení a souhlas
+### [in_progress] 5.6 Bezpečné sdílení a souhlas
+
+* report se sdili pouze po prime akci uzivatele
+* sdilena priloha je AES-256 sifrovana a heslo zustava mimo e-mailovy kanal
+* zbyva formalizovat zaznam souhlasu a audit externich sdileni
 
 * potvrzení uživatele před sdílením reportu nebo exportu
 * možnost anonymizace vybraných výstupů
@@ -587,7 +602,7 @@ Jakmile bude první sync end-to-end funkční:
 * ověření identity tokenů na backendu
 * mapování uživatele na serverový sync prostor
 
-### [in_progress] R0 Návrh E2E šifrování
+### [done] R0 Návrh E2E šifrování
 
 Ještě před plným napojením klienta na produkční sync:
 

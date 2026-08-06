@@ -14,6 +14,7 @@ import {
   pullCloudState,
   pushCloudState,
   saveSyncKeyMaterial,
+  rotateCloudEncryption,
 } from "../src/services/syncService.js";
 
 function installMemoryStorage() {
@@ -130,4 +131,23 @@ test("push exposes a decryptable remote state when the server reports a revision
   assert.equal(conflict.status, "conflict");
   assert.equal(conflict.revision, 2);
   assert.equal(conflict.remoteState.patientName, "Remote version");
+});
+
+test("key rotation replaces local key material and produces a new recovery secret", async (context) => {
+  installMemoryStorage();
+  const settings = { endpoint: "https://sync.example.test", apiToken: "test-token", userId: "user-1" };
+  const state = createInitialState();
+  let requestBody = null;
+  context.mock.method(globalThis, "fetch", async (_url, options) => {
+    requestBody = JSON.parse(options.body);
+    return jsonResponse({ status: "ok", revision: 8, updatedAt: "2026-08-06T12:00:00Z" });
+  });
+
+  const result = await rotateCloudEncryption({ state, settings, baseRevision: 7 });
+  assert.equal(result.revision, 8);
+  assert.equal(result.keyVersion, 2);
+  assert.equal(result.recoverySecret.length, 64);
+  assert.equal(requestBody.force, true);
+  assert.equal(requestBody.payload.keyVersion, 2);
+  assert.equal(requestBody.wrappedKey.keyVersion, 2);
 });

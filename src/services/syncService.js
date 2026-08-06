@@ -1,6 +1,7 @@
 import { prepareStateForSync } from "../domain/diary.js";
 import { decryptDiaryState, encryptDiaryState, exportAccountMasterKey, generateAccountMasterKey, generateRecoverySecret, importAccountMasterKey, unwrapAccountMasterKey, wrapAccountMasterKey } from "./e2eCrypto.js";
 import { getAuthorizationHeaderValue } from "./authService.js";
+import { getCurrentDeviceId } from "./trustedDevices.js";
 
 const SYNC_SETTINGS_STORAGE_KEY = "neurodiary-sync-settings-v1";
 const SYNC_KEY_MATERIAL_STORAGE_KEY = "neurodiary-sync-key-material-v1";
@@ -52,6 +53,7 @@ export function deriveSyncEndpoint() {
 function buildHeaders(settings) {
   const headers = {
     "Content-Type": "application/json",
+    "X-Device-ID": getCurrentDeviceId(),
   };
 
   const authHeader = getAuthorizationHeaderValue();
@@ -122,18 +124,21 @@ export function loadSyncKeyMaterial() {
     const raw = localStorage.getItem(SYNC_KEY_MATERIAL_STORAGE_KEY);
     if (!raw) {
       return {
+        keyVersion: 1,
         exportedMasterKey: "",
         recoverySecret: "",
       };
     }
 
     return {
+      keyVersion: 1,
       exportedMasterKey: "",
       recoverySecret: "",
       ...JSON.parse(raw),
     };
   } catch {
     return {
+      keyVersion: 1,
       exportedMasterKey: "",
       recoverySecret: "",
     };
@@ -143,6 +148,7 @@ export function loadSyncKeyMaterial() {
 export function saveSyncKeyMaterial(keyMaterial) {
   const nextKeyMaterial = {
     userId: "",
+    keyVersion: 1,
     exportedMasterKey: "",
     recoverySecret: "",
     ...cloneSerializable(keyMaterial),
@@ -170,6 +176,7 @@ export function saveRecoverySecret(recoverySecret) {
 export function clearSyncKeyMaterial() {
   return saveSyncKeyMaterial({
     userId: "",
+    keyVersion: 1,
     exportedMasterKey: "",
     recoverySecret: "",
   });
@@ -199,6 +206,7 @@ async function resolveMasterKeyForSync(wrappedKey = null) {
     const exportedMasterKey = await exportAccountMasterKey(masterKey);
     saveSyncKeyMaterial({
       ...keyMaterial,
+      keyVersion: Number(wrappedKey.keyVersion ?? keyMaterial.keyVersion ?? 1),
       exportedMasterKey,
     });
     return masterKey;
@@ -228,8 +236,9 @@ export async function initializeCloudSync({ state, settings, recoverySecret = ""
     ? await importAccountMasterKey(currentKeyMaterial.exportedMasterKey)
     : await generateAccountMasterKey();
   const exportedMasterKey = await exportAccountMasterKey(masterKey);
-  const wrappedKey = await wrapAccountMasterKey(masterKey, nextRecoverySecret);
-  const payload = await encryptDiaryState(prepareStateForSync(state), masterKey);
+  const keyVersion = Number(currentKeyMaterial.keyVersion ?? 1);
+  const wrappedKey = await wrapAccountMasterKey(masterKey, nextRecoverySecret, keyVersion);
+  const payload = await encryptDiaryState(prepareStateForSync(state), masterKey, keyVersion);
 
   const result = await fetchJson(buildEndpoint(normalizedSettings, "/api/v1/sync/push"), {
     method: "POST",
@@ -248,6 +257,7 @@ export async function initializeCloudSync({ state, settings, recoverySecret = ""
 
   saveSyncKeyMaterial({
     userId: normalizedSettings.userId ?? "",
+    keyVersion,
     exportedMasterKey,
     recoverySecret: nextRecoverySecret,
   });
@@ -333,9 +343,10 @@ export async function pushCloudState({ state, settings, baseRevision, force = fa
   const normalizedSettings = saveSyncSettings(settings);
   const keyMaterial = loadSyncKeyMaterial();
   const masterKey = await resolveMasterKeyForSync();
-  const payload = await encryptDiaryState(prepareStateForSync(state), masterKey);
+  const keyVersion = Number(keyMaterial.keyVersion ?? 1);
+  const payload = await encryptDiaryState(prepareStateForSync(state), masterKey, keyVersion);
   const wrappedKey = keyMaterial.recoverySecret
-    ? await wrapAccountMasterKey(masterKey, keyMaterial.recoverySecret)
+    ? await wrapAccountMasterKey(masterKey, keyMaterial.recoverySecret, keyVersion)
     : null;
 
   const result = await fetchJson(buildEndpoint(normalizedSettings, "/api/v1/sync/push"), {
@@ -375,4 +386,27 @@ export async function resetCloudState(settings) {
     deleted: Boolean(result.deleted),
     updatedAt: result.updatedAt ?? "",
   };
+}
+
+export async function rotateCloudEncryption({ state, settings, baseRevision }) {
+  const normalizedSettings = saveSyncSettings(settings);
+  const currentKeyMaterial = loadSyncKeyMaterial();
+  const keyVersion = Math.max(1, Number(currentKeyMaterial.keyVersion ?? 1)) + 1;
+  const recoverySecret = generateRecoverySecret();
+  const masterKey = await generateAccountMasterKey();
+  const exportedMasterKey = await exportAccountMasterKey(masterKey);
+  const wrappedKey = await wrapAccountMasterKey(masterKey, recoverySecret, keyVersion);
+  const payload = await encryptDiaryState(prepareStateForSync(state), masterKey, keyVersion);
+  const result = await fetchJson(buildEndpoint(normalizedSettings, "/api/v1/sync/push"), {
+    method: "POST",
+    headers: buildHeaders(normalizedSettings),
+    body: JSON.stringify({ baseRevision, payload, wrappedKey, force: true }),
+  });
+  saveSyncKeyMaterial({
+    userId: normalizedSettings.userId ?? "",
+    keyVersion,
+    exportedMasterKey,
+    recoverySecret,
+  });
+  return { recoverySecret, keyVersion, revision: result.revision, updatedAt: result.updatedAt };
 }

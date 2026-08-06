@@ -96,7 +96,7 @@ async function deriveRecoveryWrappingKey(recoverySecret, salt, iterations = RECO
   );
 }
 
-export async function wrapAccountMasterKey(masterKey, recoverySecret) {
+export async function wrapAccountMasterKey(masterKey, recoverySecret, keyVersion = 1) {
   const cryptoApi = ensureCrypto();
   const salt = cryptoApi.getRandomValues(new Uint8Array(RECOVERY_SALT_BYTES));
   const iv = cryptoApi.getRandomValues(new Uint8Array(AES_IV_BYTES));
@@ -121,7 +121,7 @@ export async function wrapAccountMasterKey(masterKey, recoverySecret) {
     wrappingSalt: bytesToBase64(salt),
     wrappingIv: bytesToBase64(iv),
     wrappingIterations: RECOVERY_DERIVATION_ITERATIONS,
-    keyVersion: 1,
+    keyVersion,
   };
 }
 
@@ -151,7 +151,7 @@ export async function unwrapAccountMasterKey(wrappedKeyEnvelope, recoverySecret)
   );
 }
 
-export async function encryptDiaryState(state, masterKey) {
+export async function encryptDiaryState(state, masterKey, keyVersion = 1) {
   const cryptoApi = ensureCrypto();
   const iv = cryptoApi.getRandomValues(new Uint8Array(AES_IV_BYTES));
   const serializedState = JSON.stringify(state);
@@ -167,7 +167,7 @@ export async function encryptDiaryState(state, masterKey) {
   return {
     schemaVersion: 1,
     algorithm: "AES-GCM-256",
-    keyVersion: 1,
+    keyVersion,
     iv: bytesToBase64(iv),
     cipherText: bytesToBase64(new Uint8Array(encryptedBuffer)),
   };
