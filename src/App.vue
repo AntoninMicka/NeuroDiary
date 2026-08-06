@@ -100,6 +100,12 @@ import {
   roundDownToTimelineStep,
 } from "./services/quickCapture.js";
 import { createSyncRetryScheduler } from "./services/syncRetry.js";
+import {
+  clearConflictAudit,
+  loadConflictAudit,
+  recordConflictDetected,
+  resolveConflictAudit,
+} from "./services/conflictAudit.js";
 
 const PENDING_SYNC_CHANGES_STORAGE_KEY = "neurodiary-pending-sync-changes-v1";
 
@@ -180,6 +186,7 @@ const storedRecoverySecret = ref(loadSyncKeyMaterial().recoverySecret ?? "");
 const syncKeyMaterialRefreshToken = ref(0);
 const isSyncBusy = ref(false);
 const hasPendingSyncChanges = ref(loadPendingSyncChanges());
+const conflictAuditItems = ref(loadConflictAudit());
 const isAuthBusy = ref(false);
 const isAutoRecoveringSyncKey = ref(false);
 const isRecoveryCameraBusy = ref(false);
@@ -317,6 +324,7 @@ const syncStatusSummary = computed(() => {
 
   return `Revize ${revision} · posledni sync ${syncedAt}`;
 });
+const conflictAuditCountLabel = computed(() => `${conflictAuditItems.value.length} konfliktu`);
 const bootstrapLogCountLabel = computed(() => `${bootstrapLogEntries.value.length} kroku`);
 const integrityReport = computed(() => auditDiaryState(state));
 const integritySummary = computed(() => integrityReport.value.summary);
@@ -781,6 +789,19 @@ function handleConnectionChange() {
   if (isOnline.value && isQuickSyncAvailable.value) {
     automaticSyncScheduler.schedule(0);
   }
+}
+
+function formatConflictTimestamp(value) {
+  if (!value) {
+    return "neznamy cas";
+  }
+  return new Intl.DateTimeFormat("cs-CZ", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+}
+
+function clearConflictHistory() {
+  clearConflictAudit();
+  conflictAuditItems.value = [];
+  storageMessage.value = "Lokalni historie konfliktu byla smazana.";
 }
 
 function handleOfflineReady() {
@@ -1672,6 +1693,7 @@ async function pullSync() {
 
 async function pushSync(force = false) {
   const shouldForce = force === true;
+  let conflictAuditId = "";
 
   if (!ensureSyncIdentity()) {
     return false;
@@ -1689,6 +1711,12 @@ async function pushSync(force = false) {
     });
 
     if (result.status === "conflict" && result.remoteState) {
+      const conflictAudit = recordConflictDetected({
+        baseRevision: Number(syncSettings.revision ?? 0),
+        remoteRevision: result.revision,
+      });
+      conflictAuditId = conflictAudit.id;
+      conflictAuditItems.value = loadConflictAudit();
       storageMessage.value = "Server hlasi konflikt. Slucuji cloud a lokalni data.";
       const mergedState = mergeDiaryStatesAppendOnly(result.remoteState, state);
       applyImportedState(mergedState);
@@ -1714,6 +1742,11 @@ async function pushSync(force = false) {
       markCloudAuthenticated(authSession.value?.user ?? null);
       refreshSyncKeyMaterialStatus();
       clearPushedChanges(pushedChangeVersion);
+      resolveConflictAudit(conflictAuditId, {
+        status: "resolved",
+        resolvedRevision: retryResult.revision,
+      });
+      conflictAuditItems.value = loadConflictAudit();
       storageMessage.value = "Konflikt byl sloucen append-only a synchronizace dokoncena.";
       return true;
     }
@@ -1732,6 +1765,10 @@ async function pushSync(force = false) {
     storageMessage.value = "Lokalni data byla odeslana do cloud syncu.";
     return true;
   } catch (error) {
+    if (conflictAuditId) {
+      resolveConflictAudit(conflictAuditId, { status: "failed" });
+      conflictAuditItems.value = loadConflictAudit();
+    }
     console.error("Sync push failed", error);
     Object.assign(syncSettings, saveSyncSettings({
       ...syncSettings,
@@ -2336,6 +2373,28 @@ function syncFloatingMenuHeight() {
               <p class="panel-tip">Recovery secret: {{ hasRecoverySecretStored ? "ulozen" : "chybi" }}</p>
               <p v-if="syncSettings.lastSyncMessage" class="panel-tip">{{ syncSettings.lastSyncMessage }}</p>
             </div>
+
+            <section v-if="conflictAuditItems.length" class="conflict-audit">
+              <div class="conflict-audit-heading">
+                <div>
+                  <strong>Historie konfliktu</strong>
+                  <p class="panel-tip">{{ conflictAuditCountLabel }} na tomto zarizeni, bez zdravotnich dat.</p>
+                </div>
+                <button class="ghost-button" type="button" @click="clearConflictHistory">
+                  Smazat historii
+                </button>
+              </div>
+              <ul class="conflict-audit-list">
+                <li v-for="item in conflictAuditItems" :key="item.id">
+                  <span :class="['status-chip', item.status === 'resolved' ? 'status-chip-ready' : 'status-chip-update']">
+                    {{ item.status === "resolved" ? "Vyreseno" : item.status === "failed" ? "Selhalo" : "Zjisteno" }}
+                  </span>
+                  <span>{{ formatConflictTimestamp(item.detectedAt) }}</span>
+                  <span>revize {{ item.baseRevision }} → {{ item.remoteRevision }}<template v-if="item.resolvedRevision !== null"> → {{ item.resolvedRevision }}</template></span>
+                  <span>zarizeni {{ item.deviceId.slice(0, 8) }}</span>
+                </li>
+              </ul>
+            </section>
 
             <div v-if="generatedRecoverySecret" class="sync-warning-card">
               <strong>Ulozte si recovery secret</strong>

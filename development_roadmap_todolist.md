@@ -433,7 +433,7 @@ Aktualni stav:
 * prerusene spojeni spousti omezeny exponencialni retry/backoff od 5 sekund do 5 minut
 * automaticky test overuje opakovani po vypadku, rust prodlevy a reset po uspesnem syncu
 
-### [in_progress] 6.5 Konflikty a verzování
+### [done] 6.5 Konflikty a verzování
 
 * snapshot conflict flow
 * rozhodnutí lokalní vs. serverová verze
@@ -444,10 +444,12 @@ Aktualni stav:
 Aktualni stav:
 
 * backend kontroluje `baseRevision` a vraci aktualni sifrovany snapshot pri konfliktu
-* klient konflikt desifruje, provede append-only merge a odesle slouceny snapshot s novou revizi
+* klient konflikt desifruje, provede merge a odesle slouceny snapshot s novou revizi
 * automaticke testy overuji desifrovani vzdaleneho stavu a serverovy tok push, pull, konflikt a reset
 * izolace snapshotu dvou prihlasenych uzivatelu je overena integracnim testem
-* zbyva uzivatelsky audit konfliktu a pozdejsi jemnejsi merge po entitach
+* novější denní hodnoty vyhrávají podle `updatedAt`, souběžné hodinové záznamy a dávky zůstávají zachované
+* tombstone smazané dávky brání jejímu obnovení ze staršího zařízení
+* lokální audit posledních 20 konfliktů ukládá pouze čas, zařízení, revize, strategii a výsledek bez zdravotních dat
 
 ### [ready_for_external_setup] 6.6 Deploy backendu
 

@@ -571,13 +571,18 @@ export function mergeDiaryStatesAppendOnly(baseState, incomingState) {
     }
 
     const mergedEntryBase = mergedState.entries[dateKey] ?? baseEntry ?? createDefaultEntry();
+    const incomingEntryIsNewer = incomingEntry && (
+      !baseEntry || compareIsoDateTimes(incomingEntryUpdatedAt, baseEntryUpdatedAt) >= 0
+    );
+    const preferredEntry = incomingEntryIsNewer ? incomingEntry : (baseEntry ?? mergedEntryBase);
     ensureEntry(mergedState, dateKey);
 
     mergedState.entries[dateKey] = {
       ...mergedEntryBase,
       ...incomingEntry,
-      sleepQuality: selectPreferredEntryValue(mergedEntryBase.sleepQuality, incomingEntry?.sleepQuality),
-      overallStatus: selectPreferredEntryValue(mergedEntryBase.overallStatus, incomingEntry?.overallStatus),
+      notes: preferredEntry.notes ?? "",
+      sleepQuality: preferredEntry.sleepQuality ?? UNDEFINED_ENTRY_VALUE,
+      overallStatus: preferredEntry.overallStatus ?? UNDEFINED_ENTRY_VALUE,
       medications: mergeMedicationsAppendOnly(mergedEntryBase.medications, incomingEntry?.medications),
       hourRecords: mergeHourRecordsAppendOnly(mergedEntryBase.hourRecords, incomingEntry?.hourRecords),
       updatedAt: selectLatestIsoDateTime(mergedEntryBase.updatedAt ?? "", incomingEntry?.updatedAt ?? ""),
@@ -617,15 +622,6 @@ function selectPreferredProfileValue(baseValue = "", incomingValue = "") {
   const normalizedBaseValue = typeof baseValue === "string" ? baseValue : "";
   const normalizedIncomingValue = typeof incomingValue === "string" ? incomingValue : "";
   if (normalizedIncomingValue.trim()) {
-    return normalizedIncomingValue;
-  }
-  return normalizedBaseValue;
-}
-
-function selectPreferredEntryValue(baseValue = UNDEFINED_ENTRY_VALUE, incomingValue = UNDEFINED_ENTRY_VALUE) {
-  const normalizedBaseValue = ENTRY_STATUS_VALUES.has(baseValue) ? baseValue : UNDEFINED_ENTRY_VALUE;
-  const normalizedIncomingValue = ENTRY_STATUS_VALUES.has(incomingValue) ? incomingValue : UNDEFINED_ENTRY_VALUE;
-  if (normalizedIncomingValue !== UNDEFINED_ENTRY_VALUE) {
     return normalizedIncomingValue;
   }
   return normalizedBaseValue;

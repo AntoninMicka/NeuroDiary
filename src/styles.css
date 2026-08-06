@@ -805,6 +805,40 @@ select[aria-invalid="true"] {
   margin-top: 0.9rem;
 }
 
+.conflict-audit {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid rgba(31, 41, 51, 0.1);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.42);
+}
+
+.conflict-audit-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: start;
+}
+
+.conflict-audit-list {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.conflict-audit-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.7rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
 .diagnostic-dialog-backdrop {
   position: fixed;
   inset: 0;
