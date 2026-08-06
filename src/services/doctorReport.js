@@ -916,25 +916,31 @@ export function buildDoctorReportHtml({
         }
         .medication-marker {
           position: absolute;
-          top: 1px;
-          transform: translateX(-50%);
-          width: 54px;
-          text-align: center;
+          top: 2px;
+          transform: translateX(-3.5px);
+          width: 82px;
+          display: flex;
+          align-items: flex-start;
+          gap: 2px;
+          text-align: left;
           color: var(--medication-color);
         }
         .medication-marker.medication-lane-1 {
-          top: 19px;
+          top: 20px;
         }
         .medication-dot {
           display: inline-block;
+          flex: 0 0 7px;
           width: 7px;
           height: 7px;
+          margin-top: 1px;
           border-radius: 999px;
           background: var(--medication-color);
           box-shadow: 0 0 0 1px #fff;
         }
         .medication-caption {
           display: block;
+          min-width: 0;
           margin-top: 0;
           font-size: 6px;
           line-height: 1.05;
