@@ -149,6 +149,7 @@ const timelineSelectedTime = ref(roundDownToTimelineStep(new Date()));
 const selectedStateKey = ref("on");
 const selectedTreatmentPlanId = ref("");
 const reportOptions = reactive({
+  includeToday: false,
   dailyTrend: true,
   wearingOff: true,
   weeklyCharts: true,
@@ -1299,6 +1300,7 @@ function printDoctorReport() {
       selectedDate: state.selectedDate,
       patientName: state.patientName,
       birthYear: state.birthYear,
+      includeToday: reportOptions.includeToday,
       includeDailyTrend: reportOptions.dailyTrend,
       includeWearingOff: reportOptions.wearingOff,
       includeWeeklyCharts: reportOptions.weeklyCharts,
@@ -2010,6 +2012,10 @@ function syncFloatingMenuHeight() {
               <details class="report-menu">
                 <summary class="ghost-button">Print report</summary>
                 <div class="report-menu-panel">
+                  <label>
+                    <input v-model="reportOptions.includeToday" type="checkbox" />
+                    Zahrnout dnesni den
+                  </label>
                   <label>
                     <input v-model="reportOptions.dailyTrend" type="checkbox" />
                     Tisknout Denni trend

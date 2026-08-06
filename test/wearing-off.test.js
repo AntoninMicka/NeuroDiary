@@ -108,6 +108,33 @@ test("doctor report can omit daily trend and wearing-off observations", () => {
   assert.match(html, /<h3>Hodinovy souhrn<\/h3>/);
 });
 
+test("doctor report excludes today unless including it is enabled", () => {
+  const entries = {
+    "2026-03-01": { ...createReliableEntry(1), notes: "TODAY_ONLY_NOTE" },
+    "2026-02-28": { ...createReliableEntry(1), notes: "YESTERDAY_NOTE" },
+  };
+  const withoutToday = buildDoctorReportHtml({
+    entries,
+    treatmentPlan,
+    selectedDate: "2026-03-01",
+    todayDate: "2026-03-01",
+    includeToday: false,
+  });
+  const withToday = buildDoctorReportHtml({
+    entries,
+    treatmentPlan,
+    selectedDate: "2026-03-01",
+    todayDate: "2026-03-01",
+    includeToday: true,
+  });
+
+  assert.doesNotMatch(withoutToday, /TODAY_ONLY_NOTE/);
+  assert.match(withoutToday, /YESTERDAY_NOTE/);
+  assert.match(withoutToday, /25\. 02\. 2026 - 28\. 02\. 2026/);
+  assert.match(withToday, /TODAY_ONLY_NOTE/);
+  assert.match(withToday, /26\. 02\. 2026 - 01\. 03\. 2026/);
+});
+
 test("tracking axis ends at hour 23", () => {
   assert.equal(TRACKING_HOURS.at(-1), "23");
   assert.equal(TRACKING_HOURS.includes("24"), false);

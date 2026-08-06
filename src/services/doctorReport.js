@@ -2,6 +2,7 @@ import {
   formatLongDate,
   formatOverallStatus,
   formatSleepQuality,
+  getTodayKey,
   getStateDefinition,
   HOUR_STATES,
   summarizeHours,
@@ -601,6 +602,8 @@ export function buildDoctorReportHtml({
   selectedDate,
   patientName = "",
   birthYear = "",
+  includeToday = true,
+  todayDate = getTodayKey(),
   includeDailyTrend = true,
   includeWearingOff = true,
   includeWeeklyCharts = true,
@@ -610,12 +613,16 @@ export function buildDoctorReportHtml({
     throw new Error(`No diary entry found for ${selectedDate}`);
   }
 
+  const reportEndDate = !includeToday && selectedDate === todayDate
+    ? shiftDateKey(selectedDate, -1)
+    : selectedDate;
+
   const generatedAt = new Intl.DateTimeFormat("cs-CZ", {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date());
 
-  const dateKeys = buildDateKeys(selectedDate, REPORT_DAYS_PAGE_ONE);
+  const dateKeys = buildDateKeys(reportEndDate, REPORT_DAYS_PAGE_ONE);
 
   return `<!DOCTYPE html>
   <html lang="cs">
@@ -1197,7 +1204,7 @@ export function buildDoctorReportHtml({
               <div class="meta-cell">
                 <span class="meta-label">Obdobi</span>
                 <div class="meta-value compact">
-                  ${escapeHtml(formatNumericDate(dateKeys[0]))} - ${escapeHtml(formatNumericDate(selectedDate))}
+                  ${escapeHtml(formatNumericDate(dateKeys[0]))} - ${escapeHtml(formatNumericDate(reportEndDate))}
                 </div>
               </div>
               <div class="meta-cell">
@@ -1222,7 +1229,7 @@ export function buildDoctorReportHtml({
           </section>
         </section>
 
-        ${buildAnalysisPage(entries, treatmentPlan, selectedDate, {
+        ${buildAnalysisPage(entries, treatmentPlan, reportEndDate, {
           includeDailyTrend,
           includeWearingOff,
           includeWeeklyCharts,
@@ -1238,6 +1245,7 @@ export function openDoctorReportPrint({
   selectedDate,
   patientName,
   birthYear,
+  includeToday = true,
   includeDailyTrend = true,
   includeWearingOff = true,
   includeWeeklyCharts = true,
@@ -1253,6 +1261,7 @@ export function openDoctorReportPrint({
     selectedDate,
     patientName,
     birthYear,
+    includeToday,
     includeDailyTrend,
     includeWearingOff,
     includeWeeklyCharts,
