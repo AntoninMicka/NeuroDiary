@@ -23,6 +23,17 @@ const STATE_CHART_COLORS = {
   off: "#b84a4a",
   sleep: "#7d8e9e",
 };
+const MEDICATION_COLORS = [
+  "#245f8f",
+  "#9a4f24",
+  "#4f7a38",
+  "#76509a",
+  "#a23f5d",
+  "#18766f",
+  "#8a6421",
+  "#4f638f",
+];
+const MEDICATION_LABEL_COLLISION_MINUTES = 90;
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -84,7 +95,42 @@ function buildMatrixRows(entry) {
   return rows.join("");
 }
 
-function buildMedicationTimelineRow(entry) {
+function normalizeMedicationName(value) {
+  return String(value ?? "").trim().toLocaleLowerCase("cs-CZ");
+}
+
+function buildMedicationColorMap(entries) {
+  const names = [...new Set(
+    Object.values(entries)
+      .flatMap((entry) => entry?.medications ?? [])
+      .map((medication) => normalizeMedicationName(medication.name))
+      .filter(Boolean),
+  )].sort((left, right) => left.localeCompare(right, "cs-CZ"));
+
+  return new Map(names.map((name, index) => [name, MEDICATION_COLORS[index % MEDICATION_COLORS.length]]));
+}
+
+function getMedicationMinuteOfDay(medication) {
+  const [hoursRaw, minutesRaw] = medication.time.split(":");
+  return Number(hoursRaw) * 60 + Number(minutesRaw);
+}
+
+function assignMedicationLanes(medications) {
+  const laneLastMinutes = [-Infinity, -Infinity];
+  return medications.map((medication) => {
+    const minuteOfDay = getMedicationMinuteOfDay(medication);
+    const availableLane = laneLastMinutes.findIndex(
+      (lastMinute) => minuteOfDay - lastMinute >= MEDICATION_LABEL_COLLISION_MINUTES,
+    );
+    const lane = availableLane >= 0
+      ? availableLane
+      : (laneLastMinutes[0] <= laneLastMinutes[1] ? 0 : 1);
+    laneLastMinutes[lane] = minuteOfDay;
+    return { medication, lane, minuteOfDay };
+  });
+}
+
+function buildMedicationTimelineRow(entry, medicationColorMap) {
   if (!entry?.medications?.length) {
     return `<div class="medication-empty">Bez medikace</div>`;
   }
@@ -93,18 +139,18 @@ function buildMedicationTimelineRow(entry) {
   const endHour = Number(TRACKING_HOURS.at(-1)) + 1;
   const totalHours = endHour - startHour;
 
-  return entry.medications
+  const medications = entry.medications
     .slice()
-    .sort((left, right) => left.time.localeCompare(right.time))
-    .map((medication) => {
-      const [hoursRaw, minutesRaw] = medication.time.split(":");
-      const hours = Number(hoursRaw);
-      const minutes = Number(minutesRaw);
-      const offsetHours = Math.min(Math.max(hours + minutes / 60 - startHour, 0), totalHours);
+    .sort((left, right) => left.time.localeCompare(right.time));
+
+  return assignMedicationLanes(medications)
+    .map(({ medication, lane, minuteOfDay }) => {
+      const offsetHours = Math.min(Math.max(minuteOfDay / 60 - startHour, 0), totalHours);
       const left = (offsetHours / totalHours) * 100;
+      const medicationColor = medicationColorMap.get(normalizeMedicationName(medication.name)) ?? MEDICATION_COLORS[0];
 
       return `
-        <div class="medication-marker" style="left: ${left}%;">
+        <div class="medication-marker medication-lane-${lane}" style="left: ${left}%; --medication-color: ${medicationColor};">
           <span class="medication-dot"></span>
           <span class="medication-caption">
             <strong>${escapeHtml(medication.name)}</strong>
@@ -116,7 +162,7 @@ function buildMedicationTimelineRow(entry) {
     .join("");
 }
 
-function buildDayTable(dateKey, entry) {
+function buildDayTable(dateKey, entry, medicationColorMap) {
   const note = entry?.notes?.trim() || "Bez poznamek.";
   const quality = evaluateDayQuality(entry, dateKey);
 
@@ -154,7 +200,7 @@ function buildDayTable(dateKey, entry) {
         <div class="medication-track">
           <div class="medication-grid"></div>
           <div class="medication-axis"></div>
-          ${buildMedicationTimelineRow(entry)}
+          ${buildMedicationTimelineRow(entry, medicationColorMap)}
         </div>
       </div>
 
@@ -623,6 +669,7 @@ export function buildDoctorReportHtml({
   }).format(new Date());
 
   const dateKeys = buildDateKeys(reportEndDate, REPORT_DAYS_PAGE_ONE);
+  const medicationColorMap = buildMedicationColorMap(entries);
 
   return `<!DOCTYPE html>
   <html lang="cs">
@@ -839,11 +886,11 @@ export function buildDoctorReportHtml({
           display: flex;
           align-items: center;
           padding: 0 0 0 4px;
-          min-height: 24px;
+          min-height: 38px;
         }
         .medication-track {
           position: relative;
-          min-height: 24px;
+          min-height: 38px;
           border: 1px solid var(--line);
           background: #fff;
           overflow: hidden;
@@ -864,7 +911,7 @@ export function buildDoctorReportHtml({
           position: absolute;
           left: 0;
           right: 0;
-          top: 10px;
+          top: 18px;
           border-top: 1px dashed var(--line);
         }
         .medication-marker {
@@ -873,20 +920,25 @@ export function buildDoctorReportHtml({
           transform: translateX(-50%);
           width: 54px;
           text-align: center;
+          color: var(--medication-color);
+        }
+        .medication-marker.medication-lane-1 {
+          top: 19px;
         }
         .medication-dot {
           display: inline-block;
           width: 7px;
           height: 7px;
           border-radius: 999px;
-          background: var(--blue);
+          background: var(--medication-color);
+          box-shadow: 0 0 0 1px #fff;
         }
         .medication-caption {
           display: block;
           margin-top: 0;
           font-size: 6px;
           line-height: 1.05;
-          color: var(--blue);
+          color: var(--medication-color);
         }
         .medication-caption strong,
         .medication-caption span {
@@ -894,6 +946,9 @@ export function buildDoctorReportHtml({
         }
         .medication-caption strong {
           font-weight: 700;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
         }
         .medication-empty {
           position: absolute;
@@ -1223,7 +1278,7 @@ export function buildDoctorReportHtml({
           </header>
 
           <section class="content">
-            ${dateKeys.map((dateKey) => buildDayTable(dateKey, entries[dateKey])).join("")}
+            ${dateKeys.map((dateKey) => buildDayTable(dateKey, entries[dateKey], medicationColorMap)).join("")}
 
             <p class="footer">NeuroDiary · tiskovy report pro lekare</p>
           </section>

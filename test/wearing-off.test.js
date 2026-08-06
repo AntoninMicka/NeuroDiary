@@ -135,6 +135,33 @@ test("doctor report excludes today unless including it is enabled", () => {
   assert.match(withToday, /26\. 02\. 2026 - 01\. 03\. 2026/);
 });
 
+test("doctor report colors medication names consistently and separates colliding labels into two lanes", () => {
+  const entry = createReliableEntry(1);
+  entry.medications = [
+    { id: "a", name: "Levodopa", dose: "100 mg", time: "08:00" },
+    { id: "b", name: "Pramipexol", dose: "0.7 mg", time: "08:30" },
+    { id: "c", name: "levodopa", dose: "50 mg", time: "12:00" },
+  ];
+  const html = buildDoctorReportHtml({
+    entries: { "2026-03-01": entry },
+    treatmentPlan,
+    selectedDate: "2026-03-01",
+  });
+
+  const medicationMarkers = [...html.matchAll(
+    /--medication-color: ([^;]+);">\s*<span class="medication-dot"><\/span>\s*<span class="medication-caption">\s*<strong>([^<]+)<\/strong>/g,
+  )].map((match) => ({ color: match[1], name: match[2] }));
+  const levodopaColors = medicationMarkers
+    .filter((item) => item.name.toLowerCase() === "levodopa")
+    .map((item) => item.color);
+  const pramipexolColor = medicationMarkers.find((item) => item.name === "Pramipexol")?.color;
+
+  assert.deepEqual(levodopaColors, [levodopaColors[0], levodopaColors[0]]);
+  assert.notEqual(levodopaColors[0], pramipexolColor);
+  assert.match(html, /medication-marker medication-lane-0[^>]*>[\s\S]*?<strong>Levodopa<\/strong>/);
+  assert.match(html, /medication-marker medication-lane-1[^>]*>[\s\S]*?<strong>Pramipexol<\/strong>/);
+});
+
 test("tracking axis ends at hour 23", () => {
   assert.equal(TRACKING_HOURS.at(-1), "23");
   assert.equal(TRACKING_HOURS.includes("24"), false);
