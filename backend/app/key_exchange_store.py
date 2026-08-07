@@ -67,9 +67,13 @@ class SqliteKeyExchangeStore:
                 );
                 CREATE TABLE IF NOT EXISTS identity_key_migrations (
                   user_id TEXT PRIMARY KEY, enabled INTEGER NOT NULL, created_at TEXT NOT NULL,
-                  disabled_at TEXT, disabled_by_device_id TEXT
+                  disabled_at TEXT, disabled_by_device_id TEXT,
+                  emergency_registration_open INTEGER NOT NULL DEFAULT 1
                 );
             """)
+            migration_columns = {row[1] for row in connection.execute("PRAGMA table_info(identity_key_migrations)").fetchall()}
+            if "emergency_registration_open" not in migration_columns:
+                connection.execute("ALTER TABLE identity_key_migrations ADD COLUMN emergency_registration_open INTEGER NOT NULL DEFAULT 1")
             connection.commit()
 
     def create_challenge(self, challenge_id, user_id, device_id, public_key_jwk, fingerprint, secret_hash, expires_at):
@@ -218,18 +222,19 @@ class SqliteKeyExchangeStore:
         with self._connect() as connection:
             row = connection.execute("SELECT * FROM identity_key_migrations WHERE user_id = ?", (user_id,)).fetchone()
             if row is None:
-                connection.execute("INSERT INTO identity_key_migrations VALUES (?, 1, ?, NULL, NULL)", (user_id, now.isoformat()))
+                connection.execute("INSERT INTO identity_key_migrations (user_id, enabled, created_at, disabled_at, disabled_by_device_id, emergency_registration_open) VALUES (?, 1, ?, NULL, NULL, 1)", (user_id, now.isoformat()))
                 connection.commit()
                 return {"enabled": True, "created_at": now, "disabled_at": None, "disabled_by_device_id": None}
-        return {"enabled": bool(row["enabled"]), "created_at": row["created_at"], "disabled_at": row["disabled_at"], "disabled_by_device_id": row["disabled_by_device_id"]}
+        return {"enabled": bool(row["emergency_registration_open"]), "created_at": row["created_at"], "disabled_at": row["disabled_at"], "disabled_by_device_id": row["disabled_by_device_id"]}
 
     def disable_migration(self, user_id, device_id) -> bool:
         self.get_migration(user_id)
         now = datetime.now(UTC)
         with self._connect() as connection:
             cursor = connection.execute("""
-                UPDATE identity_key_migrations SET enabled = 0, disabled_at = ?, disabled_by_device_id = ?
-                WHERE user_id = ? AND enabled = 1
+                UPDATE identity_key_migrations SET enabled = 0, emergency_registration_open = 0,
+                  disabled_at = ?, disabled_by_device_id = ?
+                WHERE user_id = ? AND emergency_registration_open = 1
             """, (now.isoformat(), device_id, user_id))
             connection.commit()
             return cursor.rowcount == 1
@@ -267,7 +272,9 @@ class PostgresKeyExchangeStore(SqliteKeyExchangeStore):
                   event_type TEXT NOT NULL, details_json TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL);
                 CREATE TABLE IF NOT EXISTS identity_key_migrations (
                   user_id TEXT PRIMARY KEY, enabled INTEGER NOT NULL, created_at TIMESTAMPTZ NOT NULL,
-                  disabled_at TIMESTAMPTZ, disabled_by_device_id TEXT);
+                  disabled_at TIMESTAMPTZ, disabled_by_device_id TEXT,
+                  emergency_registration_open INTEGER NOT NULL DEFAULT 1);
+                ALTER TABLE identity_key_migrations ADD COLUMN IF NOT EXISTS emergency_registration_open INTEGER NOT NULL DEFAULT 1;
             """)
 
     def put_key_with_bootstrap(self, user_id, device_id, public_key_jwk, fingerprint):

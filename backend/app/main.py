@@ -400,8 +400,20 @@ def register_current_device(
     user_id: Annotated[str, Depends(verify_bearer_token)],
 ) -> TrustedDeviceModel:
     record = device_store.upsert(user_id, payload.deviceId, payload.name)
-    if record.revoked_at is not None:
+    migration_enabled = key_exchange_store.get_migration(user_id)["enabled"]
+    was_revoked = record.revoked_at is not None
+    if was_revoked and migration_enabled:
+        device_store.emergency_reactivate(user_id, payload.deviceId)
+        record = device_store.get(user_id, payload.deviceId)
+        audit_security(user_id, payload.deviceId, "emergency_revoked_device_reactivated")
+    elif record.revoked_at is not None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Device has been revoked.")
+    if migration_enabled:
+        was_pending = record.trust_status == "pending"
+        device_store.trust(user_id, payload.deviceId)
+        record = device_store.get(user_id, payload.deviceId)
+        if was_pending:
+            audit_security(user_id, payload.deviceId, "emergency_device_registration_accepted")
     return TrustedDeviceModel(
         deviceId=record.device_id, name=record.name, createdAt=record.created_at,
         lastSeenAt=record.last_seen_at, revokedAt=record.revoked_at, current=True, trustStatus=record.trust_status,

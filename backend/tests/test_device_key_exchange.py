@@ -55,6 +55,27 @@ def test_device_must_prove_private_key_ownership(monkeypatch, tmp_path):
     assert error.value.status_code == 403
 
 
+def test_emergency_registration_accepts_and_can_reactivate_until_client_closes_it(monkeypatch, tmp_path):
+    main = load_app(monkeypatch, tmp_path)
+    user = "locked-user"
+    first = "device-0000000001"
+    recovered = "device-0000000002"
+    main.register_current_device(DeviceRegistrationRequestModel(deviceId=first, name="Prvni"), user)
+    accepted = main.register_current_device(DeviceRegistrationRequestModel(deviceId=recovered, name="Obnoveny"), user)
+    assert accepted.trustStatus == "trusted"
+
+    main.device_store.revoke(user, recovered)
+    reactivated = main.register_current_device(DeviceRegistrationRequestModel(deviceId=recovered, name="Obnoveny"), user)
+    assert reactivated.revokedAt is None
+    assert reactivated.trustStatus == "trusted"
+
+    main.disable_identity_key_migration(user, first)
+    main.device_store.revoke(user, recovered)
+    with pytest.raises(HTTPException) as error:
+        main.register_current_device(DeviceRegistrationRequestModel(deviceId=recovered, name="Obnoveny"), user)
+    assert error.value.status_code == 403
+
+
 def test_first_verified_key_bootstraps_legacy_account_without_keys(monkeypatch, tmp_path):
     main = load_app(monkeypatch, tmp_path)
     user = "legacy-user"
@@ -64,7 +85,7 @@ def test_first_verified_key_bootstraps_legacy_account_without_keys(monkeypatch, 
     migrating = "device-0000000004"
     main.register_current_device(DeviceRegistrationRequestModel(deviceId=old_device, name="Stary klient"), user)
     registration = main.register_current_device(DeviceRegistrationRequestModel(deviceId=bootstrap, name="Prvni s klicem"), user)
-    assert registration.trustStatus == "pending"
+    assert registration.trustStatus == "trusted"
 
     register_and_publish(main, user, bootstrap)
     assert main.device_store.is_active(user, bootstrap) is True

@@ -93,6 +93,11 @@ class SqliteDeviceStore:
             connection.execute("UPDATE trusted_devices SET trust_status = 'trusted' WHERE user_id = ? AND device_id = ? AND revoked_at IS NULL", (user_id, device_id))
             connection.commit()
 
+    def emergency_reactivate(self, user_id: str, device_id: str) -> None:
+        with self._connect() as connection:
+            connection.execute("UPDATE trusted_devices SET revoked_at = NULL, trust_status = 'trusted', last_seen_at = ? WHERE user_id = ? AND device_id = ?", (datetime.now(UTC).isoformat(), user_id, device_id))
+            connection.commit()
+
     def revoke(self, user_id: str, device_id: str) -> None:
         with self._connect() as connection:
             connection.execute(
@@ -184,6 +189,10 @@ class PostgresDeviceStore:
     def trust(self, user_id: str, device_id: str) -> None:
         with self._connect() as connection:
             connection.execute("UPDATE trusted_devices SET trust_status = 'trusted' WHERE user_id = %s AND device_id = %s AND revoked_at IS NULL", (user_id, device_id))
+
+    def emergency_reactivate(self, user_id: str, device_id: str) -> None:
+        with self._connect() as connection:
+            connection.execute("UPDATE trusted_devices SET revoked_at = NULL, trust_status = 'trusted', last_seen_at = %s WHERE user_id = %s AND device_id = %s", (datetime.now(UTC), user_id, device_id))
 
     def revoke(self, user_id: str, device_id: str) -> None:
         with self._connect() as connection:
