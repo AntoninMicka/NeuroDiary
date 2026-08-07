@@ -101,7 +101,8 @@ class SqliteKeyExchangeStore:
         now = datetime.now(UTC)
         with self._connect() as connection:
             connection.execute("""
-                INSERT INTO device_public_keys VALUES (?, ?, ?, ?, ?)
+                INSERT INTO device_public_keys (user_id, device_id, public_key_jwk, fingerprint, verified_at)
+                VALUES (?, ?, ?, ?, ?)
                 ON CONFLICT(user_id, device_id) DO UPDATE SET
                   public_key_jwk = excluded.public_key_jwk, fingerprint = excluded.fingerprint,
                   verified_at = excluded.verified_at
@@ -118,7 +119,8 @@ class SqliteKeyExchangeStore:
                 "SELECT 1 FROM device_public_keys WHERE user_id = ? LIMIT 1", (user_id,),
             ).fetchone() is None
             connection.execute("""
-                INSERT INTO device_public_keys VALUES (?, ?, ?, ?, ?)
+                INSERT INTO device_public_keys (user_id, device_id, public_key_jwk, fingerprint, verified_at)
+                VALUES (?, ?, ?, ?, ?)
                 ON CONFLICT(user_id, device_id) DO UPDATE SET
                   public_key_jwk = excluded.public_key_jwk, fingerprint = excluded.fingerprint,
                   verified_at = excluded.verified_at
@@ -304,10 +306,21 @@ class PostgresKeyExchangeStore(SqliteKeyExchangeStore):
             with connection.transaction():
                 connection.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (user_id,))
                 is_first_key = connection.execute("SELECT 1 FROM device_public_keys WHERE user_id = %s LIMIT 1", (user_id,)).fetchone() is None
-                connection.execute("""
-                    INSERT INTO device_public_keys VALUES (%s, %s, %s, %s, %s)
+                column = connection.execute("""
+                    SELECT data_type FROM information_schema.columns
+                    WHERE table_schema = current_schema() AND table_name = 'device_public_keys'
+                      AND column_name = 'public_key_jwk'
+                """).fetchone()
+                if not column:
+                    raise RuntimeError("device_public_keys.public_key_jwk is missing")
+                key_placeholder = "%s::jsonb" if column["data_type"] == "jsonb" else "%s"
+                connection.execute(f"""
+                    INSERT INTO device_public_keys
+                      (user_id, device_id, public_key_jwk, fingerprint, verified_at)
+                    VALUES (%s, %s, {key_placeholder}, %s, %s)
                     ON CONFLICT(user_id, device_id) DO UPDATE SET
-                      public_key_jwk = excluded.public_key_jwk, fingerprint = excluded.fingerprint,
+                      public_key_jwk = excluded.public_key_jwk,
+                      fingerprint = excluded.fingerprint,
                       verified_at = excluded.verified_at
                 """, (user_id, device_id, public_key_jwk, fingerprint, now))
         return DeviceKeyRecord(device_id, public_key_jwk, fingerprint, now), is_first_key
