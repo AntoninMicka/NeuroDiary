@@ -40,7 +40,7 @@ async function request(settings, path, options = {}) {
   if (!response.ok) {
     const requestId = response.headers?.get?.("x-request-id");
     const suffix = requestId ? ` Request ID: ${requestId}.` : "";
-    throw new Error(`${payload?.detail || `Device key request failed (${response.status}).`}${suffix}`);
+    throw new Error(`${payload?.detail || `Device key request ${path} failed (${response.status}).`}${suffix}`);
   }
   return payload;
 }

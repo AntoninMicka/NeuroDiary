@@ -1590,8 +1590,16 @@ function downloadGeneratedPrivateKey() {
 
 async function ensureCurrentDeviceRegistered() {
   let registration = await registerCurrentDevice(syncSettings);
-  identityKeyMigration.value = await fetchIdentityKeyMigration(syncSettings);
-  await ensureDeviceExchangeKeyPublished(syncSettings);
+  try {
+    identityKeyMigration.value = await fetchIdentityKeyMigration(syncSettings);
+    await ensureDeviceExchangeKeyPublished(syncSettings);
+  } catch (identityError) {
+    if (registration.trustStatus !== "trusted") throw identityError;
+    trustedDevices.value = (await fetchTrustedDevices(syncSettings)).map((device) => ({ ...device, hasVerifiedKey: false }));
+    pendingDeviceKeyRequests.value = [];
+    storageMessage.value = `Zarizeni je nouzove duveryhodne, ale identitni klice jsou docasne nedostupne: ${identityError.message}`;
+    return { degradedIdentity: true, registration, identityError };
+  }
   if (registration.trustStatus === "pending") {
     registration = await registerCurrentDevice(syncSettings);
   }
@@ -1605,7 +1613,7 @@ async function ensureCurrentDeviceRegistered() {
       await requestDeviceMasterKey(syncSettings);
       storageMessage.value = "Toto zarizeni pozadalo duveryhodne zarizeni o asymetricky sifrovany master key.";
       trustedDevices.value = [{ ...registration, hasVerifiedKey: true }];
-      return;
+      return { degradedIdentity: false, registration };
     }
   }
   const [devices, publicKeys] = await Promise.all([fetchTrustedDevices(syncSettings), fetchDevicePublicKeys(syncSettings)]);
@@ -1615,6 +1623,7 @@ async function ensureCurrentDeviceRegistered() {
   if (!rotationTargetDeviceIds.value.length) {
     rotationTargetDeviceIds.value = trustedDevices.value.filter((device) => !device.current && device.trustStatus === "trusted" && device.hasVerifiedKey).map((device) => device.deviceId);
   }
+  return { degradedIdentity: false, registration };
 }
 
 async function closeIdentityKeyMigration() {
@@ -1631,13 +1640,17 @@ async function repeatDeviceRegistration() {
   isSyncBusy.value = true;
   try {
     try {
-      await ensureCurrentDeviceRegistered();
-      storageMessage.value = "Registrace zarizeni a vlastnictvi identitniho klice byly znovu overeny.";
+      const result = await ensureCurrentDeviceRegistered();
+      storageMessage.value = result?.degradedIdentity
+        ? `Registrace zarizeni byla nouzove obnovena. Identitni klice zustavaji v degradovanem rezimu: ${result.identityError.message}`
+        : "Registrace zarizeni a vlastnictvi identitniho klice byly znovu overeny.";
     } catch (firstError) {
       await resetDeviceExchangeIdentity();
       try {
-        await ensureCurrentDeviceRegistered();
-        storageMessage.value = "Registrace byla opravena novym identitnim klicem pod stavajicim ID zarizeni.";
+        const result = await ensureCurrentDeviceRegistered();
+        storageMessage.value = result?.degradedIdentity
+          ? `Registrace byla nouzove obnovena, ale key-exchange zustava nedostupny: ${result.identityError.message}`
+          : "Registrace byla opravena novym identitnim klicem pod stavajicim ID zarizeni.";
       } catch (retryError) {
         throw new Error(`Prvni pokus: ${firstError.message}; opravny pokus: ${retryError.message}`);
       }
