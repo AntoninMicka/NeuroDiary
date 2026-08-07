@@ -255,7 +255,8 @@ Prakticky postup:
 4. zkopiruj `Client ID`
 5. uloz jej do GitHub `Repository variable` jako `NEURODIARY_GOOGLE_CLIENT_ID`
 
-Pro tlacitko `Odeslat pres Gmail` ve stejnem Google Cloud projektu navic:
+Pro tlacitko `Odeslat pres Gmail` ve stejnem Google Cloud projektu navic (bootstrap pri
+`ENABLE_GMAIL_SEND=true` provede prvni krok automaticky a zbytek vypise v souhrnu):
 
 1. otevri `APIs & Services -> Library` a povol `Gmail API`
 2. v `OAuth consent screen -> Data Access` pridej pouze scope

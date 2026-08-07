@@ -36,6 +36,7 @@ CLOUD_RUN_DEPLOY_FLAGS="${CLOUD_RUN_DEPLOY_FLAGS:-}"
 RUNTIME_SERVICE_ACCOUNT="${RUNTIME_SERVICE_ACCOUNT:-}"
 BILLING_ACCOUNT_ID="${BILLING_ACCOUNT_ID:-}"
 ENABLE_GOOGLE_AUTH="${ENABLE_GOOGLE_AUTH:-true}"
+ENABLE_GMAIL_SEND="${ENABLE_GMAIL_SEND:-true}"
 ENABLE_APPLE_AUTH="${ENABLE_APPLE_AUTH:-false}"
 ENABLE_LEGACY_API_TOKEN="${ENABLE_LEGACY_API_TOKEN:-false}"
 NEURODIARY_SESSION_SECRET="${NEURODIARY_SESSION_SECRET:-}"
@@ -234,6 +235,11 @@ function collect_configuration() {
   prompt_value "NEURODIARY_CORS_ORIGINS" "Frontend URL nebo vice URL oddelenych carkou." "https://app.example.com"
   prompt_choice "DATABASE_MODE" "Zvol, jestli chces jen rychly test nebo produkcnejsi PostgreSQL variantu." "sqlite postgres"
   prompt_choice "ENABLE_GOOGLE_AUTH" "Ma skript pripravit prihlaseni pres Google ID?" "true false"
+  if [[ "${ENABLE_GOOGLE_AUTH}" == "true" ]]; then
+    prompt_choice "ENABLE_GMAIL_SEND" "Ma aplikace odesilat reporty primo pres Gmail API?" "true false"
+  else
+    ENABLE_GMAIL_SEND="false"
+  fi
   prompt_choice "ENABLE_APPLE_AUTH" "Ma skript pripravit prihlaseni pres Apple ID?" "true false"
   prompt_choice "ENABLE_LEGACY_API_TOKEN" "Chces ponechat i legacy bearer token fallback?" "true false"
 
@@ -439,14 +445,21 @@ function ensure_github_repo_access() {
 
 function enable_apis() {
   log_step "Enabling required APIs"
-  gcloud services enable \
-    run.googleapis.com \
-    sqladmin.googleapis.com \
-    artifactregistry.googleapis.com \
-    cloudbuild.googleapis.com \
-    iam.googleapis.com \
-    iamcredentials.googleapis.com \
+  local required_apis=(
+    run.googleapis.com
+    sqladmin.googleapis.com
+    artifactregistry.googleapis.com
+    cloudbuild.googleapis.com
+    iam.googleapis.com
+    iamcredentials.googleapis.com
     sts.googleapis.com
+  )
+
+  if [[ "${ENABLE_GMAIL_SEND}" == "true" ]]; then
+    required_apis+=(gmail.googleapis.com)
+  fi
+
+  gcloud services enable "${required_apis[@]}"
 }
 
 function ensure_artifact_registry() {
@@ -820,6 +833,13 @@ function print_summary() {
   echo "  Keep the secrets file out of git and rotate tokens/passwords if it leaks."
   echo
   echo "Manual follow-up"
+  if [[ "${ENABLE_GMAIL_SEND}" == "true" ]]; then
+    echo "  Gmail API was enabled automatically. Complete its OAuth consent configuration:"
+    echo "    1. Open https://console.cloud.google.com/auth/scopes?project=${GCP_PROJECT_ID}"
+    echo "    2. Add only https://www.googleapis.com/auth/gmail.send"
+    echo "    3. Add test users at https://console.cloud.google.com/auth/audience?project=${GCP_PROJECT_ID}"
+    echo "    4. Before public use, submit the sensitive scope for Google verification"
+  fi
   if [[ "${TRIGGER_GITHUB_WORKFLOW}" == "true" ]]; then
     echo "  GitHub workflow ${GITHUB_WORKFLOW_FILE} was triggered via gh."
   else

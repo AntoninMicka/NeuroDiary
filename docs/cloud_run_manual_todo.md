@@ -102,7 +102,7 @@ Poznamka:
   - produkcni Cloud Run URL
 - [ ] zkopirovat `Client ID`
 - [ ] ulozit do GitHub `Repository variable` jako `NEURODIARY_GOOGLE_CLIENT_ID`
-- [ ] v `APIs & Services -> Library` povolit `Gmail API`
+- [ ] v `APIs & Services -> Library` povolit `Gmail API` (bootstrap automatizuje pri `ENABLE_GMAIL_SEND=true`)
 - [ ] do OAuth consent screen pridat pouze citlivy scope `https://www.googleapis.com/auth/gmail.send`
 - [ ] pred produkcnim pouzitim odeslat OAuth aplikaci k overeni tohoto scope
 
