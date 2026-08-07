@@ -207,6 +207,13 @@ class SecurityAuditListResponseModel(BaseModel):
     events: list[SecurityAuditEventModel]
 
 
+class IdentityKeyMigrationModel(BaseModel):
+    enabled: bool
+    createdAt: datetime
+    disabledAt: datetime | None = None
+    disabledByDeviceId: str | None = None
+
+
 class AuthConfigResponseModel(BaseModel):
     googleEnabled: bool = False
     googleClientId: str = ""

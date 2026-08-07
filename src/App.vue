@@ -74,8 +74,10 @@ import {
   ensureDeviceExchangeKeyPublished,
   fetchDeviceKeyRequests,
   fetchDevicePublicKeys,
+  fetchIdentityKeyMigration,
   fulfillDeviceKeyRequest,
   requestDeviceMasterKey,
+  disableIdentityKeyMigration,
 } from "./services/deviceKeyExchange.js";
 import {
   fetchTrustedDevices,
@@ -209,6 +211,7 @@ const reportSharePassword = ref("");
 const trustedDevices = ref([]);
 const pendingDeviceKeyRequests = ref([]);
 const rotationTargetDeviceIds = ref([]);
+const identityKeyMigration = ref(null);
 const deferredInstallPrompt = ref(null);
 const canInstallApp = ref(false);
 const isInstalledApp = ref(false);
@@ -1585,6 +1588,7 @@ function downloadGeneratedPrivateKey() {
 
 async function ensureCurrentDeviceRegistered() {
   let registration = await registerCurrentDevice(syncSettings);
+  identityKeyMigration.value = await fetchIdentityKeyMigration(syncSettings);
   await ensureDeviceExchangeKeyPublished(syncSettings);
   if (registration.trustStatus === "pending") {
     registration = await registerCurrentDevice(syncSettings);
@@ -1608,6 +1612,16 @@ async function ensureCurrentDeviceRegistered() {
   pendingDeviceKeyRequests.value = hasStoredSyncMasterKey() ? await fetchDeviceKeyRequests(syncSettings) : [];
   if (!rotationTargetDeviceIds.value.length) {
     rotationTargetDeviceIds.value = trustedDevices.value.filter((device) => !device.current && device.trustStatus === "trusted" && device.hasVerifiedKey).map((device) => device.deviceId);
+  }
+}
+
+async function closeIdentityKeyMigration() {
+  if (!globalThis.confirm("Uzavrit migracni rezim? Dalsi zmeny identitnich klicu budou znovu vyzadovat standardni schvaleni zarizeni a rezim nelze z aplikace znovu zapnout.")) return;
+  try {
+    identityKeyMigration.value = await disableIdentityKeyMigration(syncSettings);
+    storageMessage.value = "Migrace identitnich klicu byla uzavrena. Dalsi zarizeni musi projit standardnim schvalenim.";
+  } catch (error) {
+    storageMessage.value = `Migracni rezim se nepodarilo uzavrit: ${error.message}`;
   }
 }
 
@@ -2828,6 +2842,16 @@ function syncFloatingMenuHeight() {
                 </div>
                 <button class="ghost-button" type="button" :disabled="isSyncBusy" @click="refreshTrustedDevices">Obnovit</button>
               </div>
+              <div v-if="identityKeyMigration?.enabled" class="private-key-warning">
+                <strong>Docasna migrace identitnich klicu je aktivni</strong>
+                <span>Registrovaná zarizeni mohou po prokazani vlastnictvi sveho soukromeho klice aktualizovat identitni klic a stat se duveryhodnymi. Cizi deviceId ani klic bez dukazu server neprijme.</span>
+                <button class="ghost-button utility-menu-item-danger" type="button" @click="closeIdentityKeyMigration">
+                  Uzavrit migracni rezim
+                </button>
+              </div>
+              <p v-else-if="identityKeyMigration" class="panel-tip">
+                Migrace identitnich klicu byla uzavrena{{ identityKeyMigration.disabledByDeviceId ? ` zarizenim ${identityKeyMigration.disabledByDeviceId.slice(0, 8)}` : "" }}.
+              </p>
               <ul v-if="trustedDevices.length" class="backup-history-list">
                 <li v-for="device in trustedDevices" :key="device.deviceId">
                   <span>

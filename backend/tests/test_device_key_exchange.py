@@ -61,6 +61,7 @@ def test_first_verified_key_bootstraps_legacy_account_without_keys(monkeypatch, 
     old_device = "device-0000000001"
     bootstrap = "device-0000000002"
     later = "device-0000000003"
+    migrating = "device-0000000004"
     main.register_current_device(DeviceRegistrationRequestModel(deviceId=old_device, name="Stary klient"), user)
     registration = main.register_current_device(DeviceRegistrationRequestModel(deviceId=bootstrap, name="Prvni s klicem"), user)
     assert registration.trustStatus == "pending"
@@ -68,6 +69,13 @@ def test_first_verified_key_bootstraps_legacy_account_without_keys(monkeypatch, 
     register_and_publish(main, user, bootstrap)
     assert main.device_store.is_active(user, bootstrap) is True
     assert any(item["event_type"] == "device_bootstrap_trusted" for item in main.key_exchange_store.list_audit(user))
+
+    register_and_publish(main, user, migrating)
+    assert main.device_store.is_active(user, migrating) is True
+
+    main.disable_identity_key_migration(user, bootstrap)
+    assert main.get_identity_key_migration(user).enabled is False
+    assert main.disable_identity_key_migration(user, bootstrap).enabled is False
 
     register_and_publish(main, user, later)
     assert main.device_store.is_active(user, later) is False
@@ -78,6 +86,7 @@ def test_transfers_are_one_time_and_isolated_by_user(monkeypatch, tmp_path):
     source = "device-0000000001"
     target = "device-0000000002"
     register_and_publish(main, "user-a", source)
+    main.disable_identity_key_migration("user-a", source)
     _, target_key = register_and_publish(main, "user-a", target)
     register_and_publish(main, "user-b", target)
     main.push_state(SyncPushRequestModel(baseRevision=0, payload={"schemaVersion": 1, "algorithm": "AES-GCM", "keyVersion": 4, "iv": "iv", "cipherText": "data"}), "user-a")
@@ -107,6 +116,7 @@ def test_new_device_requests_and_trusted_device_approves_transfer(monkeypatch, t
     source = "device-0000000001"
     target = "device-0000000002"
     register_and_publish(main, user, source)
+    main.disable_identity_key_migration(user, source)
     _, target_key = register_and_publish(main, user, target)
     main.push_state(SyncPushRequestModel(baseRevision=0, payload={"schemaVersion": 1, "algorithm": "AES-GCM", "keyVersion": 3, "iv": "iv", "cipherText": "data"}), user)
 
@@ -145,6 +155,7 @@ def test_pending_device_cannot_sync_and_invalid_rotation_is_not_activated(monkey
     source = "device-0000000001"
     target = "device-0000000002"
     register_and_publish(main, user, source)
+    main.disable_identity_key_migration(user, source)
     _, target_key = register_and_publish(main, user, target)
     with pytest.raises(HTTPException):
         main.verify_trusted_device(user, target)

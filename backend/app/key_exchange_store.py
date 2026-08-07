@@ -65,6 +65,10 @@ class SqliteKeyExchangeStore:
                   event_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, device_id TEXT NOT NULL,
                   event_type TEXT NOT NULL, details_json TEXT NOT NULL, created_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS identity_key_migrations (
+                  user_id TEXT PRIMARY KEY, enabled INTEGER NOT NULL, created_at TEXT NOT NULL,
+                  disabled_at TEXT, disabled_by_device_id TEXT
+                );
             """)
             connection.commit()
 
@@ -209,6 +213,27 @@ class SqliteKeyExchangeStore:
                 FROM security_audit_events WHERE user_id = ? ORDER BY created_at DESC LIMIT ?
             """, (user_id, limit)).fetchall()]
 
+    def get_migration(self, user_id):
+        now = datetime.now(UTC)
+        with self._connect() as connection:
+            row = connection.execute("SELECT * FROM identity_key_migrations WHERE user_id = ?", (user_id,)).fetchone()
+            if row is None:
+                connection.execute("INSERT INTO identity_key_migrations VALUES (?, 1, ?, NULL, NULL)", (user_id, now.isoformat()))
+                connection.commit()
+                return {"enabled": True, "created_at": now, "disabled_at": None, "disabled_by_device_id": None}
+        return {"enabled": bool(row["enabled"]), "created_at": row["created_at"], "disabled_at": row["disabled_at"], "disabled_by_device_id": row["disabled_by_device_id"]}
+
+    def disable_migration(self, user_id, device_id) -> bool:
+        self.get_migration(user_id)
+        now = datetime.now(UTC)
+        with self._connect() as connection:
+            cursor = connection.execute("""
+                UPDATE identity_key_migrations SET enabled = 0, disabled_at = ?, disabled_by_device_id = ?
+                WHERE user_id = ? AND enabled = 1
+            """, (now.isoformat(), device_id, user_id))
+            connection.commit()
+            return cursor.rowcount == 1
+
 
 class PostgresKeyExchangeStore(SqliteKeyExchangeStore):
     def __init__(self, database_url: str) -> None:
@@ -240,6 +265,9 @@ class PostgresKeyExchangeStore(SqliteKeyExchangeStore):
                 CREATE TABLE IF NOT EXISTS security_audit_events (
                   event_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, device_id TEXT NOT NULL,
                   event_type TEXT NOT NULL, details_json TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL);
+                CREATE TABLE IF NOT EXISTS identity_key_migrations (
+                  user_id TEXT PRIMARY KEY, enabled INTEGER NOT NULL, created_at TIMESTAMPTZ NOT NULL,
+                  disabled_at TIMESTAMPTZ, disabled_by_device_id TEXT);
             """)
 
     def put_key_with_bootstrap(self, user_id, device_id, public_key_jwk, fingerprint):

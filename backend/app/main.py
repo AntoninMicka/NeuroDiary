@@ -51,6 +51,7 @@ from .models import (
     SecurityAuditEventModel,
     SecurityAuditListResponseModel,
     SyncRotationRequestModel,
+    IdentityKeyMigrationModel,
 )
 from .device_store import create_device_store
 from .key_exchange_store import create_key_exchange_store
@@ -468,12 +469,35 @@ def publish_current_device_key(
     if not key_exchange_store.consume_challenge(payload.challengeId, user_id, payload.deviceId, jwk_json, secret_hash):
         raise HTTPException(status_code=403, detail="Device key ownership proof is invalid or expired.")
     fingerprint = hashlib.sha256(jwk_json.encode()).hexdigest()
+    migration_enabled = key_exchange_store.get_migration(user_id)["enabled"]
     record, is_bootstrap_device = key_exchange_store.put_key_with_bootstrap(user_id, payload.deviceId, jwk_json, fingerprint)
-    if is_bootstrap_device:
+    if is_bootstrap_device or migration_enabled:
         device_store.trust(user_id, payload.deviceId)
-        audit_security(user_id, payload.deviceId, "device_bootstrap_trusted", fingerprint=fingerprint)
+        audit_security(user_id, payload.deviceId, "device_bootstrap_trusted" if is_bootstrap_device else "device_migration_trusted", fingerprint=fingerprint)
     audit_security(user_id, payload.deviceId, "device_key_verified", fingerprint=fingerprint)
     return DevicePublicKeyModel(deviceId=record.device_id, publicKeyJwk=json.loads(record.public_key_jwk), fingerprint=record.fingerprint, verifiedAt=record.verified_at)
+
+
+def migration_response(record) -> IdentityKeyMigrationModel:
+    parse = lambda value: datetime.fromisoformat(value) if isinstance(value, str) else value
+    return IdentityKeyMigrationModel(enabled=record["enabled"], createdAt=parse(record["created_at"]), disabledAt=parse(record["disabled_at"]) if record["disabled_at"] else None, disabledByDeviceId=record["disabled_by_device_id"])
+
+
+@app.get("/api/v1/devices/key-migration", response_model=IdentityKeyMigrationModel)
+def get_identity_key_migration(
+    user_id: Annotated[str, Depends(verify_registered_device)],
+) -> IdentityKeyMigrationModel:
+    return migration_response(key_exchange_store.get_migration(user_id))
+
+
+@app.post("/api/v1/devices/key-migration/disable", response_model=IdentityKeyMigrationModel)
+def disable_identity_key_migration(
+    user_id: Annotated[str, Depends(verify_trusted_device)],
+    x_device_id: Annotated[str | None, Header(alias="X-Device-ID")] = None,
+) -> IdentityKeyMigrationModel:
+    if key_exchange_store.disable_migration(user_id, x_device_id):
+        audit_security(user_id, x_device_id, "identity_key_migration_disabled")
+    return migration_response(key_exchange_store.get_migration(user_id))
 
 
 @app.get("/api/v1/devices/keys", response_model=DevicePublicKeyListResponseModel)

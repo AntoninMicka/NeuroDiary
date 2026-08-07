@@ -118,6 +118,14 @@ export async function fetchDevicePublicKeys(settings) {
   return (await request(settings, "/api/v1/devices/keys")).keys ?? [];
 }
 
+export function fetchIdentityKeyMigration(settings) {
+  return request(settings, "/api/v1/devices/key-migration");
+}
+
+export function disableIdentityKeyMigration(settings) {
+  return request(settings, "/api/v1/devices/key-migration/disable", { method: "POST" });
+}
+
 export async function encryptMasterKeyForDevice(exportedMasterKey, target) {
   const encrypted = await cryptoApi().subtle.encrypt(
     { name: "RSA-OAEP" }, await importPublicKey(target.publicKeyJwk), ENCODER.encode(exportedMasterKey),
