@@ -214,6 +214,7 @@ const trustedDevices = ref([]);
 const pendingDeviceKeyRequests = ref([]);
 const rotationTargetDeviceIds = ref([]);
 const identityKeyMigration = ref(null);
+const identityKeyError = ref("");
 const deferredInstallPrompt = ref(null);
 const canInstallApp = ref(false);
 const isInstalledApp = ref(false);
@@ -1593,10 +1594,12 @@ async function ensureCurrentDeviceRegistered() {
   try {
     identityKeyMigration.value = await fetchIdentityKeyMigration(syncSettings);
     await ensureDeviceExchangeKeyPublished(syncSettings);
+    identityKeyError.value = "";
   } catch (identityError) {
     if (registration.trustStatus !== "trusted") throw identityError;
     trustedDevices.value = (await fetchTrustedDevices(syncSettings)).map((device) => ({ ...device, hasVerifiedKey: false }));
     pendingDeviceKeyRequests.value = [];
+    identityKeyError.value = identityError.message;
     storageMessage.value = `Zarizeni je nouzove duveryhodne, ale identitni klice jsou docasne nedostupne: ${identityError.message}`;
     return { degradedIdentity: true, registration, identityError };
   }
@@ -2913,6 +2916,11 @@ function syncFloatingMenuHeight() {
                 <button class="ghost-button utility-menu-item-danger" type="button" @click="closeIdentityKeyMigration">
                   Uzavrit migracni rezim
                 </button>
+              </div>
+              <div v-if="identityKeyError" class="private-key-warning">
+                <strong>Identitni klic zarizeni neni dostupny</strong>
+                <span>{{ identityKeyError }}</span>
+                <span>Nouzova registrace je aktivni, ale rotace a predavani klicu tomuto zarizeni zatim nejsou bezpecne dostupne.</span>
               </div>
               <p v-else-if="identityKeyMigration" class="panel-tip">
                 Migrace identitnich klicu byla uzavrena{{ identityKeyMigration.disabledByDeviceId ? ` zarizenim ${identityKeyMigration.disabledByDeviceId.slice(0, 8)}` : "" }}.

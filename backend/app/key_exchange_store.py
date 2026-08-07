@@ -276,6 +276,11 @@ class PostgresKeyExchangeStore(SqliteKeyExchangeStore):
                   emergency_registration_open INTEGER NOT NULL DEFAULT 1);
             """)
             connection.execute("ALTER TABLE identity_key_migrations ADD COLUMN IF NOT EXISTS emergency_registration_open INTEGER NOT NULL DEFAULT 1")
+            # Early key-exchange builds used JSONB. Canonical key ownership proofs compare
+            # the exact serialized JWK, so normalize legacy deployments to TEXT.
+            connection.execute("ALTER TABLE device_public_keys ALTER COLUMN public_key_jwk TYPE TEXT USING public_key_jwk::text")
+            connection.execute("ALTER TABLE device_key_challenges ALTER COLUMN public_key_jwk TYPE TEXT USING public_key_jwk::text")
+            connection.execute("ALTER TABLE device_key_transfers ALTER COLUMN envelope_json TYPE TEXT USING envelope_json::text")
 
     def get_migration(self, user_id):
         # Keep this path self-healing because registration is the recovery mechanism
