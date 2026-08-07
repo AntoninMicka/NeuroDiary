@@ -1630,10 +1630,20 @@ async function closeIdentityKeyMigration() {
 async function repeatDeviceRegistration() {
   isSyncBusy.value = true;
   try {
-    await ensureCurrentDeviceRegistered();
-    storageMessage.value = "Registrace zarizeni a vlastnictvi identitniho klice byly znovu overeny.";
+    try {
+      await ensureCurrentDeviceRegistered();
+      storageMessage.value = "Registrace zarizeni a vlastnictvi identitniho klice byly znovu overeny.";
+    } catch (firstError) {
+      await resetDeviceExchangeIdentity();
+      try {
+        await ensureCurrentDeviceRegistered();
+        storageMessage.value = "Registrace byla opravena novym identitnim klicem pod stavajicim ID zarizeni.";
+      } catch (retryError) {
+        throw new Error(`Prvni pokus: ${firstError.message}; opravny pokus: ${retryError.message}`);
+      }
+    }
   } catch (error) {
-    storageMessage.value = `Opakovani registrace selhalo: ${error.message}. Pokud bylo zarizeni odvolano, registrujte jej jako nove.`;
+    storageMessage.value = `Opakovani registrace selhalo: ${error.message}. Zkuste akci Registrovat jako nove zarizeni.`;
   } finally {
     isSyncBusy.value = false;
   }
