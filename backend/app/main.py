@@ -494,6 +494,25 @@ def publish_current_device_key(
     return DevicePublicKeyModel(deviceId=record.device_id, publicKeyJwk=json.loads(record.public_key_jwk), fingerprint=record.fingerprint, verifiedAt=record.verified_at)
 
 
+@app.put("/api/v1/devices/current/key-emergency", response_model=DevicePublicKeyModel)
+def publish_current_device_key_emergency(
+    payload: DeviceKeyChallengeRequestModel,
+    user_id: Annotated[str, Depends(verify_registered_device)],
+    x_device_id: Annotated[str | None, Header(alias="X-Device-ID")] = None,
+) -> DevicePublicKeyModel:
+    if x_device_id != payload.deviceId:
+        raise HTTPException(status_code=403, detail="A device may only publish a key for its own device ID.")
+    if not key_exchange_store.get_migration(user_id)["enabled"]:
+        raise HTTPException(status_code=403, detail="Emergency identity-key migration is closed.")
+    validate_device_public_key(payload.publicKeyJwk)
+    jwk_json = canonical_jwk(payload.publicKeyJwk)
+    fingerprint = hashlib.sha256(jwk_json.encode()).hexdigest()
+    record, _ = key_exchange_store.put_key_with_bootstrap(user_id, payload.deviceId, jwk_json, fingerprint)
+    device_store.trust(user_id, payload.deviceId)
+    audit_security(user_id, payload.deviceId, "emergency_device_key_accepted", fingerprint=fingerprint)
+    return DevicePublicKeyModel(deviceId=record.device_id, publicKeyJwk=json.loads(record.public_key_jwk), fingerprint=record.fingerprint, verifiedAt=record.verified_at)
+
+
 def migration_response(record) -> IdentityKeyMigrationModel:
     parse = lambda value: datetime.fromisoformat(value) if isinstance(value, str) else value
     return IdentityKeyMigrationModel(enabled=record["enabled"], createdAt=parse(record["created_at"]), disabledAt=parse(record["disabled_at"]) if record["disabled_at"] else None, disabledByDeviceId=record["disabled_by_device_id"])

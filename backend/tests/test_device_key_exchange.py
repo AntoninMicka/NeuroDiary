@@ -76,6 +76,27 @@ def test_emergency_registration_accepts_and_can_reactivate_until_client_closes_i
     assert error.value.status_code == 403
 
 
+def test_emergency_key_publish_bypasses_broken_challenge_only_until_migration_closes(monkeypatch, tmp_path):
+    main = load_app(monkeypatch, tmp_path)
+    user = "recovery-user"
+    device = "device-0000000001"
+    main.register_current_device(DeviceRegistrationRequestModel(deviceId=device, name="Recovery"), user)
+    _, jwk = key_pair()
+    published = main.publish_current_device_key_emergency(
+        DeviceKeyChallengeRequestModel(deviceId=device, publicKeyJwk=jwk), user, device,
+    )
+    assert published.deviceId == device
+    assert main.key_exchange_store.get_key(user, device).fingerprint == published.fingerprint
+
+    main.disable_identity_key_migration(user, device)
+    _, replacement_jwk = key_pair()
+    with pytest.raises(HTTPException) as error:
+        main.publish_current_device_key_emergency(
+            DeviceKeyChallengeRequestModel(deviceId=device, publicKeyJwk=replacement_jwk), user, device,
+        )
+    assert error.value.status_code == 403
+
+
 def test_first_verified_key_bootstraps_legacy_account_without_keys(monkeypatch, tmp_path):
     main = load_app(monkeypatch, tmp_path)
     user = "legacy-user"

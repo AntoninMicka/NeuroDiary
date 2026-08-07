@@ -119,9 +119,18 @@ async function importPublicKey(jwk) {
 export async function ensureDeviceExchangeKeyPublished(settings) {
   const pair = await loadOrCreatePair();
   const deviceId = getCurrentDeviceId();
-  const challenge = await request(settings, "/api/v1/devices/key-challenge", {
-    method: "POST", body: JSON.stringify({ deviceId, publicKeyJwk: pair.publicKeyJwk }),
-  });
+  let challenge;
+  try {
+    challenge = await request(settings, "/api/v1/devices/key-challenge", {
+      method: "POST", body: JSON.stringify({ deviceId, publicKeyJwk: pair.publicKeyJwk }),
+    });
+  } catch (challengeError) {
+    const migration = await fetchIdentityKeyMigration(settings);
+    if (!migration.enabled) throw challengeError;
+    return request(settings, "/api/v1/devices/current/key-emergency", {
+      method: "PUT", body: JSON.stringify({ deviceId, publicKeyJwk: pair.publicKeyJwk }),
+    });
+  }
   const secret = await cryptoApi().subtle.decrypt({ name: "RSA-OAEP" }, pair.privateKey, base64ToBytes(challenge.encryptedChallenge));
   return request(settings, "/api/v1/devices/current/key", {
     method: "PUT",
