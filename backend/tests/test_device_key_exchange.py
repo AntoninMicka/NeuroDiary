@@ -1,5 +1,6 @@
 import base64
 import importlib
+from datetime import UTC, datetime
 
 import pytest
 from cryptography.hazmat.primitives import hashes
@@ -16,6 +17,13 @@ from backend.app.models import (
     SyncPushRequestModel,
     SyncRotationRequestModel,
 )
+from backend.app.key_exchange_store import _as_datetime
+
+
+def test_key_exchange_timestamps_accept_sqlite_text_and_postgres_datetime():
+    value = datetime.now(UTC)
+    assert _as_datetime(value) is value
+    assert _as_datetime(value.isoformat()) == value
 
 
 def load_app(monkeypatch, tmp_path):

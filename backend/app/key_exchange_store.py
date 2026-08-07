@@ -7,6 +7,10 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 
+def _as_datetime(value) -> datetime:
+    return value if isinstance(value, datetime) else datetime.fromisoformat(value)
+
+
 @dataclass
 class DeviceKeyRecord:
     device_id: str
@@ -91,7 +95,7 @@ class SqliteKeyExchangeStore:
                 "SELECT * FROM device_key_challenges WHERE challenge_id = ? AND user_id = ? AND device_id = ?",
                 (challenge_id, user_id, device_id),
             ).fetchone()
-            valid = bool(row and datetime.fromisoformat(row["expires_at"]) > now
+            valid = bool(row and _as_datetime(row["expires_at"]) > now
                          and row["public_key_jwk"] == public_key_jwk and row["secret_hash"] == secret_hash)
             connection.execute("DELETE FROM device_key_challenges WHERE challenge_id = ?", (challenge_id,))
             connection.commit()
@@ -134,7 +138,7 @@ class SqliteKeyExchangeStore:
                 "SELECT device_id, public_key_jwk, fingerprint, verified_at FROM device_public_keys WHERE user_id = ?",
                 (user_id,),
             ).fetchall()
-        return [DeviceKeyRecord(row["device_id"], row["public_key_jwk"], row["fingerprint"], datetime.fromisoformat(row["verified_at"])) for row in rows]
+        return [DeviceKeyRecord(row["device_id"], row["public_key_jwk"], row["fingerprint"], _as_datetime(row["verified_at"])) for row in rows]
 
     def get_key(self, user_id, device_id):
         return next((item for item in self.list_keys(user_id) if item.device_id == device_id), None)
@@ -187,7 +191,7 @@ class SqliteKeyExchangeStore:
             """, (user_id, target_device_id, now.isoformat())).fetchone()
         if not row:
             return None
-        return TransferRecord(row["transfer_id"], row["source_device_id"], row["target_device_id"], row["key_version"], row["envelope_json"], datetime.fromisoformat(row["created_at"]), datetime.fromisoformat(row["expires_at"]))
+        return TransferRecord(row["transfer_id"], row["source_device_id"], row["target_device_id"], row["key_version"], row["envelope_json"], _as_datetime(row["created_at"]), _as_datetime(row["expires_at"]))
 
     def confirm_transfer(self, user_id, target_device_id, transfer_id) -> bool:
         now = datetime.now(UTC)
