@@ -89,9 +89,8 @@ import {
 } from "./services/trustedDevices.js";
 import {
   generateReportPassword,
-  loadDoctorContact,
-  saveDoctorContact,
   shareEncryptedReport,
+  sharePlainReport,
 } from "./services/secureReportShare.js";
 import { generateRecoverySecret } from "./services/e2eCrypto.js";
 import {
@@ -204,7 +203,7 @@ const reportOptions = reactive({
   wearingOff: true,
   weeklyCharts: true,
 });
-const doctorContact = reactive(loadDoctorContact());
+const doctorContact = reactive({ name: "", email: "" });
 const contacts = ref(loadContacts());
 const selectedContactId = ref(contacts.value[0]?.id ?? "");
 const contactEditor = reactive({ id: "", name: "", email: "", publicKeyPem: "" });
@@ -315,8 +314,9 @@ const PANEL_ITEMS = [
   { id: "sekce-leky", label: "Lecba" },
   { id: "sekce-souhrn", label: "Souhrn" },
   { id: "sekce-manualy", label: "Manualy" },
+  { id: "sekce-kontakty", label: "Kontakty" },
 ];
-const PRIMARY_PANEL_ITEMS = PANEL_ITEMS.filter((item) => item.id !== "sekce-matice");
+const PRIMARY_PANEL_ITEMS = PANEL_ITEMS.filter((item) => !["sekce-matice", "sekce-kontakty"].includes(item.id));
 const DATE_NAV_PANEL_IDS = new Set([
   "sekce-udaje",
   "sekce-matice",
@@ -1522,11 +1522,20 @@ function buildCurrentReportOptions() {
 async function shareDoctorReportSecurely() {
   try {
     const selectedContact = contacts.value.find((contact) => contact.id === selectedContactId.value);
-    const targetContact = selectedContact ?? saveDoctorContact(doctorContact);
+    if (!selectedContact) {
+      const result = await sharePlainReport({
+        reportOptions: buildCurrentReportOptions(),
+        contact: doctorContact,
+      });
+      reportSharePassword.value = "";
+      const delivery = result.method === "native-share" ? "predano systemovemu sdileni" : "stazeno a e-mail pripraven";
+      storageMessage.value = `Nesifrovane PDF bylo ${delivery}.`;
+      return;
+    }
     const password = generateReportPassword();
     const result = await shareEncryptedReport({
       reportOptions: buildCurrentReportOptions(),
-      contact: targetContact,
+      contact: selectedContact,
       password,
     });
     reportSharePassword.value = result.password;
@@ -1536,7 +1545,7 @@ async function shareDoctorReportSecurely() {
       : `Sifrovana priloha byla ${delivery}. Heslo predejte jinym kanalem.`;
   } catch (error) {
     if (error?.name === "AbortError") return;
-    storageMessage.value = `Sifrovany report se nepodarilo pripravit: ${error.message}`;
+    storageMessage.value = `Report se nepodarilo pripravit: ${error.message}`;
   }
 }
 
@@ -2507,44 +2516,16 @@ function syncFloatingMenuHeight() {
                     Tisknout tydenni grafy
                   </label>
                   <fieldset class="contact-keyring">
-                    <legend>Kontakt a sifrovaci klic</legend>
+                    <legend>Prijemce reportu</legend>
                     <label>
-                      <span>Prijemce reportu</span>
-                      <select v-model="selectedContactId">
-                        <option value="">Jednorazovy kontakt bez klice</option>
+                      <span>Ulozeny kontakt</span>
+                      <select v-model="selectedContactId" @change="reportSharePassword = ''">
+                        <option value="">Jednorazove zadani</option>
                         <option v-for="contact in contacts" :key="contact.id" :value="contact.id">
                           {{ contact.name }} · {{ contact.keyFingerprint ? "verejny klic" : "heslo" }}
                         </option>
                       </select>
                     </label>
-                    <div class="contact-actions">
-                      <button class="ghost-button" type="button" @click="editContact(contacts.find((item) => item.id === selectedContactId))">
-                        Upravit vybrany
-                      </button>
-                      <button class="ghost-button" type="button" @click="editContact()">Novy kontakt</button>
-                    </div>
-                    <label>
-                      <span>Jmeno</span>
-                      <input v-model="contactEditor.name" type="text" maxlength="120" placeholder="MUDr. Novak" />
-                    </label>
-                    <label>
-                      <span>E-mail</span>
-                      <input v-model="contactEditor.email" type="email" maxlength="254" placeholder="lekar@example.cz" />
-                    </label>
-                    <label>
-                      <span>Verejny klic prijemce (PEM)</span>
-                      <textarea v-model="contactEditor.publicKeyPem" rows="4" placeholder="-----BEGIN PUBLIC KEY-----"></textarea>
-                    </label>
-                    <div class="contact-actions">
-                      <button class="ghost-button" type="button" @click="storeContact">Ulozit kontakt</button>
-                      <button class="ghost-button" type="button" @click="createKeysForContact">Vygenerovat klice</button>
-                      <button v-if="contactEditor.id" class="ghost-button utility-menu-item-danger" type="button" @click="removeContact">Smazat</button>
-                    </div>
-                    <div v-if="generatedContactPrivateKey" class="private-key-warning">
-                      <strong>Soukromy klic se neuklada.</strong>
-                      <span>Stahnete jej nyni a predejte prijemci bezpecnym kanalem. Po zavreni panelu jej aplikace neobnovi.</span>
-                      <button class="ghost-button" type="button" @click="downloadGeneratedPrivateKey">Stahnout soukromy klic</button>
-                    </div>
                   </fieldset>
                   <template v-if="!selectedContactId">
                     <label>
@@ -2555,6 +2536,7 @@ function syncFloatingMenuHeight() {
                       <span>E-mail jednorazoveho kontaktu</span>
                       <input v-model="doctorContact.email" type="email" maxlength="254" />
                     </label>
+                    <p class="panel-tip">Jednorazove zadany kontakt se neuklada a report se odesila jako nesifrovane PDF.</p>
                   </template>
                   <button class="primary-button" type="button" @click="printDoctorReport">
                     Otevrit tisk
@@ -2563,7 +2545,7 @@ function syncFloatingMenuHeight() {
                     Ulozit PDF
                   </button>
                   <button class="ghost-button" type="button" @click="shareDoctorReportSecurely">
-                    Sdilet sifrovane
+                    {{ selectedContactId ? "Sdilet sifrovane" : "Sdilet PDF" }}
                   </button>
                   <div v-if="reportSharePassword" class="report-share-password">
                     <strong>Heslo k zalozni ZIP priloze</strong>
@@ -2599,6 +2581,9 @@ function syncFloatingMenuHeight() {
                 </button>
                 <button class="utility-menu-item" type="button" role="menuitem" @click="handleUtilityAction(() => selectPanel('sekce-trendy'))">
                   Trendy
+                </button>
+                <button class="utility-menu-item" type="button" role="menuitem" @click="handleUtilityAction(() => selectPanel('sekce-kontakty'))">
+                  Kontakty
                 </button>
                 <button class="utility-menu-item" type="button" role="menuitem" @click="openBootstrapLogPanel">
                   Diagnostika startu
@@ -3003,6 +2988,58 @@ function syncFloatingMenuHeight() {
               <span>Bez tohoto tajemstvi nepujde na novem zarizeni data desifrovat.</span>
             </div>
           </div>
+        </section>
+
+        <section v-else-if="activePanelId === 'sekce-kontakty'" class="panel panel-wide layout-profile">
+          <div class="panel-heading">
+            <div>
+              <p class="section-kicker">Kontakty</p>
+              <h2>Prijemci reportu</h2>
+            </div>
+            <button class="ghost-button" type="button" @click="editContact()">Novy kontakt</button>
+          </div>
+          <p class="panel-tip">Ulozene kontakty muzete pri sdileni reportu vybrat bez opakovaneho zadavani udaju.</p>
+
+          <div v-if="contacts.length" class="backup-history-list contact-list">
+            <button
+              v-for="contact in contacts"
+              :key="contact.id"
+              class="ghost-button contact-list-item"
+              type="button"
+              :aria-current="contactEditor.id === contact.id ? 'true' : undefined"
+              @click="editContact(contact)"
+            >
+              <strong>{{ contact.name }}</strong>
+              <span>{{ contact.email }} · {{ contact.keyFingerprint ? "verejny klic" : "heslove sifrovani" }}</span>
+            </button>
+          </div>
+          <p v-else class="panel-tip">Zatim nemate ulozeny zadny kontakt.</p>
+
+          <fieldset class="contact-keyring contact-editor">
+            <legend>{{ contactEditor.id ? "Upravit kontakt" : "Novy kontakt" }}</legend>
+            <label>
+              <span>Jmeno</span>
+              <input v-model="contactEditor.name" type="text" maxlength="120" placeholder="MUDr. Novak" />
+            </label>
+            <label>
+              <span>E-mail</span>
+              <input v-model="contactEditor.email" type="email" maxlength="254" placeholder="lekar@example.cz" />
+            </label>
+            <label>
+              <span>Verejny klic prijemce (PEM)</span>
+              <textarea v-model="contactEditor.publicKeyPem" rows="6" placeholder="-----BEGIN PUBLIC KEY-----"></textarea>
+            </label>
+            <div class="contact-actions">
+              <button class="primary-button" type="button" @click="storeContact">Ulozit kontakt</button>
+              <button class="ghost-button" type="button" @click="createKeysForContact">Vygenerovat klice</button>
+              <button v-if="contactEditor.id" class="ghost-button utility-menu-item-danger" type="button" @click="removeContact">Smazat</button>
+            </div>
+            <div v-if="generatedContactPrivateKey" class="private-key-warning">
+              <strong>Soukromy klic se neuklada.</strong>
+              <span>Stahnete jej nyni a predejte prijemci bezpecnym kanalem. Po opusteni editoru jej aplikace neobnovi.</span>
+              <button class="ghost-button" type="button" @click="downloadGeneratedPrivateKey">Stahnout soukromy klic</button>
+            </div>
+          </fieldset>
         </section>
 
         <HourMatrix

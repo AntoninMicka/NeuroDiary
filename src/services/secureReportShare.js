@@ -41,6 +41,39 @@ export async function createEncryptedReportArchive(reportOptions, password = gen
   return { blob, password };
 }
 
+export async function sharePlainReport({ reportOptions, contact }) {
+  const safeContact = {
+    name: String(contact?.name ?? "").trim().slice(0, 120),
+    email: String(contact?.email ?? "").trim().slice(0, 254),
+  };
+  if (!safeContact.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(safeContact.email)) {
+    throw new Error("Doplnte platny e-mail lekare.");
+  }
+
+  const blob = await createDoctorReportPdfBlob(reportOptions);
+  const file = new File([blob], "neurodiary-report.pdf", { type: "application/pdf" });
+  const shareData = {
+    files: [file],
+    title: "NeuroDiary report",
+    text: `Pro ${safeContact.name || safeContact.email}.`,
+  };
+  if (globalThis.navigator?.share && globalThis.navigator.canShare?.({ files: [file] })) {
+    await globalThis.navigator.share(shareData);
+    return { method: "native-share", encryption: "none" };
+  }
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = file.name;
+  link.click();
+  URL.revokeObjectURL(url);
+  const subject = encodeURIComponent("NeuroDiary report");
+  const body = encodeURIComponent("V priloze posilam NeuroDiary report. PDF bylo stazeno a je potreba ho k e-mailu pridat.");
+  globalThis.location.href = `mailto:${encodeURIComponent(safeContact.email)}?subject=${subject}&body=${body}`;
+  return { method: "download-and-email", encryption: "none" };
+}
+
 export async function shareEncryptedReport({ reportOptions, contact, password }) {
   const safeContact = contact?.id ? contact : saveDoctorContact(contact);
   if (!safeContact.email) throw new Error("Doplnte e-mail lekare.");

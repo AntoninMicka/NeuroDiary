@@ -2101,6 +2101,27 @@ textarea {
   gap: 0.45rem;
 }
 
+.contact-list {
+  display: grid;
+  gap: 0.65rem;
+  margin: 1rem 0;
+}
+
+.contact-list-item {
+  align-items: flex-start;
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+}
+
+.contact-list-item[aria-current="true"] {
+  border-color: var(--accent, #4f6f52);
+}
+
+.contact-editor {
+  margin-top: 1rem;
+}
+
 .private-key-warning {
   display: grid;
   gap: 0.4rem;
