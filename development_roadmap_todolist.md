@@ -542,6 +542,72 @@ Poznámka:
 
 > Ukládání hesel pacientů v přímé podobě není vhodné. Pokud bude tento scénář dále rozpracován, je potřeba navrhnout bezpečnější provozní model pro práci se šifrovanými reporty.
 
+### [pending] 6.12 Online administrátorská konzole a řízení provozu
+
+Konzole bude dostupná výhradně online proti aktuálnímu stavu serveru. Nebude mít offline
+režim, lokální kopii administračních dat ani možnost provádět změny z odložené fronty.
+Nedostupný server proto znamená nedostupnou správu, nikoli práci nad zastaralými daty.
+
+Role a oprávnění:
+
+* `super_admin` – správa administrátorů a rolí, bezpečnostních pravidel a všech provozních funkcí
+* `security_admin` – správa účtů, relací, zařízení, identitních klíčů a nouzové obnovy
+* `operations_admin` – monitoring, databázové migrace, zálohy, fronty, úlohy a údržba serveru
+* `support` – omezená diagnostika účtu a zařízení a vedení uživatele procesem obnovy
+* `auditor` – pouze čtení a export auditních a provozních záznamů
+* oprávnění kontrolovat na serveru pro každou operaci; skrytí ovládacího prvku v UI není autorizace
+* dodržet princip nejnižších oprávnění a umožnit jednomu správci přidělit více rolí
+* běžný uživatel aplikace nemá do konzole přístup, pokud mu nebyla výslovně přidělena administrační role
+
+První administrátor:
+
+* pokud v systému dosud neexistuje žádný administrátor, první úspěšně založený a ověřený uživatel se atomicky stane `super_admin`
+* rozhodnutí musí být chráněné databázovou transakcí nebo zámkem, aby při souběžné registraci nemohli vzniknout dva první administrátoři
+* po vzniku prvního administrátora se tato automatika trvale uzavře; další administrátory jmenuje pouze oprávněný administrátor
+* bootstrap i každá změna rolí se zapíší do neměnného auditu a odešle se bezpečnostní upozornění
+* první administrátor musí při prvním vstupu nastavit vícefaktorové ověření a konzole upozorní, dokud není určen alespoň druhý administrátor
+
+Selektivní nouzový režim obnovy:
+
+* `super_admin` nebo `security_admin` smí režim zapnout pouze pro konkrétního uživatele a zvolená zařízení, nikdy implicitně pro celý server
+* aktivace vyžaduje čerstvé vícefaktorové ověření, zdůvodnění, rozsah, krátkou expiraci a potvrzení rizika
+* režim může dočasně povolit registraci zařízení nebo výměnu jeho identitního klíče v přesně vymezeném recovery toku
+* oprávnění je jednorázové nebo časově omezené, po úspěchu či expiraci se automaticky uzavře a uživatel je může ukončit i dříve
+* uživatel obdrží upozornění o aktivaci, využití, expiraci i ručním ukončení režimu
+* audit zaznamená iniciátora, cílový účet a zařízení, důvod, rozsah, časy a výsledek bez soukromých klíčů nebo zdravotních dat
+* nouzový režim nesmí administrátorovi zpřístupnit recovery secret, soukromý klíč, dešifrovací klíč ani otevřená zdravotní data
+* globální nouzový režim případně navrhnout jako oddělenou krizovou funkci se schválením druhým administrátorem, nikoli jako běžný ovládací prvek
+
+Kompletní správa a kontrola serveru:
+
+* přehled verze a revize služby, dostupnosti, readiness, databáze, úložiště a závislostí
+* monitoring chybovosti, latencí, kapacity, synchronizací, front, odložených úloh a push notifikací
+* stav databázových migrací, záloh, ověřování obnovitelnosti a plánovaných retenčních úloh
+* správa uživatelů, rolí, aktivních relací a registrovaných zařízení včetně revokace a bezpečného zablokování účtu
+* stav registrací zařízení, identity-key migrací, rotací a čekajících předání klíčů bez zobrazení jejich tajného obsahu
+* správa provozních přepínačů, maintenance režimu a serverových capability flags s historií změn
+* bezpečné spouštění, opakování a rušení servisních úloh, včetně přehledu dead-letter fronty
+* přehled konfigurace pouze v bezpečné podobě; u secrets zobrazit nanejvýš existenci, verzi a datum rotace, nikdy hodnotu
+* filtrování a export neměnného auditního logu, korelace přes request ID a podklady pro incident response
+* administrace nesmí poskytovat univerzální přístup k E2E šifrovaným payloadům ani možnost obejít kryptografickou izolaci uživatelů
+
+Bezpečnost konzole:
+
+* oddělené administrační API a routy s vlastním autorizačním middlewarem a přísnějšími limity
+* povinné MFA, podpora WebAuthn a nové ověření před změnou rolí, nouzovým režimem a destruktivní operací
+* ochrana proti CSRF, rate limiting, bezpečné cookies, krátká životnost relace a možnost volitelného IP allowlistu
+* destruktivní a hromadné operace mají náhled dopadu, explicitní potvrzení a tam, kde je to možné, vratný průběh
+* pro nejrizikovější globální operace zavést schválení druhým administrátorem
+
+Akceptační testy:
+
+* souběžné založení prvních účtů vytvoří právě jednoho prvního administrátora
+* matice rolí ověří povolené i zakázané API operace včetně pokusů o přímé volání bez UI
+* selektivní nouzový režim nelze použít pro jiného uživatele nebo zařízení a po expiraci již neplatí
+* administrátor ani v nouzovém režimu nedokáže získat recovery secret, soukromé klíče ani dešifrovaná zdravotní data
+* každá citlivá změna má dohledatelný auditní záznam a bezpečnostní upozornění
+* konzole bez spojení se serverem odmítne přihlášení i změny a nezobrazí dříve uložená administrační data
+
 ---
 
 # 🎯 Milník M3 – Bezpečný cloud
