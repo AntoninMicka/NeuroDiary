@@ -2,6 +2,7 @@ import { prepareStateForSync } from "../domain/diary.js";
 import { decryptDiaryState, encryptDiaryState, exportAccountMasterKey, generateAccountMasterKey, generateRecoverySecret, importAccountMasterKey, unwrapAccountMasterKey, wrapAccountMasterKey } from "./e2eCrypto.js";
 import { getAuthorizationHeaderValue } from "./authService.js";
 import { getCurrentDeviceId } from "./trustedDevices.js";
+import { publishKeyTransfersToOtherDevices } from "./deviceKeyExchange.js";
 
 const SYNC_SETTINGS_STORAGE_KEY = "neurodiary-sync-settings-v1";
 const SYNC_KEY_MATERIAL_STORAGE_KEY = "neurodiary-sync-key-material-v1";
@@ -180,6 +181,15 @@ export function clearSyncKeyMaterial() {
     exportedMasterKey: "",
     recoverySecret: "",
   });
+}
+
+export async function acceptTransferredSyncKey(transfer) {
+  if (!transfer?.exportedMasterKey) return false;
+  await importAccountMasterKey(transfer.exportedMasterKey);
+  const current = loadSyncKeyMaterial();
+  if (Number(transfer.keyVersion) < Number(current.keyVersion ?? 1)) throw new Error("Server nabidl zastaralou verzi klice.");
+  saveSyncKeyMaterial({ ...current, keyVersion: Number(transfer.keyVersion), exportedMasterKey: transfer.exportedMasterKey });
+  return true;
 }
 
 export function clearSyncState(settings = {}) {
@@ -408,5 +418,6 @@ export async function rotateCloudEncryption({ state, settings, baseRevision }) {
     exportedMasterKey,
     recoverySecret,
   });
-  return { recoverySecret, keyVersion, revision: result.revision, updatedAt: result.updatedAt };
+  const transfers = await publishKeyTransfersToOtherDevices(normalizedSettings, exportedMasterKey, keyVersion);
+  return { recoverySecret, keyVersion, revision: result.revision, updatedAt: result.updatedAt, transferredDeviceCount: transfers.length };
 }

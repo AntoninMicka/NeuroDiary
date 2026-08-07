@@ -138,7 +138,8 @@ test("key rotation replaces local key material and produces a new recovery secre
   const settings = { endpoint: "https://sync.example.test", apiToken: "test-token", userId: "user-1" };
   const state = createInitialState();
   let requestBody = null;
-  context.mock.method(globalThis, "fetch", async (_url, options) => {
+  context.mock.method(globalThis, "fetch", async (url, options = {}) => {
+    if (url.endsWith("/api/v1/devices/keys")) return jsonResponse({ keys: [] });
     requestBody = JSON.parse(options.body);
     return jsonResponse({ status: "ok", revision: 8, updatedAt: "2026-08-06T12:00:00Z" });
   });
@@ -150,4 +151,5 @@ test("key rotation replaces local key material and produces a new recovery secre
   assert.equal(requestBody.force, true);
   assert.equal(requestBody.payload.keyVersion, 2);
   assert.equal(requestBody.wrappedKey.keyVersion, 2);
+  assert.equal(result.transferredDeviceCount, 0);
 });

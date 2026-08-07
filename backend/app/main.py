@@ -6,9 +6,13 @@ import logging
 import os
 import time
 import uuid
+import base64
+import hashlib
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Annotated
+from cryptography.hazmat.primitives.asymmetric import padding, rsa
+from cryptography.hazmat.primitives import hashes
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -33,8 +37,16 @@ from .models import (
     DeviceRegistrationRequestModel,
     TrustedDeviceListResponseModel,
     TrustedDeviceModel,
+    DeviceKeyChallengeRequestModel,
+    DeviceKeyChallengeResponseModel,
+    DeviceKeyPublishRequestModel,
+    DevicePublicKeyModel,
+    DevicePublicKeyListResponseModel,
+    DeviceKeyTransferRequestModel,
+    DeviceKeyTransferModel,
 )
 from .device_store import create_device_store
+from .key_exchange_store import create_key_exchange_store
 from .push_service import PushService, WebPushException
 from .push_store import create_push_store
 from .store import RevisionConflictError, create_sync_store
@@ -60,6 +72,7 @@ PUSH_SCHEDULER_TOKEN = os.getenv("NEURODIARY_PUSH_SCHEDULER_TOKEN", "").strip()
 
 store = create_sync_store(database_url=DATABASE_URL or None, database_path=DATABASE_PATH)
 device_store = create_device_store(database_url=DATABASE_URL or None, database_path=DATABASE_PATH)
+key_exchange_store = create_key_exchange_store(database_url=DATABASE_URL or None, database_path=DATABASE_PATH)
 push_store = create_push_store(database_url=DATABASE_URL or None, database_path=DATABASE_PATH)
 push_service = PushService()
 auth_manager = AuthManager()
@@ -128,6 +141,7 @@ async def request_logging_middleware(request: Request, call_next):
 def on_startup() -> None:
     store.initialize()
     device_store.initialize()
+    key_exchange_store.initialize()
     push_store.initialize()
     log_event(
         "INFO",
@@ -186,6 +200,7 @@ def api_metadata() -> dict[str, object]:
             "wrappedRecoveryKey": True,
             "trustedDevices": True,
             "keyRotation": True,
+            "asymmetricDeviceKeyTransfer": True,
             "federatedAuth": auth_manager.federated_auth_enabled,
             "legacyToken": bool(API_TOKEN),
             "webPush": push_service.enabled,
@@ -376,6 +391,109 @@ def register_current_device(
     )
 
 
+def canonical_jwk(jwk: dict[str, object]) -> str:
+    return json.dumps(jwk, sort_keys=True, separators=(",", ":"))
+
+
+def decode_base64url_integer(value: object) -> int:
+    encoded = str(value or "")
+    decoded = base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4))
+    return int.from_bytes(decoded, "big")
+
+
+def validate_device_public_key(jwk: dict[str, object]):
+    if jwk.get("kty") != "RSA" or jwk.get("alg") not in (None, "RSA-OAEP-256"):
+        raise HTTPException(status_code=400, detail="Device key must be an RSA-OAEP-256 JWK.")
+    try:
+        exponent = decode_base64url_integer(jwk.get("e"))
+        modulus = decode_base64url_integer(jwk.get("n"))
+        public_key = rsa.RSAPublicNumbers(exponent, modulus).public_key()
+    except Exception as error:
+        raise HTTPException(status_code=400, detail="Device public key is invalid.") from error
+    if public_key.key_size < 3072 or exponent != 65537:
+        raise HTTPException(status_code=400, detail="Device key must be RSA 3072+ with exponent 65537.")
+    return public_key
+
+
+@app.post("/api/v1/devices/key-challenge", response_model=DeviceKeyChallengeResponseModel)
+def create_device_key_challenge(
+    payload: DeviceKeyChallengeRequestModel,
+    user_id: Annotated[str, Depends(verify_bearer_token)],
+    x_device_id: Annotated[str | None, Header(alias="X-Device-ID")] = None,
+) -> DeviceKeyChallengeResponseModel:
+    if x_device_id != payload.deviceId or not device_store.is_active(user_id, payload.deviceId):
+        raise HTTPException(status_code=403, detail="A device may only publish its own key.")
+    public_key = validate_device_public_key(payload.publicKeyJwk)
+    secret = base64.urlsafe_b64encode(os.urandom(32)).decode().rstrip("=")
+    encrypted = public_key.encrypt(secret.encode(), padding.OAEP(mgf=padding.MGF1(hashes.SHA256()), algorithm=hashes.SHA256(), label=None))
+    challenge_id = str(uuid.uuid4())
+    expires_at = datetime.now(UTC) + timedelta(minutes=5)
+    jwk_json = canonical_jwk(payload.publicKeyJwk)
+    fingerprint = hashlib.sha256(jwk_json.encode()).hexdigest()
+    key_exchange_store.create_challenge(challenge_id, user_id, payload.deviceId, jwk_json, fingerprint, hashlib.sha256(secret.encode()).hexdigest(), expires_at)
+    return DeviceKeyChallengeResponseModel(challengeId=challenge_id, encryptedChallenge=base64.b64encode(encrypted).decode(), expiresAt=expires_at)
+
+
+@app.put("/api/v1/devices/current/key", response_model=DevicePublicKeyModel)
+def publish_current_device_key(
+    payload: DeviceKeyPublishRequestModel,
+    user_id: Annotated[str, Depends(verify_bearer_token)],
+    x_device_id: Annotated[str | None, Header(alias="X-Device-ID")] = None,
+) -> DevicePublicKeyModel:
+    if x_device_id != payload.deviceId or not device_store.is_active(user_id, payload.deviceId):
+        raise HTTPException(status_code=403, detail="A device may only publish its own key.")
+    validate_device_public_key(payload.publicKeyJwk)
+    jwk_json = canonical_jwk(payload.publicKeyJwk)
+    secret_hash = hashlib.sha256(payload.challengeSecret.encode()).hexdigest()
+    if not key_exchange_store.consume_challenge(payload.challengeId, user_id, payload.deviceId, jwk_json, secret_hash):
+        raise HTTPException(status_code=403, detail="Device key ownership proof is invalid or expired.")
+    fingerprint = hashlib.sha256(jwk_json.encode()).hexdigest()
+    record = key_exchange_store.put_key(user_id, payload.deviceId, jwk_json, fingerprint)
+    return DevicePublicKeyModel(deviceId=record.device_id, publicKeyJwk=json.loads(record.public_key_jwk), fingerprint=record.fingerprint, verifiedAt=record.verified_at)
+
+
+@app.get("/api/v1/devices/keys", response_model=DevicePublicKeyListResponseModel)
+def list_device_keys(user_id: Annotated[str, Depends(verify_trusted_device)]) -> DevicePublicKeyListResponseModel:
+    active_ids = {item.device_id for item in device_store.list(user_id) if item.revoked_at is None}
+    return DevicePublicKeyListResponseModel(keys=[
+        DevicePublicKeyModel(deviceId=item.device_id, publicKeyJwk=json.loads(item.public_key_jwk), fingerprint=item.fingerprint, verifiedAt=item.verified_at)
+        for item in key_exchange_store.list_keys(user_id) if item.device_id in active_ids
+    ])
+
+
+@app.post("/api/v1/devices/key-transfers", response_model=DeviceKeyTransferModel)
+def create_device_key_transfer(
+    payload: DeviceKeyTransferRequestModel,
+    user_id: Annotated[str, Depends(verify_trusted_device)],
+    x_device_id: Annotated[str | None, Header(alias="X-Device-ID")] = None,
+) -> DeviceKeyTransferModel:
+    if not x_device_id or payload.targetDeviceId == x_device_id:
+        raise HTTPException(status_code=400, detail="Key transfer target must be another device.")
+    target_key = key_exchange_store.get_key(user_id, payload.targetDeviceId)
+    if not device_store.is_active(user_id, payload.targetDeviceId) or not target_key:
+        raise HTTPException(status_code=404, detail="Target device has no verified public key.")
+    if payload.envelope.targetFingerprint != target_key.fingerprint:
+        raise HTTPException(status_code=400, detail="Transfer envelope is not bound to the target device key.")
+    snapshot = store.load_latest(user_id)
+    if not snapshot or payload.keyVersion != snapshot.payload.keyVersion:
+        raise HTTPException(status_code=409, detail="Transfer key version is not the current account key version.")
+    transfer_id = str(uuid.uuid4())
+    expires_at = datetime.now(UTC) + timedelta(seconds=payload.expiresInSeconds)
+    record = key_exchange_store.create_transfer(transfer_id, user_id, x_device_id, payload.targetDeviceId, payload.keyVersion, payload.envelope.model_dump_json(), expires_at)
+    return DeviceKeyTransferModel(transferId=record.transfer_id, sourceDeviceId=record.source_device_id, targetDeviceId=record.target_device_id, keyVersion=record.key_version, envelope=json.loads(record.envelope_json), createdAt=record.created_at, expiresAt=record.expires_at)
+
+
+@app.get("/api/v1/devices/current/key-transfer", response_model=DeviceKeyTransferModel | None)
+def consume_current_device_key_transfer(
+    user_id: Annotated[str, Depends(verify_trusted_device)],
+    x_device_id: Annotated[str | None, Header(alias="X-Device-ID")] = None,
+) -> DeviceKeyTransferModel | None:
+    record = key_exchange_store.consume_transfer(user_id, x_device_id)
+    if not record:
+        return None
+    return DeviceKeyTransferModel(transferId=record.transfer_id, sourceDeviceId=record.source_device_id, targetDeviceId=record.target_device_id, keyVersion=record.key_version, envelope=json.loads(record.envelope_json), createdAt=record.created_at, expiresAt=record.expires_at)
+
+
 @app.get("/api/v1/devices", response_model=TrustedDeviceListResponseModel)
 def list_trusted_devices(
     user_id: Annotated[str, Depends(verify_bearer_token)],
@@ -404,6 +522,7 @@ def revoke_trusted_device(
     if device_id == x_device_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current device cannot revoke itself.")
     device_store.revoke(user_id, device_id)
+    key_exchange_store.delete_device(user_id, device_id)
     return DeviceActionResponseModel(status="ok", affected=1)
 
 

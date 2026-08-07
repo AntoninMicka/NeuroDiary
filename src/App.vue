@@ -51,6 +51,7 @@ import {
   canReadRecoveryQrFromImage,
 } from "./services/recoveryTransfer.js";
 import {
+  acceptTransferredSyncKey,
   clearSyncKeyMaterial,
   clearSyncState,
   deriveSyncEndpoint,
@@ -68,11 +69,11 @@ import {
   saveRecoverySecret,
   saveSyncSettings,
 } from "./services/syncService.js";
+import { consumeDeviceKeyTransfer, ensureDeviceExchangeKeyPublished } from "./services/deviceKeyExchange.js";
 import {
   fetchTrustedDevices,
   getCurrentDeviceId,
   registerCurrentDevice,
-  revokeOtherTrustedDevices,
   revokeTrustedDevice,
 } from "./services/trustedDevices.js";
 import {
@@ -1575,6 +1576,15 @@ function downloadGeneratedPrivateKey() {
 
 async function ensureCurrentDeviceRegistered() {
   await registerCurrentDevice(syncSettings);
+  await ensureDeviceExchangeKeyPublished(syncSettings);
+  if (!hasStoredSyncMasterKey()) {
+    const transfer = await consumeDeviceKeyTransfer(syncSettings);
+    if (transfer) {
+      await acceptTransferredSyncKey(transfer);
+      syncKeyMaterialRefreshToken.value += 1;
+      storageMessage.value = `Sifrovaci klic verze ${transfer.keyVersion} byl bezpecne prevzat ze zarizeni ${transfer.sourceDeviceId.slice(0, 8)}.`;
+    }
+  }
   trustedDevices.value = await fetchTrustedDevices(syncSettings);
 }
 
@@ -1599,19 +1609,18 @@ async function removeTrustedDevice(device) {
 }
 
 async function rotateEncryptionKey() {
-  if (!globalThis.confirm("Rotace vytvori novy recovery secret a odpoji vsechna ostatni zarizeni. Pokracovat?")) return;
+  if (!globalThis.confirm("Rotace vytvori novy recovery secret a asymetricky preda novy klic ostatnim aktivnim zarizenim. Pokracovat?")) return;
   isSyncBusy.value = true;
   try {
     await ensureCurrentDeviceRegistered();
     const result = await rotateCloudEncryption({ state, settings: syncSettings, baseRevision: Number(syncSettings.revision ?? 0) });
-    await revokeOtherTrustedDevices(syncSettings);
     Object.assign(syncSettings, saveSyncSettings({ ...syncSettings, revision: result.revision, lastSyncAt: result.updatedAt }));
     recoverySecretInput.value = result.recoverySecret;
     generatedRecoverySecret.value = result.recoverySecret;
     reportSharePassword.value = "";
     refreshSyncKeyMaterialStatus();
     await refreshTrustedDevices();
-    storageMessage.value = `Sifrovaci klic byl rotovan na verzi ${result.keyVersion}. Ulozte novy recovery secret.`;
+    storageMessage.value = `Sifrovaci klic byl rotovan na verzi ${result.keyVersion} a pripraven pro ${result.transferredDeviceCount} dalsich zarizeni. Ulozte novy recovery secret.`;
   } catch (error) {
     storageMessage.value = `Rotace sifrovaciho klice selhala: ${error.message}`;
   } finally {
@@ -2793,7 +2802,7 @@ function syncFloatingMenuHeight() {
                 </li>
               </ul>
               <button class="ghost-button utility-menu-item-danger" type="button" :disabled="isSyncBusy" @click="rotateEncryptionKey">
-                Rotovat klic a odpojit ostatni zarizeni
+                Rotovat klic a predat ostatnim zarizenim
               </button>
             </section>
 

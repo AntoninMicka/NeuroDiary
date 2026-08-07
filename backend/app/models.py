@@ -92,6 +92,58 @@ class DeviceRegistrationRequestModel(BaseModel):
     name: str = Field(min_length=1, max_length=80)
 
 
+class DeviceKeyChallengeRequestModel(BaseModel):
+    deviceId: str = Field(pattern=r"^[A-Za-z0-9_-]{16,128}$")
+    publicKeyJwk: dict[str, object]
+
+
+class DeviceKeyChallengeResponseModel(BaseModel):
+    challengeId: str
+    encryptedChallenge: str
+    expiresAt: datetime
+
+
+class DeviceKeyPublishRequestModel(BaseModel):
+    deviceId: str = Field(pattern=r"^[A-Za-z0-9_-]{16,128}$")
+    publicKeyJwk: dict[str, object]
+    challengeId: str = Field(min_length=16, max_length=128)
+    challengeSecret: str = Field(min_length=16, max_length=256)
+
+
+class DevicePublicKeyModel(BaseModel):
+    deviceId: str
+    publicKeyJwk: dict[str, object]
+    fingerprint: str
+    verifiedAt: datetime
+
+
+class DevicePublicKeyListResponseModel(BaseModel):
+    keys: list[DevicePublicKeyModel]
+
+
+class DeviceKeyTransferRequestModel(BaseModel):
+    targetDeviceId: str = Field(pattern=r"^[A-Za-z0-9_-]{16,128}$")
+    keyVersion: int = Field(ge=1)
+    envelope: "DeviceKeyTransferEnvelopeModel"
+    expiresInSeconds: int = Field(default=600, ge=60, le=3600)
+
+
+class DeviceKeyTransferModel(BaseModel):
+    transferId: str
+    sourceDeviceId: str
+    targetDeviceId: str
+    keyVersion: int
+    envelope: dict[str, object]
+    createdAt: datetime
+    expiresAt: datetime
+
+
+class DeviceKeyTransferEnvelopeModel(BaseModel):
+    algorithm: Literal["RSA-OAEP-3072-SHA256"]
+    cipherText: str = Field(min_length=1, max_length=2048)
+    targetFingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
 class TrustedDeviceModel(BaseModel):
     deviceId: str
     name: str
