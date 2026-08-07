@@ -274,8 +274,22 @@ class PostgresKeyExchangeStore(SqliteKeyExchangeStore):
                   user_id TEXT PRIMARY KEY, enabled INTEGER NOT NULL, created_at TIMESTAMPTZ NOT NULL,
                   disabled_at TIMESTAMPTZ, disabled_by_device_id TEXT,
                   emergency_registration_open INTEGER NOT NULL DEFAULT 1);
-                ALTER TABLE identity_key_migrations ADD COLUMN IF NOT EXISTS emergency_registration_open INTEGER NOT NULL DEFAULT 1;
             """)
+            connection.execute("ALTER TABLE identity_key_migrations ADD COLUMN IF NOT EXISTS emergency_registration_open INTEGER NOT NULL DEFAULT 1")
+
+    def get_migration(self, user_id):
+        # Keep this path self-healing because registration is the recovery mechanism
+        # for deployments that may have missed an earlier schema migration.
+        with self._connect() as connection:
+            connection.execute("""
+                CREATE TABLE IF NOT EXISTS identity_key_migrations (
+                  user_id TEXT PRIMARY KEY, enabled INTEGER NOT NULL, created_at TIMESTAMPTZ NOT NULL,
+                  disabled_at TIMESTAMPTZ, disabled_by_device_id TEXT,
+                  emergency_registration_open INTEGER NOT NULL DEFAULT 1)
+            """)
+            connection.execute("ALTER TABLE identity_key_migrations ADD COLUMN IF NOT EXISTS emergency_registration_open INTEGER NOT NULL DEFAULT 1")
+            connection.commit()
+        return super().get_migration(user_id)
 
     def put_key_with_bootstrap(self, user_id, device_id, public_key_jwk, fingerprint):
         now = datetime.now(UTC)

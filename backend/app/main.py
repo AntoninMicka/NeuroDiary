@@ -425,7 +425,11 @@ def canonical_jwk(jwk: dict[str, object]) -> str:
 
 
 def audit_security(user_id: str, device_id: str, event_type: str, **details: object) -> None:
-    key_exchange_store.record_audit(str(uuid.uuid4()), user_id, device_id, event_type, json.dumps(details, separators=(",", ":")))
+    try:
+        key_exchange_store.record_audit(str(uuid.uuid4()), user_id, device_id, event_type, json.dumps(details, separators=(",", ":")))
+    except Exception as error:
+        # Audit availability must not lock users out of the emergency registration path.
+        log_event("ERROR", "security_audit_write_failed", deviceId=device_id, eventType=event_type, errorType=type(error).__name__)
 
 
 def decode_base64url_integer(value: object) -> int:

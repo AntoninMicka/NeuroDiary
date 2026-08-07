@@ -37,7 +37,11 @@ function headers(settings) {
 async function request(settings, path, options = {}) {
   const response = await fetch(endpoint(settings, path), { ...options, headers: headers(settings) });
   const payload = response.status === 204 ? null : await response.json().catch(() => null);
-  if (!response.ok) throw new Error(payload?.detail || `Device key request failed (${response.status}).`);
+  if (!response.ok) {
+    const requestId = response.headers?.get?.("x-request-id");
+    const suffix = requestId ? ` Request ID: ${requestId}.` : "";
+    throw new Error(`${payload?.detail || `Device key request failed (${response.status}).`}${suffix}`);
+  }
   return payload;
 }
 
