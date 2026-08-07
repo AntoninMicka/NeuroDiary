@@ -458,6 +458,7 @@ let quickCaptureClockIntervalId = 0;
 let localBackupTimeoutId = 0;
 let localChangeVersion = 0;
 let isUpdatingSyncMetadata = false;
+let isDeviceIdentityOperation = false;
 const SERVICE_WORKER_RELOAD_GUARD_KEY = "neurodiary-sw-reload-guard-v1";
 const automaticSyncScheduler = createSyncRetryScheduler({
   task: runAutomaticSynchronization,
@@ -1640,6 +1641,8 @@ async function closeIdentityKeyMigration() {
 }
 
 async function repeatDeviceRegistration() {
+  isDeviceIdentityOperation = true;
+  automaticSyncScheduler.cancel();
   isSyncBusy.value = true;
   try {
     try {
@@ -1662,11 +1665,15 @@ async function repeatDeviceRegistration() {
     storageMessage.value = `Opakovani registrace selhalo: ${error.message}. Zkuste akci Registrovat jako nove zarizeni.`;
   } finally {
     isSyncBusy.value = false;
+    automaticSyncScheduler.cancel();
+    isDeviceIdentityOperation = false;
   }
 }
 
 async function registerAsNewDevice() {
   if (!globalThis.confirm("Vytvorit pro tento klient novou identitu zarizeni? Stary zaznam zustane na serveru k odvolani a po uzavreni migrace bude nove zarizeni vyzadovat schvaleni.")) return;
+  isDeviceIdentityOperation = true;
+  automaticSyncScheduler.cancel();
   isSyncBusy.value = true;
   try {
     await resetDeviceExchangeIdentity();
@@ -1682,6 +1689,8 @@ async function registerAsNewDevice() {
     storageMessage.value = `Nova registrace zarizeni selhala: ${error.message}`;
   } finally {
     isSyncBusy.value = false;
+    automaticSyncScheduler.cancel();
+    isDeviceIdentityOperation = false;
   }
 }
 
@@ -2209,8 +2218,11 @@ async function pushPendingChanges() {
 }
 
 async function runAutomaticSynchronization() {
+  if (isDeviceIdentityOperation) {
+    return true;
+  }
   if (!isQuickSyncAvailable.value) {
-    return false;
+    return true;
   }
 
   if (hasPendingSyncChanges.value) {
