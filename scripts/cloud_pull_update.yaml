@@ -1,0 +1,63 @@
+steps:
+  - id: clone-source
+    name: gcr.io/cloud-builders/git
+    entrypoint: bash
+    args:
+      - -euc
+      - |
+        git clone --depth=1 --branch="${_GIT_BRANCH}" "${_GIT_REPOSITORY}" /workspace/neurodiary
+        git -C /workspace/neurodiary rev-parse HEAD > /workspace/source-sha
+
+  - id: inspect-version
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    args:
+      - -euc
+      - |
+        SOURCE_SHA="$$(cat /workspace/source-sha)"
+        CURRENT_SHA="$$(gcloud run services describe "${_CLOUD_RUN_SERVICE}" --region="${_GCP_REGION}" --format='value(metadata.labels.neurodiary-source-sha)' 2>/dev/null || true)"
+        if [[ "$${SOURCE_SHA}" == "$${CURRENT_SHA}" ]]; then
+          touch /workspace/skip-deploy
+          echo "NeuroDiary is already at commit $${SOURCE_SHA}."
+        else
+          echo "Updating NeuroDiary from $${CURRENT_SHA:-unknown} to $${SOURCE_SHA}."
+        fi
+
+  - id: build-image
+    name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    args:
+      - -euc
+      - |
+        [[ -f /workspace/skip-deploy ]] && exit 0
+        docker build -f /workspace/neurodiary/backend/Dockerfile -t "${_IMAGE_URI}:cloud-pull" /workspace/neurodiary
+
+  - id: push-image
+    name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    args:
+      - -euc
+      - |
+        [[ -f /workspace/skip-deploy ]] && exit 0
+        docker push "${_IMAGE_URI}:cloud-pull"
+
+  - id: deploy-service
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    args:
+      - -euc
+      - |
+        [[ -f /workspace/skip-deploy ]] && exit 0
+        SOURCE_SHA="$$(cat /workspace/source-sha)"
+        gcloud run deploy "${_CLOUD_RUN_SERVICE}" \
+          --image="${_IMAGE_URI}:cloud-pull" \
+          --region="${_GCP_REGION}" \
+          --platform=managed \
+          --update-env-vars="NEURODIARY_VERSION=$${SOURCE_SHA}" \
+          --update-labels="neurodiary-installation=true,neurodiary-source-sha=$${SOURCE_SHA}"
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  substitutionOption: MUST_MATCH
+
+timeout: 1800s

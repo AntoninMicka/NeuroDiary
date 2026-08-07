@@ -37,6 +37,8 @@ with a FastAPI-based `pull/push` snapshot API intended as the first step toward 
 
 Cloud Run deployment notes and the GitHub Actions workflow are documented in
 [docs/cloud_run_deploy.md](/home/antonin/Projects/NeuroDiary/NeuroDiary/docs/cloud_run_deploy.md:1).
+Independent installations can instead pull scheduled updates from a public Git repository without
+GitHub Actions or repository secrets; see [docs/cloud_pull_install.md](/home/antonin/Projects/NeuroDiary/NeuroDiary/docs/cloud_pull_install.md:1).
 Monitoring, backups, and incident handling are documented in
 [docs/operations.md](/home/antonin/Projects/NeuroDiary/NeuroDiary/docs/operations.md:1).
 
