@@ -51,6 +51,17 @@ function openKeyDatabase() {
   });
 }
 
+export async function resetDeviceExchangeIdentity() {
+  globalThis.localStorage?.removeItem(STORAGE_KEY);
+  if (!globalThis.indexedDB) return;
+  await new Promise((resolve, reject) => {
+    const request = globalThis.indexedDB.deleteDatabase(KEY_DATABASE);
+    request.onsuccess = resolve;
+    request.onerror = () => reject(request.error);
+    request.onblocked = () => reject(new Error("Uloziste identitniho klice je otevrene v jine zalozce."));
+  });
+}
+
 async function readPrivateKey() {
   const database = await openKeyDatabase();
   return new Promise((resolve, reject) => {

@@ -78,10 +78,12 @@ import {
   fulfillDeviceKeyRequest,
   requestDeviceMasterKey,
   disableIdentityKeyMigration,
+  resetDeviceExchangeIdentity,
 } from "./services/deviceKeyExchange.js";
 import {
   fetchTrustedDevices,
   getCurrentDeviceId,
+  regenerateCurrentDeviceId,
   registerCurrentDevice,
   revokeTrustedDevice,
 } from "./services/trustedDevices.js";
@@ -1625,6 +1627,38 @@ async function closeIdentityKeyMigration() {
   }
 }
 
+async function repeatDeviceRegistration() {
+  isSyncBusy.value = true;
+  try {
+    await ensureCurrentDeviceRegistered();
+    storageMessage.value = "Registrace zarizeni a vlastnictvi identitniho klice byly znovu overeny.";
+  } catch (error) {
+    storageMessage.value = `Opakovani registrace selhalo: ${error.message}. Pokud bylo zarizeni odvolano, registrujte jej jako nove.`;
+  } finally {
+    isSyncBusy.value = false;
+  }
+}
+
+async function registerAsNewDevice() {
+  if (!globalThis.confirm("Vytvorit pro tento klient novou identitu zarizeni? Stary zaznam zustane na serveru k odvolani a po uzavreni migrace bude nove zarizeni vyzadovat schvaleni.")) return;
+  isSyncBusy.value = true;
+  try {
+    await resetDeviceExchangeIdentity();
+    regenerateCurrentDeviceId();
+    trustedDevices.value = [];
+    pendingDeviceKeyRequests.value = [];
+    rotationTargetDeviceIds.value = [];
+    await ensureCurrentDeviceRegistered();
+    storageMessage.value = identityKeyMigration.value?.enabled
+      ? "Nova identita zarizeni byla zaregistrovana v migracnim rezimu."
+      : "Nova identita zarizeni byla zaregistrovana a ceka na schvaleni duveryhodnym zarizenim.";
+  } catch (error) {
+    storageMessage.value = `Nova registrace zarizeni selhala: ${error.message}`;
+  } finally {
+    isSyncBusy.value = false;
+  }
+}
+
 async function approveDeviceKeyRequest(keyRequest) {
   try {
     const material = loadSyncKeyMaterial();
@@ -2841,6 +2875,14 @@ function syncFloatingMenuHeight() {
                   <p class="panel-tip">Aktualni zarizeni {{ getCurrentDeviceId().slice(0, 8) }}.</p>
                 </div>
                 <button class="ghost-button" type="button" :disabled="isSyncBusy" @click="refreshTrustedDevices">Obnovit</button>
+              </div>
+              <div class="contact-actions">
+                <button class="ghost-button" type="button" :disabled="isSyncBusy" @click="repeatDeviceRegistration">
+                  Znovu overit registraci
+                </button>
+                <button class="ghost-button" type="button" :disabled="isSyncBusy" @click="registerAsNewDevice">
+                  Registrovat jako nove zarizeni
+                </button>
               </div>
               <div v-if="identityKeyMigration?.enabled" class="private-key-warning">
                 <strong>Docasna migrace identitnich klicu je aktivni</strong>

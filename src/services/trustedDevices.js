@@ -11,6 +11,12 @@ export function getCurrentDeviceId() {
   return deviceId;
 }
 
+export function regenerateCurrentDeviceId() {
+  const deviceId = (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`).replaceAll(".", "-");
+  globalThis.localStorage?.setItem(DEVICE_ID_KEY, deviceId);
+  return deviceId;
+}
+
 export function getDefaultDeviceName() {
   const platform = globalThis.navigator?.userAgentData?.platform || globalThis.navigator?.platform || "Zarizeni";
   const browser = /Firefox/i.test(globalThis.navigator?.userAgent ?? "")
