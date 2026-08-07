@@ -18,6 +18,7 @@ GAR_REPOSITORY="${GAR_REPOSITORY:-neurodiary}"
 IMAGE_NAME="${IMAGE_NAME:-neurodiary-sync}"
 UPDATE_GIT_REPOSITORY="${UPDATE_GIT_REPOSITORY:-https://github.com/AntoninMicka/NeuroDiary.git}"
 UPDATE_GIT_BRANCH="${UPDATE_GIT_BRANCH:-main}"
+UPDATE_GIT_TAG_LIMIT="${UPDATE_GIT_TAG_LIMIT:-3}"
 UPDATE_SCHEDULE="${UPDATE_SCHEDULE:-17 3 * * *}"
 UPDATE_TIME_ZONE="${UPDATE_TIME_ZONE:-Europe/Prague}"
 UPDATE_TRIGGER_NAME="${UPDATE_TRIGGER_NAME:-neurodiary-cloud-pull}"
@@ -56,6 +57,10 @@ validate_configuration() {
   }
   [[ "${UPDATE_GIT_BRANCH}" =~ ^[A-Za-z0-9._/-]+$ ]] || {
     echo "UPDATE_GIT_BRANCH contains unsupported characters."
+    exit 1
+  }
+  [[ "${UPDATE_GIT_TAG_LIMIT}" =~ ^[0-3]$ ]] || {
+    echo "UPDATE_GIT_TAG_LIMIT must be between 0 and 3."
     exit 1
   }
   [[ "${CLOUD_RUN_SERVICE}" =~ ^[a-z][a-z0-9-]{0,62}$ ]] || {
@@ -133,7 +138,7 @@ ensure_service_account() {
 ensure_update_trigger() {
   local updater_email="$1"
   local image_uri="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GAR_REPOSITORY}/${IMAGE_NAME}"
-  local substitutions="_GIT_REPOSITORY=${UPDATE_GIT_REPOSITORY},_GIT_BRANCH=${UPDATE_GIT_BRANCH},_GCP_REGION=${GCP_REGION},_CLOUD_RUN_SERVICE=${CLOUD_RUN_SERVICE},_IMAGE_URI=${image_uri}"
+  local substitutions="_GIT_REPOSITORY=${UPDATE_GIT_REPOSITORY},_GIT_BRANCH=${UPDATE_GIT_BRANCH},_GIT_TAG_LIMIT=${UPDATE_GIT_TAG_LIMIT},_GCP_REGION=${GCP_REGION},_CLOUD_RUN_SERVICE=${CLOUD_RUN_SERVICE},_IMAGE_URI=${image_uri}"
   local service_account_resource="projects/${GCP_PROJECT_ID}/serviceAccounts/${updater_email}"
 
   if gcloud builds triggers describe "${UPDATE_TRIGGER_NAME}" --region="${GCP_REGION}" >/dev/null 2>&1; then
@@ -152,6 +157,17 @@ ensure_update_trigger() {
       --substitutions="${substitutions}" \
       --no-require-approval
   fi
+}
+
+ensure_artifact_cleanup() {
+  local policy_file
+  policy_file="$(mktemp /tmp/neurodiary-cleanup-policy.XXXXXX.json)"
+  sed "s/__IMAGE_NAME__/${IMAGE_NAME}/g" "${SCRIPT_DIR}/cloud_pull_cleanup_policy.json" >"${policy_file}"
+  gcloud artifacts repositories set-cleanup-policies "${GAR_REPOSITORY}" \
+    --location="${GCP_REGION}" \
+    --policy="${policy_file}" \
+    --no-dry-run
+  rm -f "${policy_file}"
 }
 
 ensure_scheduler() {
@@ -212,6 +228,7 @@ main() {
   prompt_value "IMAGE_NAME" "Container image name"
   prompt_value "UPDATE_GIT_REPOSITORY" "Public HTTPS Git repository"
   prompt_value "UPDATE_GIT_BRANCH" "Git branch"
+  prompt_value "UPDATE_GIT_TAG_LIMIT" "Maximum recent release tags to fetch (0-3)"
   prompt_value "UPDATE_SCHEDULE" "Update schedule (cron)"
   prompt_value "UPDATE_TIME_ZONE" "Schedule time zone"
   validate_configuration
@@ -225,6 +242,7 @@ main() {
 
   local updater_email="${UPDATE_SERVICE_ACCOUNT_NAME}@${GCP_PROJECT_ID}.iam.gserviceaccount.com"
   ensure_service_account "${updater_email}"
+  ensure_artifact_cleanup
   ensure_update_trigger "${updater_email}"
   ensure_scheduler "${updater_email}"
 
@@ -234,11 +252,16 @@ main() {
   echo "NeuroDiary installation: ${CLOUD_RUN_SERVICE}"
   echo "URL: ${service_url}"
   echo "Source: ${UPDATE_GIT_REPOSITORY} (${UPDATE_GIT_BRANCH})"
+  echo "Git checkout: branch HEAD plus at most ${UPDATE_GIT_TAG_LIMIT} release tags; no other history"
+  echo "Artifact Registry retention: latest 3 ${IMAGE_NAME} image versions"
   echo "Updates: ${UPDATE_SCHEDULE} ${UPDATE_TIME_ZONE}"
   export_qr "${service_url}"
 
   if prompt_yes_no "Run the first cloud update now?" "y"; then
     gcloud builds triggers run "${UPDATE_TRIGGER_NAME}" --region="${GCP_REGION}"
+  fi
+  if prompt_yes_no "Open interactive image management?" "n"; then
+    bash "${SCRIPT_DIR}/cloud_pull_images.sh" "${ENV_FILE}"
   fi
 }
 

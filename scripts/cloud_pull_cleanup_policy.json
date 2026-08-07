@@ -1,0 +1,18 @@
+[
+  {
+    "name": "delete-old-neurodiary-images",
+    "action": {"type": "Delete"},
+    "condition": {
+      "tagState": "any",
+      "packageNamePrefixes": ["__IMAGE_NAME__"]
+    }
+  },
+  {
+    "name": "keep-three-neurodiary-images",
+    "action": {"type": "Keep"},
+    "mostRecentVersions": {
+      "packageNamePrefixes": ["__IMAGE_NAME__"],
+      "keepCount": 3
+    }
+  }
+]

@@ -5,7 +5,28 @@ steps:
     args:
       - -euc
       - |
-        git clone --depth=1 --branch="${_GIT_BRANCH}" "${_GIT_REPOSITORY}" /workspace/neurodiary
+        git clone \
+          --depth=1 \
+          --filter=blob:none \
+          --single-branch \
+          --no-tags \
+          --branch="${_GIT_BRANCH}" \
+          "${_GIT_REPOSITORY}" \
+          /workspace/neurodiary
+        if (( ${_GIT_TAG_LIMIT} > 0 )); then
+          mapfile -t TAG_REFS < <(
+            git ls-remote --tags --refs --sort=-version:refname "${_GIT_REPOSITORY}" \
+              | awk '{print $2}' \
+              | head -n "${_GIT_TAG_LIMIT}"
+          )
+          for tag_ref in "$${TAG_REFS[@]}"; do
+            git -C /workspace/neurodiary fetch \
+              --depth=1 \
+              --filter=blob:none \
+              origin \
+              "$${tag_ref}:$${tag_ref}"
+          done
+        fi
         git -C /workspace/neurodiary rev-parse HEAD > /workspace/source-sha
 
   - id: inspect-version
@@ -30,7 +51,12 @@ steps:
       - -euc
       - |
         [[ -f /workspace/skip-deploy ]] && exit 0
-        docker build -f /workspace/neurodiary/backend/Dockerfile -t "${_IMAGE_URI}:cloud-pull" /workspace/neurodiary
+        SOURCE_SHA="$$(cat /workspace/source-sha)"
+        docker build \
+          -f /workspace/neurodiary/backend/Dockerfile \
+          -t "${_IMAGE_URI}:cloud-pull" \
+          -t "${_IMAGE_URI}:$${SOURCE_SHA}" \
+          /workspace/neurodiary
 
   - id: push-image
     name: gcr.io/cloud-builders/docker
@@ -39,7 +65,9 @@ steps:
       - -euc
       - |
         [[ -f /workspace/skip-deploy ]] && exit 0
+        SOURCE_SHA="$$(cat /workspace/source-sha)"
         docker push "${_IMAGE_URI}:cloud-pull"
+        docker push "${_IMAGE_URI}:$${SOURCE_SHA}"
 
   - id: deploy-service
     name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim

@@ -7,13 +7,22 @@ zdroj kodu pro cteni.
 ## Jak aktualizace funguje
 
 1. Cloud Scheduler podle cron rozvrhu spusti manualni Cloud Build trigger.
-2. Build provede anonymni `git clone` z nakonfigurovane HTTPS adresy a vetve.
+2. Build provede anonymni, castecny `git clone` pouze z nakonfigurovane HTTPS adresy a vetve.
 3. Commit porovna s labelem aktualni Cloud Run sluzby.
 4. Pokud se commit nezmenil, build skonci bez sestaveni a nasazeni.
 5. Pri zmene sestavi image, ulozi ji do Artifact Registry a aktualizuje existujici Cloud Run sluzbu.
 
 Aktualizace zachovava runtime konfiguraci existujici Cloud Run sluzby, vcetne environment variables,
 Cloud SQL napojeni a runtime service accountu.
+
+Git checkout pouziva `--depth=1`, `--single-branch`, `--no-tags` a `--filter=blob:none`. Obsahuje tedy
+HEAD zvolene vetve a nanejvys tri samostatne dotazene release tagy serazene podle verze nazvu. Release
+tagy se predpokladaji na zvolene hlavni vetvi; ostatni vetve ani historie se nestahuji. Limit lze snizit
+pres `UPDATE_GIT_TAG_LIMIT` az na nulu. Cloud Build po dokonceni smaze cely docasny build environment.
+
+Instalator navic na vybrany Artifact Registry repository nastavi cleanup policy omezenou na package
+`IMAGE_NAME`: vsechny verze jsou kandidaty ke smazani, ale tri nejnovejsi image zustanou zachovane.
+Artifact Registry aplikuje uklid na pozadi, takze uvolneni mista nemusi byt okamzite.
 
 ## Spusteni
 
@@ -52,3 +61,24 @@ Rucni kontrolu aktualizace lze spustit:
 ```bash
 gcloud builds triggers run neurodiary-cloud-pull --region=europe-west1
 ```
+
+## Sprava container images
+
+Interaktivni spravu lze otevrit na konci instalace nebo samostatne:
+
+```bash
+bash scripts/cloud_pull_images.sh scripts/cloud_pull.env
+```
+
+Spravce muze:
+
+- vypsat digesty, tagy, cas vytvoreni a velikost dostupnych image,
+- poznat image pouzivany aktivni Cloud Run revizi,
+- provest rollback na jednu ze zachovanych verzi,
+- smazat konkretni neaktivni image a jeji tagy,
+- zobrazit cleanup policy a stav aktualizacniho Scheduler jobu,
+- pozastavit nebo obnovit automaticke aktualizace.
+
+Rollback nejprve pozastavi Scheduler, aby se zvolena verze pri dalsi automaticke kontrole neprepsala.
+Rucni mazani aktivniho digestu skript odmitne. Mazani jine verze vyzaduje samostatne potvrzeni a je
+nevratne; obnova je mozna jen novym sestavenim stejneho Git commitu.
