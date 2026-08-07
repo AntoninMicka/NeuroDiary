@@ -255,47 +255,47 @@ class PostgresKeyExchangeStore(SqliteKeyExchangeStore):
     # by failing explicitly until its migration-backed implementation is enabled.
     def initialize(self) -> None:
         with self._connect() as connection:
-            connection.execute("""
+            statements = ["""
                 CREATE TABLE IF NOT EXISTS device_public_keys (
                   user_id TEXT NOT NULL, device_id TEXT NOT NULL, public_key_jwk TEXT NOT NULL,
-                  fingerprint TEXT NOT NULL, verified_at TIMESTAMPTZ NOT NULL, PRIMARY KEY (user_id, device_id));
+                  fingerprint TEXT NOT NULL, verified_at TIMESTAMPTZ NOT NULL, PRIMARY KEY (user_id, device_id))
+            """, """
                 CREATE TABLE IF NOT EXISTS device_key_challenges (
                   challenge_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, device_id TEXT NOT NULL,
-                  public_key_jwk TEXT NOT NULL, fingerprint TEXT NOT NULL, secret_hash TEXT NOT NULL, expires_at TIMESTAMPTZ NOT NULL);
+                  public_key_jwk TEXT NOT NULL, fingerprint TEXT NOT NULL, secret_hash TEXT NOT NULL, expires_at TIMESTAMPTZ NOT NULL)
+            """, """
                 CREATE TABLE IF NOT EXISTS device_key_transfers (
                   transfer_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, source_device_id TEXT NOT NULL,
                   target_device_id TEXT NOT NULL, key_version INTEGER NOT NULL, envelope_json TEXT NOT NULL,
-                  created_at TIMESTAMPTZ NOT NULL, expires_at TIMESTAMPTZ NOT NULL, consumed_at TIMESTAMPTZ);
+                  created_at TIMESTAMPTZ NOT NULL, expires_at TIMESTAMPTZ NOT NULL, consumed_at TIMESTAMPTZ)
+            """, """
                 CREATE TABLE IF NOT EXISTS device_key_requests (
                   request_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, target_device_id TEXT NOT NULL,
-                  created_at TIMESTAMPTZ NOT NULL, expires_at TIMESTAMPTZ NOT NULL, fulfilled_at TIMESTAMPTZ);
+                  created_at TIMESTAMPTZ NOT NULL, expires_at TIMESTAMPTZ NOT NULL, fulfilled_at TIMESTAMPTZ)
+            """, """
                 CREATE TABLE IF NOT EXISTS security_audit_events (
                   event_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, device_id TEXT NOT NULL,
-                  event_type TEXT NOT NULL, details_json TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL);
+                  event_type TEXT NOT NULL, details_json TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL)
+            """, """
                 CREATE TABLE IF NOT EXISTS identity_key_migrations (
                   user_id TEXT PRIMARY KEY, enabled INTEGER NOT NULL, created_at TIMESTAMPTZ NOT NULL,
                   disabled_at TIMESTAMPTZ, disabled_by_device_id TEXT,
-                  emergency_registration_open INTEGER NOT NULL DEFAULT 1);
-            """)
+                  emergency_registration_open INTEGER NOT NULL DEFAULT 1)
+            """]
+            for statement in statements:
+                connection.execute(statement)
             connection.execute("ALTER TABLE identity_key_migrations ADD COLUMN IF NOT EXISTS emergency_registration_open INTEGER NOT NULL DEFAULT 1")
             # Early key-exchange builds used JSONB. Canonical key ownership proofs compare
             # the exact serialized JWK, so normalize legacy deployments to TEXT.
             connection.execute("ALTER TABLE device_public_keys ALTER COLUMN public_key_jwk TYPE TEXT USING public_key_jwk::text")
             connection.execute("ALTER TABLE device_key_challenges ALTER COLUMN public_key_jwk TYPE TEXT USING public_key_jwk::text")
             connection.execute("ALTER TABLE device_key_transfers ALTER COLUMN envelope_json TYPE TEXT USING envelope_json::text")
+            connection.commit()
 
     def get_migration(self, user_id):
         # Keep this path self-healing because registration is the recovery mechanism
         # for deployments that may have missed an earlier schema migration.
-        with self._connect() as connection:
-            connection.execute("""
-                CREATE TABLE IF NOT EXISTS identity_key_migrations (
-                  user_id TEXT PRIMARY KEY, enabled INTEGER NOT NULL, created_at TIMESTAMPTZ NOT NULL,
-                  disabled_at TIMESTAMPTZ, disabled_by_device_id TEXT,
-                  emergency_registration_open INTEGER NOT NULL DEFAULT 1)
-            """)
-            connection.execute("ALTER TABLE identity_key_migrations ADD COLUMN IF NOT EXISTS emergency_registration_open INTEGER NOT NULL DEFAULT 1")
-            connection.commit()
+        self.initialize()
         return super().get_migration(user_id)
 
     def put_key_with_bootstrap(self, user_id, device_id, public_key_jwk, fingerprint):
