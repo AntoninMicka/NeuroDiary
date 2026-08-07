@@ -2,6 +2,9 @@ import { getAuthorizationHeaderValue } from "./authService.js";
 import { getCurrentDeviceId } from "./trustedDevices.js";
 
 const STORAGE_KEY = "neurodiary-device-exchange-key-v1";
+const KEY_DATABASE = "neurodiary-device-keys-v1";
+const KEY_STORE = "crypto-keys";
+const PRIVATE_KEY_ID = "rsa-oaep-private";
 const ENCODER = new TextEncoder();
 const DECODER = new TextDecoder();
 
@@ -38,24 +41,60 @@ async function request(settings, path, options = {}) {
   return payload;
 }
 
+function openKeyDatabase() {
+  if (!globalThis.indexedDB) throw new Error("IndexedDB neni dostupne; soukromy klic nelze bezpecne ulozit.");
+  return new Promise((resolve, reject) => {
+    const request = globalThis.indexedDB.open(KEY_DATABASE, 1);
+    request.onupgradeneeded = () => request.result.createObjectStore(KEY_STORE);
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function readPrivateKey() {
+  const database = await openKeyDatabase();
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction(KEY_STORE, "readonly");
+    const request = transaction.objectStore(KEY_STORE).get(PRIVATE_KEY_ID);
+    request.onsuccess = () => resolve(request.result ?? null);
+    request.onerror = () => reject(request.error);
+    transaction.oncomplete = () => database.close();
+  });
+}
+
+async function writePrivateKey(key) {
+  const database = await openKeyDatabase();
+  await new Promise((resolve, reject) => {
+    const transaction = database.transaction(KEY_STORE, "readwrite");
+    transaction.objectStore(KEY_STORE).put(key, PRIVATE_KEY_ID);
+    transaction.oncomplete = resolve;
+    transaction.onerror = () => reject(transaction.error);
+  });
+  database.close();
+}
+
 async function loadOrCreatePair() {
   const stored = JSON.parse(globalThis.localStorage?.getItem(STORAGE_KEY) ?? "null");
-  if (stored?.publicKeyJwk && stored?.privateKeyJwk) return stored;
+  let privateKey = await readPrivateKey();
+  if (stored?.publicKeyJwk && privateKey) return { publicKeyJwk: stored.publicKeyJwk, privateKey };
+  if (stored?.publicKeyJwk && stored?.privateKeyJwk) {
+    privateKey = await cryptoApi().subtle.importKey("jwk", stored.privateKeyJwk, { name: "RSA-OAEP", hash: "SHA-256" }, false, ["decrypt"]);
+    await writePrivateKey(privateKey);
+    globalThis.localStorage?.setItem(STORAGE_KEY, JSON.stringify({ publicKeyJwk: stored.publicKeyJwk }));
+    return { publicKeyJwk: stored.publicKeyJwk, privateKey };
+  }
   const pair = await cryptoApi().subtle.generateKey(
     { name: "RSA-OAEP", modulusLength: 3072, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" },
-    true,
+    false,
     ["encrypt", "decrypt"],
   );
   const result = {
     publicKeyJwk: await cryptoApi().subtle.exportKey("jwk", pair.publicKey),
-    privateKeyJwk: await cryptoApi().subtle.exportKey("jwk", pair.privateKey),
+    privateKey: pair.privateKey,
   };
-  globalThis.localStorage?.setItem(STORAGE_KEY, JSON.stringify(result));
+  await writePrivateKey(pair.privateKey);
+  globalThis.localStorage?.setItem(STORAGE_KEY, JSON.stringify({ publicKeyJwk: result.publicKeyJwk }));
   return result;
-}
-
-async function importPrivateKey(jwk) {
-  return cryptoApi().subtle.importKey("jwk", jwk, { name: "RSA-OAEP", hash: "SHA-256" }, false, ["decrypt"]);
 }
 
 async function importPublicKey(jwk) {
@@ -68,7 +107,7 @@ export async function ensureDeviceExchangeKeyPublished(settings) {
   const challenge = await request(settings, "/api/v1/devices/key-challenge", {
     method: "POST", body: JSON.stringify({ deviceId, publicKeyJwk: pair.publicKeyJwk }),
   });
-  const secret = await cryptoApi().subtle.decrypt({ name: "RSA-OAEP" }, await importPrivateKey(pair.privateKeyJwk), base64ToBytes(challenge.encryptedChallenge));
+  const secret = await cryptoApi().subtle.decrypt({ name: "RSA-OAEP" }, pair.privateKey, base64ToBytes(challenge.encryptedChallenge));
   return request(settings, "/api/v1/devices/current/key", {
     method: "PUT",
     body: JSON.stringify({ deviceId, publicKeyJwk: pair.publicKeyJwk, challengeId: challenge.challengeId, challengeSecret: DECODER.decode(secret) }),
@@ -100,6 +139,16 @@ export async function publishKeyTransfersToOtherDevices(settings, exportedMaster
   return Promise.all(targets.map((target) => publishDeviceKeyTransfer(settings, target, exportedMasterKey, keyVersion)));
 }
 
+export async function prepareRotationTransfers(settings, exportedMasterKey, targetDeviceIds = []) {
+  const selected = new Set(targetDeviceIds);
+  const targets = (await fetchDevicePublicKeys(settings)).filter((item) => selected.has(item.deviceId));
+  if (targets.length !== selected.size) throw new Error("Nektere vybrane zarizeni nema dostupny overeny verejny klic.");
+  return Promise.all(targets.map(async (target) => ({
+    targetDeviceId: target.deviceId,
+    envelope: await encryptMasterKeyForDevice(exportedMasterKey, target),
+  })));
+}
+
 export function requestDeviceMasterKey(settings) {
   return request(settings, "/api/v1/devices/current/key-request", { method: "POST" });
 }
@@ -122,8 +171,9 @@ export async function consumeDeviceKeyTransfer(settings) {
   const transfer = await request(settings, "/api/v1/devices/current/key-transfer");
   if (!transfer) return null;
   const pair = await loadOrCreatePair();
-  const clear = await cryptoApi().subtle.decrypt(
-    { name: "RSA-OAEP" }, await importPrivateKey(pair.privateKeyJwk), base64ToBytes(transfer.envelope.cipherText),
-  );
+  const clear = await cryptoApi().subtle.decrypt({ name: "RSA-OAEP" }, pair.privateKey, base64ToBytes(transfer.envelope.cipherText));
+  await request(settings, "/api/v1/devices/current/key-transfer/confirm", {
+    method: "POST", body: JSON.stringify({ transferId: transfer.transferId }),
+  });
   return { exportedMasterKey: DECODER.decode(clear), keyVersion: transfer.keyVersion, sourceDeviceId: transfer.sourceDeviceId };
 }

@@ -14,6 +14,7 @@ class DeviceRecord:
     created_at: datetime
     last_seen_at: datetime
     revoked_at: datetime | None
+    trust_status: str
 
 
 class SqliteDeviceStore:
@@ -39,28 +40,34 @@ class SqliteDeviceStore:
                   created_at TEXT NOT NULL,
                   last_seen_at TEXT NOT NULL,
                   revoked_at TEXT,
+                  trust_status TEXT NOT NULL DEFAULT 'trusted',
                   PRIMARY KEY (user_id, device_id)
                 )
             """)
+            columns = {row[1] for row in connection.execute("PRAGMA table_info(trusted_devices)").fetchall()}
+            if "trust_status" not in columns:
+                connection.execute("ALTER TABLE trusted_devices ADD COLUMN trust_status TEXT NOT NULL DEFAULT 'trusted'")
             connection.commit()
 
     def upsert(self, user_id: str, device_id: str, name: str) -> DeviceRecord:
         now = datetime.now(UTC)
         with self._connect() as connection:
+            has_devices = connection.execute("SELECT 1 FROM trusted_devices WHERE user_id = ? LIMIT 1", (user_id,)).fetchone() is not None
+            initial_status = "pending" if has_devices else "trusted"
             connection.execute("""
-                INSERT INTO trusted_devices (user_id, device_id, name, created_at, last_seen_at, revoked_at)
-                VALUES (?, ?, ?, ?, ?, NULL)
+                INSERT INTO trusted_devices (user_id, device_id, name, created_at, last_seen_at, revoked_at, trust_status)
+                VALUES (?, ?, ?, ?, ?, NULL, ?)
                 ON CONFLICT(user_id, device_id) DO UPDATE SET
                   name = excluded.name,
                   last_seen_at = CASE WHEN trusted_devices.revoked_at IS NULL THEN excluded.last_seen_at ELSE trusted_devices.last_seen_at END
-            """, (user_id, device_id, name, now.isoformat(), now.isoformat()))
+            """, (user_id, device_id, name, now.isoformat(), now.isoformat(), initial_status))
             connection.commit()
         return self.get(user_id, device_id)
 
     def get(self, user_id: str, device_id: str) -> DeviceRecord | None:
         with self._connect() as connection:
             row = connection.execute(
-                "SELECT device_id, name, created_at, last_seen_at, revoked_at FROM trusted_devices WHERE user_id = ? AND device_id = ?",
+                "SELECT device_id, name, created_at, last_seen_at, revoked_at, trust_status FROM trusted_devices WHERE user_id = ? AND device_id = ?",
                 (user_id, device_id),
             ).fetchone()
         return self._record(row)
@@ -68,14 +75,23 @@ class SqliteDeviceStore:
     def list(self, user_id: str) -> list[DeviceRecord]:
         with self._connect() as connection:
             rows = connection.execute(
-                "SELECT device_id, name, created_at, last_seen_at, revoked_at FROM trusted_devices WHERE user_id = ? ORDER BY last_seen_at DESC",
+                "SELECT device_id, name, created_at, last_seen_at, revoked_at, trust_status FROM trusted_devices WHERE user_id = ? ORDER BY last_seen_at DESC",
                 (user_id,),
             ).fetchall()
         return [self._record(row) for row in rows]
 
     def is_active(self, user_id: str, device_id: str) -> bool:
         record = self.get(user_id, device_id)
+        return bool(record and record.revoked_at is None and record.trust_status == "trusted")
+
+    def is_registered(self, user_id: str, device_id: str) -> bool:
+        record = self.get(user_id, device_id)
         return bool(record and record.revoked_at is None)
+
+    def trust(self, user_id: str, device_id: str) -> None:
+        with self._connect() as connection:
+            connection.execute("UPDATE trusted_devices SET trust_status = 'trusted' WHERE user_id = ? AND device_id = ? AND revoked_at IS NULL", (user_id, device_id))
+            connection.commit()
 
     def revoke(self, user_id: str, device_id: str) -> None:
         with self._connect() as connection:
@@ -103,6 +119,7 @@ class SqliteDeviceStore:
             created_at=datetime.fromisoformat(row["created_at"]),
             last_seen_at=datetime.fromisoformat(row["last_seen_at"]),
             revoked_at=datetime.fromisoformat(row["revoked_at"]) if row["revoked_at"] else None,
+            trust_status=row["trust_status"],
         )
 
 
@@ -124,23 +141,26 @@ class PostgresDeviceStore:
                   revoked_at TIMESTAMPTZ, PRIMARY KEY (user_id, device_id)
                 )
             """)
+            connection.execute("ALTER TABLE trusted_devices ADD COLUMN IF NOT EXISTS trust_status TEXT NOT NULL DEFAULT 'trusted'")
 
     def upsert(self, user_id: str, device_id: str, name: str) -> DeviceRecord:
         now = datetime.now(UTC)
         with self._connect() as connection:
+            has_devices = connection.execute("SELECT 1 FROM trusted_devices WHERE user_id = %s LIMIT 1", (user_id,)).fetchone() is not None
+            initial_status = "pending" if has_devices else "trusted"
             connection.execute("""
-                INSERT INTO trusted_devices (user_id, device_id, name, created_at, last_seen_at, revoked_at)
-                VALUES (%s, %s, %s, %s, %s, NULL)
+                INSERT INTO trusted_devices (user_id, device_id, name, created_at, last_seen_at, revoked_at, trust_status)
+                VALUES (%s, %s, %s, %s, %s, NULL, %s)
                 ON CONFLICT(user_id, device_id) DO UPDATE SET
                   name = excluded.name,
                   last_seen_at = CASE WHEN trusted_devices.revoked_at IS NULL THEN excluded.last_seen_at ELSE trusted_devices.last_seen_at END
-            """, (user_id, device_id, name, now, now))
+            """, (user_id, device_id, name, now, now, initial_status))
         return self.get(user_id, device_id)
 
     def get(self, user_id: str, device_id: str) -> DeviceRecord | None:
         with self._connect() as connection:
             row = connection.execute(
-                "SELECT device_id, name, created_at, last_seen_at, revoked_at FROM trusted_devices WHERE user_id = %s AND device_id = %s",
+                "SELECT device_id, name, created_at, last_seen_at, revoked_at, trust_status FROM trusted_devices WHERE user_id = %s AND device_id = %s",
                 (user_id, device_id),
             ).fetchone()
         return self._record(row)
@@ -148,14 +168,22 @@ class PostgresDeviceStore:
     def list(self, user_id: str) -> list[DeviceRecord]:
         with self._connect() as connection:
             rows = connection.execute(
-                "SELECT device_id, name, created_at, last_seen_at, revoked_at FROM trusted_devices WHERE user_id = %s ORDER BY last_seen_at DESC",
+                "SELECT device_id, name, created_at, last_seen_at, revoked_at, trust_status FROM trusted_devices WHERE user_id = %s ORDER BY last_seen_at DESC",
                 (user_id,),
             ).fetchall()
         return [self._record(row) for row in rows]
 
     def is_active(self, user_id: str, device_id: str) -> bool:
         record = self.get(user_id, device_id)
+        return bool(record and record.revoked_at is None and record.trust_status == "trusted")
+
+    def is_registered(self, user_id: str, device_id: str) -> bool:
+        record = self.get(user_id, device_id)
         return bool(record and record.revoked_at is None)
+
+    def trust(self, user_id: str, device_id: str) -> None:
+        with self._connect() as connection:
+            connection.execute("UPDATE trusted_devices SET trust_status = 'trusted' WHERE user_id = %s AND device_id = %s AND revoked_at IS NULL", (user_id, device_id))
 
     def revoke(self, user_id: str, device_id: str) -> None:
         with self._connect() as connection:
@@ -176,6 +204,7 @@ class PostgresDeviceStore:
         return DeviceRecord(
             device_id=row["device_id"], name=row["name"], created_at=row["created_at"],
             last_seen_at=row["last_seen_at"], revoked_at=row["revoked_at"],
+            trust_status=row["trust_status"],
         )
 
 

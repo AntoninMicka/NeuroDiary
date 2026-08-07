@@ -1584,9 +1584,9 @@ function downloadGeneratedPrivateKey() {
 }
 
 async function ensureCurrentDeviceRegistered() {
-  await registerCurrentDevice(syncSettings);
+  const registration = await registerCurrentDevice(syncSettings);
   await ensureDeviceExchangeKeyPublished(syncSettings);
-  if (!hasStoredSyncMasterKey()) {
+  if (registration.trustStatus === "pending") {
     const transfer = await consumeDeviceKeyTransfer(syncSettings);
     if (transfer) {
       await acceptTransferredSyncKey(transfer);
@@ -1595,6 +1595,8 @@ async function ensureCurrentDeviceRegistered() {
     } else {
       await requestDeviceMasterKey(syncSettings);
       storageMessage.value = "Toto zarizeni pozadalo duveryhodne zarizeni o asymetricky sifrovany master key.";
+      trustedDevices.value = [{ ...registration, hasVerifiedKey: true }];
+      return;
     }
   }
   const [devices, publicKeys] = await Promise.all([fetchTrustedDevices(syncSettings), fetchDevicePublicKeys(syncSettings)]);
@@ -1602,7 +1604,7 @@ async function ensureCurrentDeviceRegistered() {
   trustedDevices.value = devices.map((device) => ({ ...device, hasVerifiedKey: keyedIds.has(device.deviceId) }));
   pendingDeviceKeyRequests.value = hasStoredSyncMasterKey() ? await fetchDeviceKeyRequests(syncSettings) : [];
   if (!rotationTargetDeviceIds.value.length) {
-    rotationTargetDeviceIds.value = trustedDevices.value.filter((device) => !device.current && !device.revokedAt && device.hasVerifiedKey).map((device) => device.deviceId);
+    rotationTargetDeviceIds.value = trustedDevices.value.filter((device) => !device.current && device.trustStatus === "trusted" && device.hasVerifiedKey).map((device) => device.deviceId);
   }
 }
 
@@ -1643,7 +1645,7 @@ async function rotateEncryptionKey() {
   try {
     await ensureCurrentDeviceRegistered();
     const selectedIds = [...rotationTargetDeviceIds.value];
-    const unselected = trustedDevices.value.filter((device) => !device.current && !device.revokedAt && !selectedIds.includes(device.deviceId));
+    const unselected = trustedDevices.value.filter((device) => !device.current && device.trustStatus === "trusted" && !selectedIds.includes(device.deviceId));
     const result = await rotateCloudEncryption({ state, settings: syncSettings, baseRevision: Number(syncSettings.revision ?? 0), targetDeviceIds: selectedIds });
     Object.assign(syncSettings, saveSyncSettings({ ...syncSettings, revision: result.revision, lastSyncAt: result.updatedAt }));
     recoverySecretInput.value = result.recoverySecret;
@@ -2827,7 +2829,7 @@ function syncFloatingMenuHeight() {
                 <li v-for="device in trustedDevices" :key="device.deviceId">
                   <span>
                     {{ device.name }}
-                    · {{ device.current ? "toto zarizeni" : device.revokedAt ? "odvolano" : "aktivni" }}
+                    · {{ device.current ? "toto zarizeni" : device.trustStatus === "pending" ? "ceka na schvaleni" : device.revokedAt ? "odvolano" : "aktivni" }}
                     · {{ device.hasVerifiedKey ? "klic overen" : "bez klice" }}
                   </span>
                   <button
@@ -2849,9 +2851,10 @@ function syncFloatingMenuHeight() {
               <fieldset class="contact-keyring">
                 <legend>Cile pristi rotace</legend>
                 <label v-for="device in trustedDevices.filter((item) => !item.current && !item.revokedAt)" :key="`rotation-${device.deviceId}`">
-                  <input v-model="rotationTargetDeviceIds" type="checkbox" :value="device.deviceId" :disabled="!device.hasVerifiedKey" />
+                  <input v-model="rotationTargetDeviceIds" type="checkbox" :value="device.deviceId" :disabled="!device.hasVerifiedKey || device.trustStatus !== 'trusted'" />
                   {{ device.name }} · {{ device.deviceId.slice(0, 8) }}
                   <span v-if="!device.hasVerifiedKey">(nejprve musi overit verejny klic)</span>
+                  <span v-else-if="device.trustStatus === 'pending'">(ceka na potvrzeni prevzeti)</span>
                 </label>
                 <p class="panel-tip">Nevybrana zarizeni novy klic neobdrzi a po rotaci budou nabidnuta k odvolani.</p>
               </fieldset>

@@ -44,9 +44,13 @@ from .models import (
     DevicePublicKeyListResponseModel,
     DeviceKeyTransferRequestModel,
     DeviceKeyTransferModel,
+    DeviceKeyTransferConfirmModel,
     DeviceKeyRequestModel,
     DeviceKeyRequestListResponseModel,
     DeviceKeyRequestFulfillModel,
+    SecurityAuditEventModel,
+    SecurityAuditListResponseModel,
+    SyncRotationRequestModel,
 )
 from .device_store import create_device_store
 from .key_exchange_store import create_key_exchange_store
@@ -166,6 +170,15 @@ def verify_trusted_device(
 ) -> str:
     if not x_device_id or not device_store.is_active(user_id, x_device_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Device is not trusted for this account.")
+    return user_id
+
+
+def verify_registered_device(
+    user_id: Annotated[str, Depends(verify_bearer_token)],
+    x_device_id: Annotated[str | None, Header(alias="X-Device-ID")] = None,
+) -> str:
+    if not x_device_id or not device_store.is_registered(user_id, x_device_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Device is not registered for this account.")
     return user_id
 
 
@@ -390,12 +403,16 @@ def register_current_device(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Device has been revoked.")
     return TrustedDeviceModel(
         deviceId=record.device_id, name=record.name, createdAt=record.created_at,
-        lastSeenAt=record.last_seen_at, revokedAt=record.revoked_at, current=True,
+        lastSeenAt=record.last_seen_at, revokedAt=record.revoked_at, current=True, trustStatus=record.trust_status,
     )
 
 
 def canonical_jwk(jwk: dict[str, object]) -> str:
     return json.dumps(jwk, sort_keys=True, separators=(",", ":"))
+
+
+def audit_security(user_id: str, device_id: str, event_type: str, **details: object) -> None:
+    key_exchange_store.record_audit(str(uuid.uuid4()), user_id, device_id, event_type, json.dumps(details, separators=(",", ":")))
 
 
 def decode_base64url_integer(value: object) -> int:
@@ -424,7 +441,7 @@ def create_device_key_challenge(
     user_id: Annotated[str, Depends(verify_bearer_token)],
     x_device_id: Annotated[str | None, Header(alias="X-Device-ID")] = None,
 ) -> DeviceKeyChallengeResponseModel:
-    if x_device_id != payload.deviceId or not device_store.is_active(user_id, payload.deviceId):
+    if x_device_id != payload.deviceId or not device_store.is_registered(user_id, payload.deviceId):
         raise HTTPException(status_code=403, detail="A device may only publish its own key.")
     public_key = validate_device_public_key(payload.publicKeyJwk)
     secret = base64.urlsafe_b64encode(os.urandom(32)).decode().rstrip("=")
@@ -443,7 +460,7 @@ def publish_current_device_key(
     user_id: Annotated[str, Depends(verify_bearer_token)],
     x_device_id: Annotated[str | None, Header(alias="X-Device-ID")] = None,
 ) -> DevicePublicKeyModel:
-    if x_device_id != payload.deviceId or not device_store.is_active(user_id, payload.deviceId):
+    if x_device_id != payload.deviceId or not device_store.is_registered(user_id, payload.deviceId):
         raise HTTPException(status_code=403, detail="A device may only publish its own key.")
     validate_device_public_key(payload.publicKeyJwk)
     jwk_json = canonical_jwk(payload.publicKeyJwk)
@@ -452,6 +469,7 @@ def publish_current_device_key(
         raise HTTPException(status_code=403, detail="Device key ownership proof is invalid or expired.")
     fingerprint = hashlib.sha256(jwk_json.encode()).hexdigest()
     record = key_exchange_store.put_key(user_id, payload.deviceId, jwk_json, fingerprint)
+    audit_security(user_id, payload.deviceId, "device_key_verified", fingerprint=fingerprint)
     return DevicePublicKeyModel(deviceId=record.device_id, publicKeyJwk=json.loads(record.public_key_jwk), fingerprint=record.fingerprint, verifiedAt=record.verified_at)
 
 
@@ -466,13 +484,14 @@ def list_device_keys(user_id: Annotated[str, Depends(verify_trusted_device)]) ->
 
 @app.post("/api/v1/devices/current/key-request", response_model=DeviceKeyRequestModel)
 def request_current_device_key(
-    user_id: Annotated[str, Depends(verify_trusted_device)],
+    user_id: Annotated[str, Depends(verify_registered_device)],
     x_device_id: Annotated[str | None, Header(alias="X-Device-ID")] = None,
 ) -> DeviceKeyRequestModel:
     if not key_exchange_store.get_key(user_id, x_device_id):
         raise HTTPException(status_code=409, detail="Current device must publish a verified public key first.")
     request_id = str(uuid.uuid4())
     record = key_exchange_store.create_request(request_id, user_id, x_device_id, datetime.now(UTC) + timedelta(hours=24))
+    audit_security(user_id, x_device_id, "master_key_requested", requestId=request_id)
     return DeviceKeyRequestModel(requestId=record["request_id"], targetDeviceId=record["target_device_id"], createdAt=record["created_at"], expiresAt=record["expires_at"])
 
 
@@ -496,7 +515,7 @@ def create_device_key_transfer(
     if not x_device_id or payload.targetDeviceId == x_device_id:
         raise HTTPException(status_code=400, detail="Key transfer target must be another device.")
     target_key = key_exchange_store.get_key(user_id, payload.targetDeviceId)
-    if not device_store.is_active(user_id, payload.targetDeviceId) or not target_key:
+    if not device_store.is_registered(user_id, payload.targetDeviceId) or not target_key:
         raise HTTPException(status_code=404, detail="Target device has no verified public key.")
     if payload.envelope.targetFingerprint != target_key.fingerprint:
         raise HTTPException(status_code=400, detail="Transfer envelope is not bound to the target device key.")
@@ -506,6 +525,7 @@ def create_device_key_transfer(
     transfer_id = str(uuid.uuid4())
     expires_at = datetime.now(UTC) + timedelta(seconds=payload.expiresInSeconds)
     record = key_exchange_store.create_transfer(transfer_id, user_id, x_device_id, payload.targetDeviceId, payload.keyVersion, payload.envelope.model_dump_json(), expires_at)
+    audit_security(user_id, x_device_id, "master_key_transfer_created", transferId=transfer_id, targetDeviceId=payload.targetDeviceId, keyVersion=payload.keyVersion)
     return DeviceKeyTransferModel(transferId=record.transfer_id, sourceDeviceId=record.source_device_id, targetDeviceId=record.target_device_id, keyVersion=record.key_version, envelope=json.loads(record.envelope_json), createdAt=record.created_at, expiresAt=record.expires_at)
 
 
@@ -522,18 +542,32 @@ def fulfill_device_key_request(
     result = create_device_key_transfer(payload.transfer, user_id, x_device_id)
     if not key_exchange_store.fulfill_request(user_id, payload.requestId, payload.transfer.targetDeviceId):
         raise HTTPException(status_code=409, detail="Key request was already fulfilled.")
+    audit_security(user_id, x_device_id, "master_key_transfer_created", requestId=payload.requestId, targetDeviceId=payload.transfer.targetDeviceId, keyVersion=payload.transfer.keyVersion)
     return result
 
 
 @app.get("/api/v1/devices/current/key-transfer", response_model=DeviceKeyTransferModel | None)
 def consume_current_device_key_transfer(
-    user_id: Annotated[str, Depends(verify_trusted_device)],
+    user_id: Annotated[str, Depends(verify_registered_device)],
     x_device_id: Annotated[str | None, Header(alias="X-Device-ID")] = None,
 ) -> DeviceKeyTransferModel | None:
-    record = key_exchange_store.consume_transfer(user_id, x_device_id)
+    record = key_exchange_store.get_transfer(user_id, x_device_id)
     if not record:
         return None
     return DeviceKeyTransferModel(transferId=record.transfer_id, sourceDeviceId=record.source_device_id, targetDeviceId=record.target_device_id, keyVersion=record.key_version, envelope=json.loads(record.envelope_json), createdAt=record.created_at, expiresAt=record.expires_at)
+
+
+@app.post("/api/v1/devices/current/key-transfer/confirm", response_model=DeviceActionResponseModel)
+def confirm_current_device_key_transfer(
+    payload: DeviceKeyTransferConfirmModel,
+    user_id: Annotated[str, Depends(verify_registered_device)],
+    x_device_id: Annotated[str | None, Header(alias="X-Device-ID")] = None,
+) -> DeviceActionResponseModel:
+    if not key_exchange_store.confirm_transfer(user_id, x_device_id, payload.transferId):
+        raise HTTPException(status_code=404, detail="Key transfer is missing, expired, or already confirmed.")
+    device_store.trust(user_id, x_device_id)
+    audit_security(user_id, x_device_id, "master_key_transfer_confirmed", transferId=payload.transferId)
+    return DeviceActionResponseModel(status="ok", affected=1)
 
 
 @app.get("/api/v1/devices", response_model=TrustedDeviceListResponseModel)
@@ -548,6 +582,7 @@ def list_trusted_devices(
             deviceId=item.device_id, name=item.name, createdAt=item.created_at,
             lastSeenAt=item.last_seen_at, revokedAt=item.revoked_at,
             current=item.device_id == x_device_id,
+            trustStatus="revoked" if item.revoked_at else item.trust_status,
         )
         for item in device_store.list(user_id)
     ])
@@ -565,7 +600,18 @@ def revoke_trusted_device(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current device cannot revoke itself.")
     device_store.revoke(user_id, device_id)
     key_exchange_store.delete_device(user_id, device_id)
+    audit_security(user_id, x_device_id, "device_revoked", revokedDeviceId=device_id)
     return DeviceActionResponseModel(status="ok", affected=1)
+
+
+@app.get("/api/v1/security/audit", response_model=SecurityAuditListResponseModel)
+def list_security_audit(
+    user_id: Annotated[str, Depends(verify_trusted_device)],
+) -> SecurityAuditListResponseModel:
+    return SecurityAuditListResponseModel(events=[
+        SecurityAuditEventModel(eventId=item["event_id"], deviceId=item["device_id"], eventType=item["event_type"], details=json.loads(item["details_json"]), createdAt=datetime.fromisoformat(item["created_at"]) if isinstance(item["created_at"], str) else item["created_at"])
+        for item in key_exchange_store.list_audit(user_id)
+    ])
 
 
 @app.post("/api/v1/devices/revoke-others", response_model=DeviceActionResponseModel)
@@ -627,6 +673,41 @@ def push_state(
             payload=snapshot.payload,
             wrappedKey=snapshot.wrappedKey,
         )
+
+
+@app.post("/api/v1/sync/rotate", response_model=SyncPushResponseModel)
+def rotate_state_key(
+    payload: SyncRotationRequestModel,
+    user_id: Annotated[str, Depends(verify_trusted_device)],
+    x_device_id: Annotated[str | None, Header(alias="X-Device-ID")] = None,
+) -> SyncPushResponseModel:
+    current = store.load_latest(user_id)
+    expected_version = (current.payload.keyVersion if current else 0) + 1
+    if payload.payload.keyVersion != expected_version or payload.wrappedKey.keyVersion != expected_version:
+        raise HTTPException(status_code=409, detail="Rotation must advance the account key by exactly one version.")
+    seen = set()
+    validated_targets = []
+    for transfer in payload.transfers:
+        if transfer.targetDeviceId == x_device_id or transfer.targetDeviceId in seen:
+            raise HTTPException(status_code=400, detail="Rotation contains a duplicate or current target device.")
+        target_key = key_exchange_store.get_key(user_id, transfer.targetDeviceId)
+        if not device_store.is_active(user_id, transfer.targetDeviceId) or not target_key:
+            raise HTTPException(status_code=409, detail="Every rotation target must be trusted and have a verified key.")
+        if transfer.envelope.targetFingerprint != target_key.fingerprint:
+            raise HTTPException(status_code=400, detail="Rotation envelope fingerprint does not match its target.")
+        seen.add(transfer.targetDeviceId)
+        validated_targets.append(transfer)
+    try:
+        result = store.save_state(user_id=user_id, base_revision=payload.baseRevision, payload=payload.payload, wrapped_key=payload.wrappedKey, force=False)
+    except RevisionConflictError as error:
+        raise HTTPException(status_code=409, detail="Rotation base revision is stale.") from error
+    expires_at = datetime.now(UTC) + timedelta(minutes=10)
+    for transfer in validated_targets:
+        transfer_id = str(uuid.uuid4())
+        key_exchange_store.create_transfer(transfer_id, user_id, x_device_id, transfer.targetDeviceId, expected_version, transfer.envelope.model_dump_json(), expires_at)
+        audit_security(user_id, x_device_id, "rotation_key_distributed", transferId=transfer_id, targetDeviceId=transfer.targetDeviceId, keyVersion=expected_version)
+    audit_security(user_id, x_device_id, "key_rotated", keyVersion=expected_version, targetCount=len(validated_targets))
+    return SyncPushResponseModel(status="ok", revision=result.revision, updatedAt=result.updated_at, payload=result.payload, wrappedKey=result.wrapped_key)
 
 
 @app.delete("/api/v1/sync/reset", response_model=SyncResetResponseModel)

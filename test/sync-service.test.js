@@ -148,7 +148,7 @@ test("key rotation replaces local key material and produces a new recovery secre
   assert.equal(result.revision, 8);
   assert.equal(result.keyVersion, 2);
   assert.equal(result.recoverySecret.length, 64);
-  assert.equal(requestBody.force, true);
+  assert.deepEqual(requestBody.transfers, []);
   assert.equal(requestBody.payload.keyVersion, 2);
   assert.equal(requestBody.wrappedKey.keyVersion, 2);
   assert.equal(result.transferredDeviceCount, 0);

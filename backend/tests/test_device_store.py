@@ -9,6 +9,8 @@ def test_device_registry_revoke_and_revoke_others(tmp_path):
 
     assert first.revoked_at is None
     assert store.is_active("user", "device-0000000001") is True
+    assert store.is_active("user", "device-0000000002") is False
+    store.trust("user", "device-0000000002")
     assert store.revoke_others("user", "device-0000000001") == 1
     assert store.is_active("user", "device-0000000002") is False
 

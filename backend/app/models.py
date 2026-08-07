@@ -138,10 +138,26 @@ class DeviceKeyTransferModel(BaseModel):
     expiresAt: datetime
 
 
+class DeviceKeyTransferConfirmModel(BaseModel):
+    transferId: str = Field(min_length=16, max_length=128)
+
+
 class DeviceKeyTransferEnvelopeModel(BaseModel):
     algorithm: Literal["RSA-OAEP-3072-SHA256"]
     cipherText: str = Field(min_length=1, max_length=2048)
     targetFingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+class RotationDeviceEnvelopeModel(BaseModel):
+    targetDeviceId: str = Field(pattern=r"^[A-Za-z0-9_-]{16,128}$")
+    envelope: DeviceKeyTransferEnvelopeModel
+
+
+class SyncRotationRequestModel(BaseModel):
+    baseRevision: int = Field(ge=0)
+    payload: EncryptedPayloadModel
+    wrappedKey: WrappedKeyEnvelopeModel
+    transfers: list[RotationDeviceEnvelopeModel] = Field(default_factory=list, max_length=50)
 
 
 class DeviceKeyRequestModel(BaseModel):
@@ -167,6 +183,7 @@ class TrustedDeviceModel(BaseModel):
     lastSeenAt: datetime
     revokedAt: datetime | None = None
     current: bool = False
+    trustStatus: Literal["pending", "trusted", "revoked"] = "trusted"
 
 
 class TrustedDeviceListResponseModel(BaseModel):
@@ -176,6 +193,18 @@ class TrustedDeviceListResponseModel(BaseModel):
 class DeviceActionResponseModel(BaseModel):
     status: Literal["ok"]
     affected: int = Field(ge=0)
+
+
+class SecurityAuditEventModel(BaseModel):
+    eventId: str
+    deviceId: str
+    eventType: str
+    details: dict[str, object]
+    createdAt: datetime
+
+
+class SecurityAuditListResponseModel(BaseModel):
+    events: list[SecurityAuditEventModel]
 
 
 class AuthConfigResponseModel(BaseModel):

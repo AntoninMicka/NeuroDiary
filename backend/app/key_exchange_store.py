@@ -61,6 +61,10 @@ class SqliteKeyExchangeStore:
                   request_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, target_device_id TEXT NOT NULL,
                   created_at TEXT NOT NULL, expires_at TEXT NOT NULL, fulfilled_at TEXT
                 );
+                CREATE TABLE IF NOT EXISTS security_audit_events (
+                  event_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, device_id TEXT NOT NULL,
+                  event_type TEXT NOT NULL, details_json TEXT NOT NULL, created_at TEXT NOT NULL
+                );
             """)
             connection.commit()
 
@@ -147,19 +151,26 @@ class SqliteKeyExchangeStore:
             connection.commit()
             return cursor.rowcount == 1
 
-    def consume_transfer(self, user_id, target_device_id):
+    def get_transfer(self, user_id, target_device_id):
         now = datetime.now(UTC)
         with self._connect() as connection:
             row = connection.execute("""
                 SELECT * FROM device_key_transfers WHERE user_id = ? AND target_device_id = ?
                   AND consumed_at IS NULL AND expires_at > ? ORDER BY created_at DESC LIMIT 1
             """, (user_id, target_device_id, now.isoformat())).fetchone()
-            if row:
-                connection.execute("UPDATE device_key_transfers SET consumed_at = ? WHERE transfer_id = ?", (now.isoformat(), row["transfer_id"]))
-                connection.commit()
         if not row:
             return None
         return TransferRecord(row["transfer_id"], row["source_device_id"], row["target_device_id"], row["key_version"], row["envelope_json"], datetime.fromisoformat(row["created_at"]), datetime.fromisoformat(row["expires_at"]))
+
+    def confirm_transfer(self, user_id, target_device_id, transfer_id) -> bool:
+        now = datetime.now(UTC)
+        with self._connect() as connection:
+            cursor = connection.execute("""
+                UPDATE device_key_transfers SET consumed_at = ? WHERE transfer_id = ? AND user_id = ?
+                  AND target_device_id = ? AND consumed_at IS NULL AND expires_at > ?
+            """, (now.isoformat(), transfer_id, user_id, target_device_id, now.isoformat()))
+            connection.commit()
+            return cursor.rowcount == 1
 
     def delete_device(self, user_id, device_id):
         with self._connect() as connection:
@@ -167,6 +178,19 @@ class SqliteKeyExchangeStore:
             connection.execute("DELETE FROM device_key_transfers WHERE user_id = ? AND (source_device_id = ? OR target_device_id = ?)", (user_id, device_id, device_id))
             connection.execute("DELETE FROM device_key_requests WHERE user_id = ? AND target_device_id = ?", (user_id, device_id))
             connection.commit()
+
+    def record_audit(self, event_id, user_id, device_id, event_type, details_json):
+        now = datetime.now(UTC)
+        with self._connect() as connection:
+            connection.execute("INSERT INTO security_audit_events VALUES (?, ?, ?, ?, ?, ?)", (event_id, user_id, device_id, event_type, details_json, now.isoformat()))
+            connection.commit()
+
+    def list_audit(self, user_id, limit=100):
+        with self._connect() as connection:
+            return [dict(row) for row in connection.execute("""
+                SELECT event_id, device_id, event_type, details_json, created_at
+                FROM security_audit_events WHERE user_id = ? ORDER BY created_at DESC LIMIT ?
+            """, (user_id, limit)).fetchall()]
 
 
 class PostgresKeyExchangeStore(SqliteKeyExchangeStore):
@@ -196,6 +220,9 @@ class PostgresKeyExchangeStore(SqliteKeyExchangeStore):
                 CREATE TABLE IF NOT EXISTS device_key_requests (
                   request_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, target_device_id TEXT NOT NULL,
                   created_at TIMESTAMPTZ NOT NULL, expires_at TIMESTAMPTZ NOT NULL, fulfilled_at TIMESTAMPTZ);
+                CREATE TABLE IF NOT EXISTS security_audit_events (
+                  event_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, device_id TEXT NOT NULL,
+                  event_type TEXT NOT NULL, details_json TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL);
             """)
 
     # Adapt the compact SQLite implementation at the connection boundary.

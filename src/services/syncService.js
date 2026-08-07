@@ -2,7 +2,7 @@ import { prepareStateForSync } from "../domain/diary.js";
 import { decryptDiaryState, encryptDiaryState, exportAccountMasterKey, generateAccountMasterKey, generateRecoverySecret, importAccountMasterKey, unwrapAccountMasterKey, wrapAccountMasterKey } from "./e2eCrypto.js";
 import { getAuthorizationHeaderValue } from "./authService.js";
 import { getCurrentDeviceId } from "./trustedDevices.js";
-import { publishKeyTransfersToOtherDevices } from "./deviceKeyExchange.js";
+import { prepareRotationTransfers } from "./deviceKeyExchange.js";
 
 const SYNC_SETTINGS_STORAGE_KEY = "neurodiary-sync-settings-v1";
 const SYNC_KEY_MATERIAL_STORAGE_KEY = "neurodiary-sync-key-material-v1";
@@ -407,10 +407,11 @@ export async function rotateCloudEncryption({ state, settings, baseRevision, tar
   const exportedMasterKey = await exportAccountMasterKey(masterKey);
   const wrappedKey = await wrapAccountMasterKey(masterKey, recoverySecret, keyVersion);
   const payload = await encryptDiaryState(prepareStateForSync(state), masterKey, keyVersion);
-  const result = await fetchJson(buildEndpoint(normalizedSettings, "/api/v1/sync/push"), {
+  const transfers = await prepareRotationTransfers(normalizedSettings, exportedMasterKey, targetDeviceIds ?? []);
+  const result = await fetchJson(buildEndpoint(normalizedSettings, "/api/v1/sync/rotate"), {
     method: "POST",
     headers: buildHeaders(normalizedSettings),
-    body: JSON.stringify({ baseRevision, payload, wrappedKey, force: true }),
+    body: JSON.stringify({ baseRevision, payload, wrappedKey, transfers }),
   });
   saveSyncKeyMaterial({
     userId: normalizedSettings.userId ?? "",
@@ -418,6 +419,5 @@ export async function rotateCloudEncryption({ state, settings, baseRevision, tar
     exportedMasterKey,
     recoverySecret,
   });
-  const transfers = await publishKeyTransfersToOtherDevices(normalizedSettings, exportedMasterKey, keyVersion, targetDeviceIds);
   return { recoverySecret, keyVersion, revision: result.revision, updatedAt: result.updatedAt, transferredDeviceCount: transfers.length };
 }

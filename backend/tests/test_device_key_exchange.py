@@ -10,9 +10,11 @@ from backend.app.models import (
     DeviceKeyChallengeRequestModel,
     DeviceKeyPublishRequestModel,
     DeviceKeyTransferRequestModel,
+    DeviceKeyTransferConfirmModel,
     DeviceKeyRequestFulfillModel,
     DeviceRegistrationRequestModel,
     SyncPushRequestModel,
+    SyncRotationRequestModel,
 )
 
 
@@ -66,6 +68,9 @@ def test_transfers_are_one_time_and_isolated_by_user(monkeypatch, tmp_path):
     consumed = main.consume_current_device_key_transfer("user-a", target)
     assert consumed.transferId == created.transferId
     assert consumed.keyVersion == 4
+    assert main.device_store.is_active("user-a", target) is False
+    main.confirm_current_device_key_transfer(DeviceKeyTransferConfirmModel(transferId=consumed.transferId), "user-a", target)
+    assert main.device_store.is_active("user-a", target) is True
     assert main.consume_current_device_key_transfer("user-a", target) is None
 
 
@@ -110,4 +115,35 @@ def test_new_device_requests_and_trusted_device_approves_transfer(monkeypatch, t
     )
     assert fulfilled.targetDeviceId == target
     assert main.list_device_key_requests(user, source).requests == []
-    assert main.consume_current_device_key_transfer(user, target).transferId == fulfilled.transferId
+    received = main.consume_current_device_key_transfer(user, target)
+    assert received.transferId == fulfilled.transferId
+    main.confirm_current_device_key_transfer(DeviceKeyTransferConfirmModel(transferId=received.transferId), user, target)
+    assert main.consume_current_device_key_transfer(user, target) is None
+
+
+def test_pending_device_cannot_sync_and_invalid_rotation_is_not_activated(monkeypatch, tmp_path):
+    main = load_app(monkeypatch, tmp_path)
+    user = "user-a"
+    source = "device-0000000001"
+    target = "device-0000000002"
+    register_and_publish(main, user, source)
+    _, target_key = register_and_publish(main, user, target)
+    with pytest.raises(HTTPException):
+        main.verify_trusted_device(user, target)
+    main.device_store.trust(user, target)
+    main.push_state(SyncPushRequestModel(baseRevision=0, payload={"schemaVersion": 1, "algorithm": "AES-GCM", "keyVersion": 1, "iv": "iv", "cipherText": "old"}), user)
+    rotation = SyncRotationRequestModel(
+        baseRevision=1,
+        payload={"schemaVersion": 1, "algorithm": "AES-GCM", "keyVersion": 2, "iv": "iv2", "cipherText": "new"},
+        wrappedKey={"wrappedKey": "wrapped", "wrappingAlgorithm": "PBKDF2-AES-GCM-256", "wrappingSalt": "salt", "wrappingIv": "iv", "wrappingIterations": 1, "keyVersion": 2},
+        transfers=[{"targetDeviceId": target, "envelope": {"algorithm": "RSA-OAEP-3072-SHA256", "cipherText": "opaque", "targetFingerprint": "0" * 64}}],
+    )
+    with pytest.raises(HTTPException) as error:
+        main.rotate_state_key(rotation, user, source)
+    assert error.value.status_code == 400
+    assert main.store.load_latest(user).payload.cipherText == "old"
+
+    rotation.transfers[0].envelope.targetFingerprint = target_key.fingerprint
+    result = main.rotate_state_key(rotation, user, source)
+    assert result.payload.cipherText == "new"
+    assert main.key_exchange_store.list_audit(user)[0]["event_type"] == "key_rotated"
