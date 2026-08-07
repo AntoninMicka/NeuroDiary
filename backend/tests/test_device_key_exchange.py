@@ -10,6 +10,7 @@ from backend.app.models import (
     DeviceKeyChallengeRequestModel,
     DeviceKeyPublishRequestModel,
     DeviceKeyTransferRequestModel,
+    DeviceKeyRequestFulfillModel,
     DeviceRegistrationRequestModel,
     SyncPushRequestModel,
 )
@@ -75,3 +76,38 @@ def test_device_cannot_publish_key_for_different_device(monkeypatch, tmp_path):
     with pytest.raises(HTTPException) as error:
         main.create_device_key_challenge(DeviceKeyChallengeRequestModel(deviceId="device-0000000002", publicKeyJwk=jwk), "user", "device-0000000001")
     assert error.value.status_code == 403
+
+
+def test_new_device_requests_and_trusted_device_approves_transfer(monkeypatch, tmp_path):
+    main = load_app(monkeypatch, tmp_path)
+    user = "user-a"
+    source = "device-0000000001"
+    target = "device-0000000002"
+    register_and_publish(main, user, source)
+    _, target_key = register_and_publish(main, user, target)
+    main.push_state(SyncPushRequestModel(baseRevision=0, payload={"schemaVersion": 1, "algorithm": "AES-GCM", "keyVersion": 3, "iv": "iv", "cipherText": "data"}), user)
+
+    requested = main.request_current_device_key(user, target)
+    pending = main.list_device_key_requests(user, source)
+    assert [item.requestId for item in pending.requests] == [requested.requestId]
+    assert main.list_device_key_requests("different-user", source).requests == []
+
+    fulfilled = main.fulfill_device_key_request(
+        DeviceKeyRequestFulfillModel(
+            requestId=requested.requestId,
+            transfer={
+                "targetDeviceId": target,
+                "keyVersion": 3,
+                "envelope": {
+                    "algorithm": "RSA-OAEP-3072-SHA256",
+                    "cipherText": "encrypted-master-key",
+                    "targetFingerprint": target_key.fingerprint,
+                },
+            },
+        ),
+        user,
+        source,
+    )
+    assert fulfilled.targetDeviceId == target
+    assert main.list_device_key_requests(user, source).requests == []
+    assert main.consume_current_device_key_transfer(user, target).transferId == fulfilled.transferId

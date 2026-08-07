@@ -93,10 +93,29 @@ export async function publishDeviceKeyTransfer(settings, target, exportedMasterK
   });
 }
 
-export async function publishKeyTransfersToOtherDevices(settings, exportedMasterKey, keyVersion) {
+export async function publishKeyTransfersToOtherDevices(settings, exportedMasterKey, keyVersion, targetDeviceIds = null) {
   const currentId = getCurrentDeviceId();
-  const targets = (await fetchDevicePublicKeys(settings)).filter((item) => item.deviceId !== currentId);
+  const selected = targetDeviceIds ? new Set(targetDeviceIds) : null;
+  const targets = (await fetchDevicePublicKeys(settings)).filter((item) => item.deviceId !== currentId && (!selected || selected.has(item.deviceId)));
   return Promise.all(targets.map((target) => publishDeviceKeyTransfer(settings, target, exportedMasterKey, keyVersion)));
+}
+
+export function requestDeviceMasterKey(settings) {
+  return request(settings, "/api/v1/devices/current/key-request", { method: "POST" });
+}
+
+export async function fetchDeviceKeyRequests(settings) {
+  return (await request(settings, "/api/v1/devices/key-requests")).requests ?? [];
+}
+
+export async function fulfillDeviceKeyRequest(settings, keyRequest, exportedMasterKey, keyVersion) {
+  const target = (await fetchDevicePublicKeys(settings)).find((item) => item.deviceId === keyRequest.targetDeviceId);
+  if (!target) throw new Error("Cilove zarizeni nema overeny verejny klic.");
+  const envelope = await encryptMasterKeyForDevice(exportedMasterKey, target);
+  return request(settings, "/api/v1/devices/key-requests/fulfill", {
+    method: "POST",
+    body: JSON.stringify({ requestId: keyRequest.requestId, transfer: { targetDeviceId: target.deviceId, keyVersion, envelope, expiresInSeconds: 600 } }),
+  });
 }
 
 export async function consumeDeviceKeyTransfer(settings) {

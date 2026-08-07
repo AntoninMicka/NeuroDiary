@@ -398,7 +398,7 @@ export async function resetCloudState(settings) {
   };
 }
 
-export async function rotateCloudEncryption({ state, settings, baseRevision }) {
+export async function rotateCloudEncryption({ state, settings, baseRevision, targetDeviceIds = null }) {
   const normalizedSettings = saveSyncSettings(settings);
   const currentKeyMaterial = loadSyncKeyMaterial();
   const keyVersion = Math.max(1, Number(currentKeyMaterial.keyVersion ?? 1)) + 1;
@@ -418,6 +418,6 @@ export async function rotateCloudEncryption({ state, settings, baseRevision }) {
     exportedMasterKey,
     recoverySecret,
   });
-  const transfers = await publishKeyTransfersToOtherDevices(normalizedSettings, exportedMasterKey, keyVersion);
+  const transfers = await publishKeyTransfersToOtherDevices(normalizedSettings, exportedMasterKey, keyVersion, targetDeviceIds);
   return { recoverySecret, keyVersion, revision: result.revision, updatedAt: result.updatedAt, transferredDeviceCount: transfers.length };
 }

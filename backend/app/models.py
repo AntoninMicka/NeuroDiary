@@ -144,6 +144,22 @@ class DeviceKeyTransferEnvelopeModel(BaseModel):
     targetFingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
 
 
+class DeviceKeyRequestModel(BaseModel):
+    requestId: str
+    targetDeviceId: str
+    createdAt: datetime
+    expiresAt: datetime
+
+
+class DeviceKeyRequestListResponseModel(BaseModel):
+    requests: list[DeviceKeyRequestModel]
+
+
+class DeviceKeyRequestFulfillModel(BaseModel):
+    requestId: str = Field(min_length=16, max_length=128)
+    transfer: DeviceKeyTransferRequestModel
+
+
 class TrustedDeviceModel(BaseModel):
     deviceId: str
     name: str

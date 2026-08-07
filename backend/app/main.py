@@ -44,6 +44,9 @@ from .models import (
     DevicePublicKeyListResponseModel,
     DeviceKeyTransferRequestModel,
     DeviceKeyTransferModel,
+    DeviceKeyRequestModel,
+    DeviceKeyRequestListResponseModel,
+    DeviceKeyRequestFulfillModel,
 )
 from .device_store import create_device_store
 from .key_exchange_store import create_key_exchange_store
@@ -461,6 +464,29 @@ def list_device_keys(user_id: Annotated[str, Depends(verify_trusted_device)]) ->
     ])
 
 
+@app.post("/api/v1/devices/current/key-request", response_model=DeviceKeyRequestModel)
+def request_current_device_key(
+    user_id: Annotated[str, Depends(verify_trusted_device)],
+    x_device_id: Annotated[str | None, Header(alias="X-Device-ID")] = None,
+) -> DeviceKeyRequestModel:
+    if not key_exchange_store.get_key(user_id, x_device_id):
+        raise HTTPException(status_code=409, detail="Current device must publish a verified public key first.")
+    request_id = str(uuid.uuid4())
+    record = key_exchange_store.create_request(request_id, user_id, x_device_id, datetime.now(UTC) + timedelta(hours=24))
+    return DeviceKeyRequestModel(requestId=record["request_id"], targetDeviceId=record["target_device_id"], createdAt=record["created_at"], expiresAt=record["expires_at"])
+
+
+@app.get("/api/v1/devices/key-requests", response_model=DeviceKeyRequestListResponseModel)
+def list_device_key_requests(
+    user_id: Annotated[str, Depends(verify_trusted_device)],
+    x_device_id: Annotated[str | None, Header(alias="X-Device-ID")] = None,
+) -> DeviceKeyRequestListResponseModel:
+    return DeviceKeyRequestListResponseModel(requests=[
+        DeviceKeyRequestModel(requestId=item["request_id"], targetDeviceId=item["target_device_id"], createdAt=datetime.fromisoformat(item["created_at"]) if isinstance(item["created_at"], str) else item["created_at"], expiresAt=datetime.fromisoformat(item["expires_at"]) if isinstance(item["expires_at"], str) else item["expires_at"])
+        for item in key_exchange_store.list_requests(user_id, x_device_id)
+    ])
+
+
 @app.post("/api/v1/devices/key-transfers", response_model=DeviceKeyTransferModel)
 def create_device_key_transfer(
     payload: DeviceKeyTransferRequestModel,
@@ -481,6 +507,22 @@ def create_device_key_transfer(
     expires_at = datetime.now(UTC) + timedelta(seconds=payload.expiresInSeconds)
     record = key_exchange_store.create_transfer(transfer_id, user_id, x_device_id, payload.targetDeviceId, payload.keyVersion, payload.envelope.model_dump_json(), expires_at)
     return DeviceKeyTransferModel(transferId=record.transfer_id, sourceDeviceId=record.source_device_id, targetDeviceId=record.target_device_id, keyVersion=record.key_version, envelope=json.loads(record.envelope_json), createdAt=record.created_at, expiresAt=record.expires_at)
+
+
+@app.post("/api/v1/devices/key-requests/fulfill", response_model=DeviceKeyTransferModel)
+def fulfill_device_key_request(
+    payload: DeviceKeyRequestFulfillModel,
+    user_id: Annotated[str, Depends(verify_trusted_device)],
+    x_device_id: Annotated[str | None, Header(alias="X-Device-ID")] = None,
+) -> DeviceKeyTransferModel:
+    pending = {item["request_id"]: item for item in key_exchange_store.list_requests(user_id, x_device_id)}
+    request_record = pending.get(payload.requestId)
+    if not request_record or request_record["target_device_id"] != payload.transfer.targetDeviceId:
+        raise HTTPException(status_code=404, detail="Key request is missing or expired.")
+    result = create_device_key_transfer(payload.transfer, user_id, x_device_id)
+    if not key_exchange_store.fulfill_request(user_id, payload.requestId, payload.transfer.targetDeviceId):
+        raise HTTPException(status_code=409, detail="Key request was already fulfilled.")
+    return result
 
 
 @app.get("/api/v1/devices/current/key-transfer", response_model=DeviceKeyTransferModel | None)

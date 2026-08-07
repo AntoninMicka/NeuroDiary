@@ -69,7 +69,14 @@ import {
   saveRecoverySecret,
   saveSyncSettings,
 } from "./services/syncService.js";
-import { consumeDeviceKeyTransfer, ensureDeviceExchangeKeyPublished } from "./services/deviceKeyExchange.js";
+import {
+  consumeDeviceKeyTransfer,
+  ensureDeviceExchangeKeyPublished,
+  fetchDeviceKeyRequests,
+  fetchDevicePublicKeys,
+  fulfillDeviceKeyRequest,
+  requestDeviceMasterKey,
+} from "./services/deviceKeyExchange.js";
 import {
   fetchTrustedDevices,
   getCurrentDeviceId,
@@ -200,6 +207,8 @@ const contactEditor = reactive({ id: "", name: "", email: "", publicKeyPem: "" }
 const generatedContactPrivateKey = ref("");
 const reportSharePassword = ref("");
 const trustedDevices = ref([]);
+const pendingDeviceKeyRequests = ref([]);
+const rotationTargetDeviceIds = ref([]);
 const deferredInstallPrompt = ref(null);
 const canInstallApp = ref(false);
 const isInstalledApp = ref(false);
@@ -1583,9 +1592,29 @@ async function ensureCurrentDeviceRegistered() {
       await acceptTransferredSyncKey(transfer);
       syncKeyMaterialRefreshToken.value += 1;
       storageMessage.value = `Sifrovaci klic verze ${transfer.keyVersion} byl bezpecne prevzat ze zarizeni ${transfer.sourceDeviceId.slice(0, 8)}.`;
+    } else {
+      await requestDeviceMasterKey(syncSettings);
+      storageMessage.value = "Toto zarizeni pozadalo duveryhodne zarizeni o asymetricky sifrovany master key.";
     }
   }
-  trustedDevices.value = await fetchTrustedDevices(syncSettings);
+  const [devices, publicKeys] = await Promise.all([fetchTrustedDevices(syncSettings), fetchDevicePublicKeys(syncSettings)]);
+  const keyedIds = new Set(publicKeys.map((item) => item.deviceId));
+  trustedDevices.value = devices.map((device) => ({ ...device, hasVerifiedKey: keyedIds.has(device.deviceId) }));
+  pendingDeviceKeyRequests.value = hasStoredSyncMasterKey() ? await fetchDeviceKeyRequests(syncSettings) : [];
+  if (!rotationTargetDeviceIds.value.length) {
+    rotationTargetDeviceIds.value = trustedDevices.value.filter((device) => !device.current && !device.revokedAt && device.hasVerifiedKey).map((device) => device.deviceId);
+  }
+}
+
+async function approveDeviceKeyRequest(keyRequest) {
+  try {
+    const material = loadSyncKeyMaterial();
+    await fulfillDeviceKeyRequest(syncSettings, keyRequest, material.exportedMasterKey, Number(material.keyVersion ?? 1));
+    pendingDeviceKeyRequests.value = await fetchDeviceKeyRequests(syncSettings);
+    storageMessage.value = `Master key byl jednorazove zasifrovan pro zarizeni ${keyRequest.targetDeviceId.slice(0, 8)}. Recovery secret predan nebyl.`;
+  } catch (error) {
+    storageMessage.value = `Predani klice selhalo: ${error.message}`;
+  }
 }
 
 async function refreshTrustedDevices() {
@@ -1613,7 +1642,9 @@ async function rotateEncryptionKey() {
   isSyncBusy.value = true;
   try {
     await ensureCurrentDeviceRegistered();
-    const result = await rotateCloudEncryption({ state, settings: syncSettings, baseRevision: Number(syncSettings.revision ?? 0) });
+    const selectedIds = [...rotationTargetDeviceIds.value];
+    const unselected = trustedDevices.value.filter((device) => !device.current && !device.revokedAt && !selectedIds.includes(device.deviceId));
+    const result = await rotateCloudEncryption({ state, settings: syncSettings, baseRevision: Number(syncSettings.revision ?? 0), targetDeviceIds: selectedIds });
     Object.assign(syncSettings, saveSyncSettings({ ...syncSettings, revision: result.revision, lastSyncAt: result.updatedAt }));
     recoverySecretInput.value = result.recoverySecret;
     generatedRecoverySecret.value = result.recoverySecret;
@@ -1621,6 +1652,11 @@ async function rotateEncryptionKey() {
     refreshSyncKeyMaterialStatus();
     await refreshTrustedDevices();
     storageMessage.value = `Sifrovaci klic byl rotovan na verzi ${result.keyVersion} a pripraven pro ${result.transferredDeviceCount} dalsich zarizeni. Ulozte novy recovery secret.`;
+    if (unselected.length && globalThis.confirm(`Novy klic nebyl predan ${unselected.length} zarizenim. Chcete je nyni odvolat?`)) {
+      await Promise.all(unselected.map((device) => revokeTrustedDevice(syncSettings, device.deviceId)));
+      await refreshTrustedDevices();
+      storageMessage.value = `Klic byl rotovan a ${unselected.length} nevybranych zarizeni bylo odvolano.`;
+    }
   } catch (error) {
     storageMessage.value = `Rotace sifrovaciho klice selhala: ${error.message}`;
   } finally {
@@ -2792,6 +2828,7 @@ function syncFloatingMenuHeight() {
                   <span>
                     {{ device.name }}
                     · {{ device.current ? "toto zarizeni" : device.revokedAt ? "odvolano" : "aktivni" }}
+                    · {{ device.hasVerifiedKey ? "klic overen" : "bez klice" }}
                   </span>
                   <button
                     v-if="!device.current && !device.revokedAt"
@@ -2801,6 +2838,23 @@ function syncFloatingMenuHeight() {
                   >Odpojit</button>
                 </li>
               </ul>
+              <div v-if="pendingDeviceKeyRequests.length" class="private-key-warning">
+                <strong>Zadosti novych zarizeni o master key</strong>
+                <div v-for="request in pendingDeviceKeyRequests" :key="request.requestId" class="contact-actions">
+                  <span>Zarizeni {{ request.targetDeviceId.slice(0, 8) }}</span>
+                  <button class="ghost-button" type="button" @click="approveDeviceKeyRequest(request)">Schvalit jednorazove predani</button>
+                </div>
+                <span>Predava se pouze master key zasifrovany verejnym klicem ciloveho zarizeni, nikoli recovery secret.</span>
+              </div>
+              <fieldset class="contact-keyring">
+                <legend>Cile pristi rotace</legend>
+                <label v-for="device in trustedDevices.filter((item) => !item.current && !item.revokedAt)" :key="`rotation-${device.deviceId}`">
+                  <input v-model="rotationTargetDeviceIds" type="checkbox" :value="device.deviceId" :disabled="!device.hasVerifiedKey" />
+                  {{ device.name }} · {{ device.deviceId.slice(0, 8) }}
+                  <span v-if="!device.hasVerifiedKey">(nejprve musi overit verejny klic)</span>
+                </label>
+                <p class="panel-tip">Nevybrana zarizeni novy klic neobdrzi a po rotaci budou nabidnuta k odvolani.</p>
+              </fieldset>
               <button class="ghost-button utility-menu-item-danger" type="button" :disabled="isSyncBusy" @click="rotateEncryptionKey">
                 Rotovat klic a predat ostatnim zarizenim
               </button>

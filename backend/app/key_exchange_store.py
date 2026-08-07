@@ -57,6 +57,10 @@ class SqliteKeyExchangeStore:
                   target_device_id TEXT NOT NULL, key_version INTEGER NOT NULL, envelope_json TEXT NOT NULL,
                   created_at TEXT NOT NULL, expires_at TEXT NOT NULL, consumed_at TEXT
                 );
+                CREATE TABLE IF NOT EXISTS device_key_requests (
+                  request_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, target_device_id TEXT NOT NULL,
+                  created_at TEXT NOT NULL, expires_at TEXT NOT NULL, fulfilled_at TEXT
+                );
             """)
             connection.commit()
 
@@ -115,6 +119,34 @@ class SqliteKeyExchangeStore:
             connection.commit()
         return TransferRecord(transfer_id, source_device_id, target_device_id, key_version, envelope_json, now, expires_at)
 
+    def create_request(self, request_id, user_id, target_device_id, expires_at):
+        now = datetime.now(UTC)
+        with self._connect() as connection:
+            connection.execute("DELETE FROM device_key_requests WHERE user_id = ? AND target_device_id = ? AND fulfilled_at IS NULL", (user_id, target_device_id))
+            connection.execute("INSERT INTO device_key_requests VALUES (?, ?, ?, ?, ?, NULL)", (request_id, user_id, target_device_id, now.isoformat(), expires_at.isoformat()))
+            connection.commit()
+        return {"request_id": request_id, "target_device_id": target_device_id, "created_at": now, "expires_at": expires_at}
+
+    def list_requests(self, user_id, exclude_device_id):
+        now = datetime.now(UTC)
+        with self._connect() as connection:
+            rows = connection.execute("""
+                SELECT request_id, target_device_id, created_at, expires_at FROM device_key_requests
+                WHERE user_id = ? AND target_device_id <> ? AND fulfilled_at IS NULL AND expires_at > ?
+                ORDER BY created_at
+            """, (user_id, exclude_device_id, now.isoformat())).fetchall()
+        return [dict(row) for row in rows]
+
+    def fulfill_request(self, user_id, request_id, target_device_id) -> bool:
+        now = datetime.now(UTC)
+        with self._connect() as connection:
+            cursor = connection.execute("""
+                UPDATE device_key_requests SET fulfilled_at = ? WHERE request_id = ? AND user_id = ?
+                  AND target_device_id = ? AND fulfilled_at IS NULL AND expires_at > ?
+            """, (now.isoformat(), request_id, user_id, target_device_id, now.isoformat()))
+            connection.commit()
+            return cursor.rowcount == 1
+
     def consume_transfer(self, user_id, target_device_id):
         now = datetime.now(UTC)
         with self._connect() as connection:
@@ -133,6 +165,7 @@ class SqliteKeyExchangeStore:
         with self._connect() as connection:
             connection.execute("DELETE FROM device_public_keys WHERE user_id = ? AND device_id = ?", (user_id, device_id))
             connection.execute("DELETE FROM device_key_transfers WHERE user_id = ? AND (source_device_id = ? OR target_device_id = ?)", (user_id, device_id, device_id))
+            connection.execute("DELETE FROM device_key_requests WHERE user_id = ? AND target_device_id = ?", (user_id, device_id))
             connection.commit()
 
 
@@ -160,6 +193,9 @@ class PostgresKeyExchangeStore(SqliteKeyExchangeStore):
                   transfer_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, source_device_id TEXT NOT NULL,
                   target_device_id TEXT NOT NULL, key_version INTEGER NOT NULL, envelope_json TEXT NOT NULL,
                   created_at TIMESTAMPTZ NOT NULL, expires_at TIMESTAMPTZ NOT NULL, consumed_at TIMESTAMPTZ);
+                CREATE TABLE IF NOT EXISTS device_key_requests (
+                  request_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, target_device_id TEXT NOT NULL,
+                  created_at TIMESTAMPTZ NOT NULL, expires_at TIMESTAMPTZ NOT NULL, fulfilled_at TIMESTAMPTZ);
             """)
 
     # Adapt the compact SQLite implementation at the connection boundary.
