@@ -1,5 +1,6 @@
 import { BlobReader, BlobWriter, ZipWriter } from "@zip.js/zip.js";
 import { createDoctorReportPdfBlob } from "./doctorReport.js";
+import { encryptBlobForContact } from "./contactKeyring.js";
 
 const CONTACT_KEY = "neurodiary-doctor-contact-v1";
 
@@ -41,18 +42,23 @@ export async function createEncryptedReportArchive(reportOptions, password = gen
 }
 
 export async function shareEncryptedReport({ reportOptions, contact, password }) {
-  const safeContact = saveDoctorContact(contact);
+  const safeContact = contact?.id ? contact : saveDoctorContact(contact);
   if (!safeContact.email) throw new Error("Doplnte e-mail lekare.");
-  const encrypted = await createEncryptedReportArchive(reportOptions, password);
-  const file = new File([encrypted.blob], "neurodiary-report.zip", { type: "application/zip" });
+  const usesPublicKey = Boolean(safeContact.publicKeyPem);
+  const encrypted = usesPublicKey
+    ? { blob: await encryptBlobForContact(await createDoctorReportPdfBlob(reportOptions), safeContact), password: "" }
+    : await createEncryptedReportArchive(reportOptions, password);
+  const file = new File([encrypted.blob], usesPublicKey ? "neurodiary-report.ndreport" : "neurodiary-report.zip", { type: encrypted.blob.type });
   const shareData = {
     files: [file],
     title: "Sifrovany NeuroDiary report",
-    text: `Pro ${safeContact.name || safeContact.email}. Heslo k priloze bude predano jinym kanalem.`,
+    text: usesPublicKey
+      ? `Pro ${safeContact.name || safeContact.email}. Report je zasifrovan verejnym klicem prijemce.`
+      : `Pro ${safeContact.name || safeContact.email}. Heslo k priloze bude predano jinym kanalem.`,
   };
   if (globalThis.navigator?.share && globalThis.navigator.canShare?.({ files: [file] })) {
     await globalThis.navigator.share(shareData);
-    return { ...encrypted, method: "native-share" };
+    return { ...encrypted, method: "native-share", encryption: usesPublicKey ? "public-key" : "password" };
   }
   const url = URL.createObjectURL(encrypted.blob);
   const link = document.createElement("a");
@@ -61,7 +67,9 @@ export async function shareEncryptedReport({ reportOptions, contact, password })
   link.click();
   URL.revokeObjectURL(url);
   const subject = encodeURIComponent("Sifrovany NeuroDiary report");
-  const body = encodeURIComponent("V priloze posilam sifrovany report. Heslo predam jinym kanalem. Priloha byla stazena a je potreba ji k e-mailu pridat.");
+  const body = encodeURIComponent(usesPublicKey
+    ? "V priloze posilam report zasifrovany vasim verejnym klicem. Priloha byla stazena a je potreba ji k e-mailu pridat."
+    : "V priloze posilam sifrovany report. Heslo predam jinym kanalem. Priloha byla stazena a je potreba ji k e-mailu pridat.");
   globalThis.location.href = `mailto:${encodeURIComponent(safeContact.email)}?subject=${subject}&body=${body}`;
-  return { ...encrypted, method: "download-and-email" };
+  return { ...encrypted, method: "download-and-email", encryption: usesPublicKey ? "public-key" : "password" };
 }

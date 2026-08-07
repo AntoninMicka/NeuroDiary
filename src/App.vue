@@ -83,6 +83,12 @@ import {
 } from "./services/secureReportShare.js";
 import { generateRecoverySecret } from "./services/e2eCrypto.js";
 import {
+  deleteContact,
+  generateContactKeyPair,
+  loadContacts,
+  saveContact,
+} from "./services/contactKeyring.js";
+import {
   appendBootstrapLog,
   BOOTSTRAP_LOG_EVENT,
   getBootstrapLogEntries,
@@ -187,6 +193,10 @@ const reportOptions = reactive({
   weeklyCharts: true,
 });
 const doctorContact = reactive(loadDoctorContact());
+const contacts = ref(loadContacts());
+const selectedContactId = ref(contacts.value[0]?.id ?? "");
+const contactEditor = reactive({ id: "", name: "", email: "", publicKeyPem: "" });
+const generatedContactPrivateKey = ref("");
 const reportSharePassword = ref("");
 const trustedDevices = ref([]);
 const deferredInstallPrompt = ref(null);
@@ -1494,21 +1504,73 @@ function buildCurrentReportOptions() {
 
 async function shareDoctorReportSecurely() {
   try {
-    Object.assign(doctorContact, saveDoctorContact(doctorContact));
+    const selectedContact = contacts.value.find((contact) => contact.id === selectedContactId.value);
+    const targetContact = selectedContact ?? saveDoctorContact(doctorContact);
     const password = generateReportPassword();
     const result = await shareEncryptedReport({
       reportOptions: buildCurrentReportOptions(),
-      contact: doctorContact,
+      contact: targetContact,
       password,
     });
     reportSharePassword.value = result.password;
-    storageMessage.value = result.method === "native-share"
-      ? "Sifrovana priloha byla predana systemovemu sdileni. Heslo predejte jinym kanalem."
-      : "Sifrovana priloha byla stazena a e-mail pripraven. Prilohu rucne pridejte; heslo predejte jinym kanalem.";
+    const delivery = result.method === "native-share" ? "predana systemovemu sdileni" : "stazena a e-mail pripraven";
+    storageMessage.value = result.encryption === "public-key"
+      ? `Priloha byla ${delivery}; je sifrovana verejnym klicem kontaktu.`
+      : `Sifrovana priloha byla ${delivery}. Heslo predejte jinym kanalem.`;
   } catch (error) {
     if (error?.name === "AbortError") return;
     storageMessage.value = `Sifrovany report se nepodarilo pripravit: ${error.message}`;
   }
+}
+
+function editContact(contact = null) {
+  Object.assign(contactEditor, contact ?? { id: "", name: "", email: "", publicKeyPem: "" });
+  generatedContactPrivateKey.value = "";
+}
+
+async function storeContact() {
+  try {
+    const saved = await saveContact(contactEditor);
+    contacts.value = loadContacts();
+    selectedContactId.value = saved.id;
+    editContact(saved);
+    storageMessage.value = saved.keyFingerprint
+      ? `Kontakt ulozen. Otisk klice: ${saved.keyFingerprint}`
+      : "Kontakt ulozen bez verejneho klice; sdileni pouzije heslovy ZIP.";
+  } catch (error) {
+    storageMessage.value = `Kontakt se nepodarilo ulozit: ${error.message}`;
+  }
+}
+
+function removeContact() {
+  if (!contactEditor.id || !globalThis.confirm(`Smazat kontakt ${contactEditor.name}?`)) return;
+  contacts.value = deleteContact(contactEditor.id);
+  selectedContactId.value = contacts.value[0]?.id ?? "";
+  editContact(contacts.value[0]);
+  storageMessage.value = "Kontakt a jeho verejny klic byly odebrany.";
+}
+
+async function createKeysForContact() {
+  try {
+    storageMessage.value = "Generuji 3072bitovy RSA klic…";
+    const keys = await generateContactKeyPair();
+    contactEditor.publicKeyPem = keys.publicKeyPem;
+    generatedContactPrivateKey.value = keys.privateKeyPem;
+    storageMessage.value = `Klice vygenerovany. Overte otisk ${keys.fingerprint} a soukromy klic bezpecne predejte prijemci.`;
+  } catch (error) {
+    storageMessage.value = `Klice se nepodarilo vytvorit: ${error.message}`;
+  }
+}
+
+function downloadGeneratedPrivateKey() {
+  if (!generatedContactPrivateKey.value) return;
+  const blob = new Blob([generatedContactPrivateKey.value], { type: "application/x-pem-file" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `neurodiary-${contactEditor.email || "contact"}-private-key.pem`;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 async function ensureCurrentDeviceRegistered() {
@@ -2308,14 +2370,56 @@ function syncFloatingMenuHeight() {
                     <input v-model="reportOptions.weeklyCharts" type="checkbox" />
                     Tisknout tydenni grafy
                   </label>
-                  <label>
-                    <span>Jmeno lekare</span>
-                    <input v-model="doctorContact.name" type="text" maxlength="120" placeholder="MUDr. Novak" />
-                  </label>
-                  <label>
-                    <span>E-mail lekare</span>
-                    <input v-model="doctorContact.email" type="email" maxlength="254" placeholder="lekar@example.cz" />
-                  </label>
+                  <fieldset class="contact-keyring">
+                    <legend>Kontakt a sifrovaci klic</legend>
+                    <label>
+                      <span>Prijemce reportu</span>
+                      <select v-model="selectedContactId">
+                        <option value="">Jednorazovy kontakt bez klice</option>
+                        <option v-for="contact in contacts" :key="contact.id" :value="contact.id">
+                          {{ contact.name }} · {{ contact.keyFingerprint ? "verejny klic" : "heslo" }}
+                        </option>
+                      </select>
+                    </label>
+                    <div class="contact-actions">
+                      <button class="ghost-button" type="button" @click="editContact(contacts.find((item) => item.id === selectedContactId))">
+                        Upravit vybrany
+                      </button>
+                      <button class="ghost-button" type="button" @click="editContact()">Novy kontakt</button>
+                    </div>
+                    <label>
+                      <span>Jmeno</span>
+                      <input v-model="contactEditor.name" type="text" maxlength="120" placeholder="MUDr. Novak" />
+                    </label>
+                    <label>
+                      <span>E-mail</span>
+                      <input v-model="contactEditor.email" type="email" maxlength="254" placeholder="lekar@example.cz" />
+                    </label>
+                    <label>
+                      <span>Verejny klic prijemce (PEM)</span>
+                      <textarea v-model="contactEditor.publicKeyPem" rows="4" placeholder="-----BEGIN PUBLIC KEY-----"></textarea>
+                    </label>
+                    <div class="contact-actions">
+                      <button class="ghost-button" type="button" @click="storeContact">Ulozit kontakt</button>
+                      <button class="ghost-button" type="button" @click="createKeysForContact">Vygenerovat klice</button>
+                      <button v-if="contactEditor.id" class="ghost-button utility-menu-item-danger" type="button" @click="removeContact">Smazat</button>
+                    </div>
+                    <div v-if="generatedContactPrivateKey" class="private-key-warning">
+                      <strong>Soukromy klic se neuklada.</strong>
+                      <span>Stahnete jej nyni a predejte prijemci bezpecnym kanalem. Po zavreni panelu jej aplikace neobnovi.</span>
+                      <button class="ghost-button" type="button" @click="downloadGeneratedPrivateKey">Stahnout soukromy klic</button>
+                    </div>
+                  </fieldset>
+                  <template v-if="!selectedContactId">
+                    <label>
+                      <span>Jmeno jednorazoveho kontaktu</span>
+                      <input v-model="doctorContact.name" type="text" maxlength="120" />
+                    </label>
+                    <label>
+                      <span>E-mail jednorazoveho kontaktu</span>
+                      <input v-model="doctorContact.email" type="email" maxlength="254" />
+                    </label>
+                  </template>
                   <button class="primary-button" type="button" @click="printDoctorReport">
                     Otevrit tisk
                   </button>
@@ -2326,7 +2430,7 @@ function syncFloatingMenuHeight() {
                     Sdilet sifrovane
                   </button>
                   <div v-if="reportSharePassword" class="report-share-password">
-                    <strong>Heslo k priloze</strong>
+                    <strong>Heslo k zalozni ZIP priloze</strong>
                     <code>{{ reportSharePassword }}</code>
                     <span>Predejte jinym kanalem, nikdy ve stejnem e-mailu.</span>
                   </div>
