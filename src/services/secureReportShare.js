@@ -41,6 +41,33 @@ export async function createEncryptedReportArchive(reportOptions, password = gen
   return { blob, password };
 }
 
+export async function createPlainReportAttachment(reportOptions) {
+  return {
+    blob: await createDoctorReportPdfBlob(reportOptions),
+    filename: "neurodiary-report.pdf",
+    encryption: "none",
+    password: "",
+  };
+}
+
+export async function createProtectedReportAttachment(reportOptions, contact, password = generateReportPassword()) {
+  const usesPublicKey = Boolean(contact?.publicKeyPem);
+  if (usesPublicKey) {
+    return {
+      blob: await encryptBlobForContact(await createDoctorReportPdfBlob(reportOptions), contact),
+      filename: "neurodiary-report.ndreport",
+      encryption: "public-key",
+      password: "",
+    };
+  }
+  const encrypted = await createEncryptedReportArchive(reportOptions, password);
+  return {
+    ...encrypted,
+    filename: "neurodiary-report.zip",
+    encryption: "password",
+  };
+}
+
 export async function sharePlainReport({ reportOptions, contact }) {
   const safeContact = {
     name: String(contact?.name ?? "").trim().slice(0, 120),
@@ -50,8 +77,8 @@ export async function sharePlainReport({ reportOptions, contact }) {
     throw new Error("Doplnte platny e-mail lekare.");
   }
 
-  const blob = await createDoctorReportPdfBlob(reportOptions);
-  const file = new File([blob], "neurodiary-report.pdf", { type: "application/pdf" });
+  const attachment = await createPlainReportAttachment(reportOptions);
+  const file = new File([attachment.blob], attachment.filename, { type: attachment.blob.type });
   const shareData = {
     files: [file],
     title: "NeuroDiary report",
@@ -78,10 +105,8 @@ export async function shareEncryptedReport({ reportOptions, contact, password })
   const safeContact = contact?.id ? contact : saveDoctorContact(contact);
   if (!safeContact.email) throw new Error("Doplnte e-mail lekare.");
   const usesPublicKey = Boolean(safeContact.publicKeyPem);
-  const encrypted = usesPublicKey
-    ? { blob: await encryptBlobForContact(await createDoctorReportPdfBlob(reportOptions), safeContact), password: "" }
-    : await createEncryptedReportArchive(reportOptions, password);
-  const file = new File([encrypted.blob], usesPublicKey ? "neurodiary-report.ndreport" : "neurodiary-report.zip", { type: encrypted.blob.type });
+  const encrypted = await createProtectedReportAttachment(reportOptions, safeContact, password);
+  const file = new File([encrypted.blob], encrypted.filename, { type: encrypted.blob.type });
   const shareData = {
     files: [file],
     title: "Sifrovany NeuroDiary report",

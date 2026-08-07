@@ -39,6 +39,7 @@ import {
   exchangeIdentityToken,
   fetchAuthConfig,
   loadStoredAuthSession,
+  requestGoogleGmailSendAccessToken,
   renderGoogleSignInButton,
   startAppleSignIn,
 } from "./services/authService.js";
@@ -88,10 +89,13 @@ import {
   revokeTrustedDevice,
 } from "./services/trustedDevices.js";
 import {
+  createPlainReportAttachment,
+  createProtectedReportAttachment,
   generateReportPassword,
   shareEncryptedReport,
   sharePlainReport,
 } from "./services/secureReportShare.js";
+import { sendGmailMessage } from "./services/gmailService.js";
 import { generateRecoverySecret } from "./services/e2eCrypto.js";
 import {
   deleteContact,
@@ -1549,6 +1553,46 @@ async function shareDoctorReportSecurely() {
   }
 }
 
+async function sendDoctorReportWithGmail() {
+  try {
+    const selectedContact = contacts.value.find((contact) => contact.id === selectedContactId.value);
+    const recipient = selectedContact ?? {
+      name: String(doctorContact.name ?? "").trim(),
+      email: String(doctorContact.email ?? "").trim(),
+    };
+    if (!recipient.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient.email)) {
+      throw new Error("Doplnte platny e-mail lekare.");
+    }
+
+    const accessToken = await requestGoogleGmailSendAccessToken(authConfig.googleClientId);
+    storageMessage.value = "Pripravuji report a odesilam ho pres Gmail…";
+    const password = selectedContact ? generateReportPassword() : "";
+    const attachment = selectedContact
+      ? await createProtectedReportAttachment(buildCurrentReportOptions(), selectedContact, password)
+      : await createPlainReportAttachment(buildCurrentReportOptions());
+    const isEncrypted = attachment.encryption !== "none";
+    const subject = isEncrypted ? "Sifrovany NeuroDiary report" : "NeuroDiary report";
+    const body = attachment.encryption === "public-key"
+      ? `Pro ${recipient.name || recipient.email}. Report je zasifrovan vasim verejnym klicem.`
+      : attachment.encryption === "password"
+        ? `Pro ${recipient.name || recipient.email}. Report je v sifrovanem ZIPu; heslo vam bude predano jinym kanalem.`
+        : `Pro ${recipient.name || recipient.email}. V priloze posilam NeuroDiary report ve formatu PDF.`;
+
+    await sendGmailMessage({
+      accessToken,
+      to: recipient.email,
+      subject,
+      body,
+      attachment,
+    });
+    reportSharePassword.value = attachment.password;
+    storageMessage.value = `Report byl odeslan pres Gmail na ${recipient.email}.`;
+  } catch (error) {
+    if (error?.name === "AbortError") return;
+    storageMessage.value = `Odeslani pres Gmail se nepodarilo: ${error.message}`;
+  }
+}
+
 function editContact(contact = null) {
   Object.assign(contactEditor, contact ?? { id: "", name: "", email: "", publicKeyPem: "" });
   generatedContactPrivateKey.value = "";
@@ -2546,6 +2590,14 @@ function syncFloatingMenuHeight() {
                   </button>
                   <button class="ghost-button" type="button" @click="shareDoctorReportSecurely">
                     {{ selectedContactId ? "Sdilet sifrovane" : "Sdilet PDF" }}
+                  </button>
+                  <button
+                    v-if="authConfig.googleEnabled"
+                    class="ghost-button"
+                    type="button"
+                    @click="sendDoctorReportWithGmail"
+                  >
+                    Odeslat pres Gmail
                   </button>
                   <div v-if="reportSharePassword" class="report-share-password">
                     <strong>Heslo k zalozni ZIP priloze</strong>

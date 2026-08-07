@@ -255,6 +255,16 @@ Prakticky postup:
 4. zkopiruj `Client ID`
 5. uloz jej do GitHub `Repository variable` jako `NEURODIARY_GOOGLE_CLIENT_ID`
 
+Pro tlacitko `Odeslat pres Gmail` ve stejnem Google Cloud projektu navic:
+
+1. otevri `APIs & Services -> Library` a povol `Gmail API`
+2. v `OAuth consent screen -> Data Access` pridej pouze scope
+   `https://www.googleapis.com/auth/gmail.send`
+3. dopln privacy policy a odesli produkcni OAuth aplikaci k overeni citliveho scope
+
+Gmail access token ziska frontend samostatnym souhlasem az pri odeslani reportu. NeuroDiary jej
+uklada pouze do pameti otevrene stranky a neposila jej backendu.
+
 Poznamka:
 
 - backend umi overit i vice Google client ID, pokud pozdeji pouzijes `NEURODIARY_GOOGLE_CLIENT_IDS`

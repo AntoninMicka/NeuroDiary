@@ -1,6 +1,9 @@
 const AUTH_SESSION_STORAGE_KEY = "neurodiary-auth-session-v1";
 const GOOGLE_SCRIPT_URL = "https://accounts.google.com/gsi/client";
 const APPLE_SCRIPT_URL = "https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/en_US/appleid.auth.js";
+const GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
+let gmailAccessToken = "";
+let gmailAccessTokenExpiresAt = 0;
 
 function trimTrailingSlash(value) {
   return value.trim().replace(/\/+$/, "");
@@ -146,6 +149,39 @@ export async function renderGoogleSignInButton(target, clientId, onCredential) {
     shape: "pill",
     text: "signin_with",
     width: 260,
+  });
+}
+
+export async function requestGoogleGmailSendAccessToken(clientId) {
+  if (!clientId) {
+    throw new Error("Odesilani pres Gmail neni v teto instalaci nakonfigurovano.");
+  }
+  if (gmailAccessToken && Date.now() < gmailAccessTokenExpiresAt - 60_000) {
+    return gmailAccessToken;
+  }
+
+  await loadScript(GOOGLE_SCRIPT_URL, "google");
+  return new Promise((resolve, reject) => {
+    const tokenClient = globalThis.google.accounts.oauth2.initTokenClient({
+      client_id: clientId,
+      scope: GMAIL_SEND_SCOPE,
+      callback: (response) => {
+        if (!response?.access_token) {
+          reject(new Error(response?.error_description || "Google neudelil opravneni k odeslani e-mailu."));
+          return;
+        }
+        gmailAccessToken = response.access_token;
+        gmailAccessTokenExpiresAt = Date.now() + Number(response.expires_in || 3600) * 1000;
+        resolve(gmailAccessToken);
+      },
+      error_callback: (error) => {
+        const aborted = error?.type === "popup_closed" || error?.type === "popup_failed_to_open";
+        const authError = new Error(aborted ? "Prihlaseni ke Gmailu bylo zruseno." : "Gmail autorizace se nepodarila.");
+        authError.name = aborted ? "AbortError" : "Error";
+        reject(authError);
+      },
+    });
+    tokenClient.requestAccessToken({ prompt: "consent" });
   });
 }
 
