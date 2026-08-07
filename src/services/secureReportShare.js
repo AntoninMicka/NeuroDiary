@@ -68,14 +68,20 @@ export async function createProtectedReportAttachment(reportOptions, contact, pa
   };
 }
 
-export async function sharePlainReport({ reportOptions, contact }) {
+function cleanShareContact(contact) {
   const safeContact = {
+    ...contact,
     name: String(contact?.name ?? "").trim().slice(0, 120),
     email: String(contact?.email ?? "").trim().slice(0, 254),
   };
   if (!safeContact.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(safeContact.email)) {
     throw new Error("Doplnte platny e-mail lekare.");
   }
+  return safeContact;
+}
+
+export async function sharePlainReport({ reportOptions, contact }) {
+  const safeContact = cleanShareContact(contact);
 
   const attachment = await createPlainReportAttachment(reportOptions);
   const file = new File([attachment.blob], attachment.filename, { type: attachment.blob.type });
@@ -89,7 +95,7 @@ export async function sharePlainReport({ reportOptions, contact }) {
     return { method: "native-share", encryption: "none" };
   }
 
-  const url = URL.createObjectURL(blob);
+  const url = URL.createObjectURL(attachment.blob);
   const link = document.createElement("a");
   link.href = url;
   link.download = file.name;
@@ -102,8 +108,7 @@ export async function sharePlainReport({ reportOptions, contact }) {
 }
 
 export async function shareEncryptedReport({ reportOptions, contact, password }) {
-  const safeContact = contact?.id ? contact : saveDoctorContact(contact);
-  if (!safeContact.email) throw new Error("Doplnte e-mail lekare.");
+  const safeContact = cleanShareContact(contact);
   const usesPublicKey = Boolean(safeContact.publicKeyPem);
   const encrypted = await createProtectedReportAttachment(reportOptions, safeContact, password);
   const file = new File([encrypted.blob], encrypted.filename, { type: encrypted.blob.type });

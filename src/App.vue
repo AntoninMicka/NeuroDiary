@@ -213,6 +213,7 @@ const selectedContactId = ref(contacts.value[0]?.id ?? "");
 const contactEditor = reactive({ id: "", name: "", email: "", publicKeyPem: "" });
 const generatedContactPrivateKey = ref("");
 const reportSharePassword = ref("");
+const encryptOneTimeReport = ref(false);
 const trustedDevices = ref([]);
 const pendingDeviceKeyRequests = ref([]);
 const rotationTargetDeviceIds = ref([]);
@@ -1527,6 +1528,17 @@ async function shareDoctorReportSecurely() {
   try {
     const selectedContact = contacts.value.find((contact) => contact.id === selectedContactId.value);
     if (!selectedContact) {
+      if (encryptOneTimeReport.value) {
+        const result = await shareEncryptedReport({
+          reportOptions: buildCurrentReportOptions(),
+          contact: doctorContact,
+          password: generateReportPassword(),
+        });
+        reportSharePassword.value = result.password;
+        const delivery = result.method === "native-share" ? "predana systemovemu sdileni" : "stazena a e-mail pripraven";
+        storageMessage.value = `Sifrovana priloha byla ${delivery}. Heslo predejte jinym kanalem.`;
+        return;
+      }
       const result = await sharePlainReport({
         reportOptions: buildCurrentReportOptions(),
         contact: doctorContact,
@@ -1566,9 +1578,10 @@ async function sendDoctorReportWithGmail() {
 
     const accessToken = await requestGoogleGmailSendAccessToken(authConfig.googleClientId);
     storageMessage.value = "Pripravuji report a odesilam ho pres Gmail…";
-    const password = selectedContact ? generateReportPassword() : "";
-    const attachment = selectedContact
-      ? await createProtectedReportAttachment(buildCurrentReportOptions(), selectedContact, password)
+    const protectReport = Boolean(selectedContact) || encryptOneTimeReport.value;
+    const password = protectReport ? generateReportPassword() : "";
+    const attachment = protectReport
+      ? await createProtectedReportAttachment(buildCurrentReportOptions(), recipient, password)
       : await createPlainReportAttachment(buildCurrentReportOptions());
     const isEncrypted = attachment.encryption !== "none";
     const subject = isEncrypted ? "Sifrovany NeuroDiary report" : "NeuroDiary report";
@@ -2580,7 +2593,20 @@ function syncFloatingMenuHeight() {
                       <span>E-mail jednorazoveho kontaktu</span>
                       <input v-model="doctorContact.email" type="email" maxlength="254" />
                     </label>
-                    <p class="panel-tip">Jednorazove zadany kontakt se neuklada a report se odesila jako nesifrovane PDF.</p>
+                    <label>
+                      <input
+                        v-model="encryptOneTimeReport"
+                        type="checkbox"
+                        @change="reportSharePassword = ''"
+                      />
+                      Zasifrovat report heslem
+                    </label>
+                    <p class="panel-tip">
+                      Jednorazove zadany kontakt se neuklada.
+                      {{ encryptOneTimeReport
+                        ? "Report se odesle v sifrovanem ZIPu a heslo je nutne predat jinym kanalem."
+                        : "Report se odesle jako nesifrovane PDF." }}
+                    </p>
                   </template>
                   <button class="primary-button" type="button" @click="printDoctorReport">
                     Otevrit tisk
@@ -2589,7 +2615,7 @@ function syncFloatingMenuHeight() {
                     Ulozit PDF
                   </button>
                   <button class="ghost-button" type="button" @click="shareDoctorReportSecurely">
-                    {{ selectedContactId ? "Sdilet sifrovane" : "Sdilet PDF" }}
+                    {{ selectedContactId || encryptOneTimeReport ? "Sdilet sifrovane" : "Sdilet PDF" }}
                   </button>
                   <button
                     v-if="authConfig.googleEnabled"
