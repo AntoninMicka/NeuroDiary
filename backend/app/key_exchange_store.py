@@ -101,6 +101,23 @@ class SqliteKeyExchangeStore:
             connection.commit()
         return DeviceKeyRecord(device_id, public_key_jwk, fingerprint, now)
 
+    def put_key_with_bootstrap(self, user_id, device_id, public_key_jwk, fingerprint):
+        """Store a proven key and elect exactly one bootstrap device when no key exists."""
+        now = datetime.now(UTC)
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            is_first_key = connection.execute(
+                "SELECT 1 FROM device_public_keys WHERE user_id = ? LIMIT 1", (user_id,),
+            ).fetchone() is None
+            connection.execute("""
+                INSERT INTO device_public_keys VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(user_id, device_id) DO UPDATE SET
+                  public_key_jwk = excluded.public_key_jwk, fingerprint = excluded.fingerprint,
+                  verified_at = excluded.verified_at
+            """, (user_id, device_id, public_key_jwk, fingerprint, now.isoformat()))
+            connection.commit()
+        return DeviceKeyRecord(device_id, public_key_jwk, fingerprint, now), is_first_key
+
     def list_keys(self, user_id) -> list[DeviceKeyRecord]:
         with self._connect() as connection:
             rows = connection.execute(
@@ -224,6 +241,22 @@ class PostgresKeyExchangeStore(SqliteKeyExchangeStore):
                   event_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, device_id TEXT NOT NULL,
                   event_type TEXT NOT NULL, details_json TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL);
             """)
+
+    def put_key_with_bootstrap(self, user_id, device_id, public_key_jwk, fingerprint):
+        now = datetime.now(UTC)
+        from psycopg import connect
+        from psycopg.rows import dict_row
+        with connect(self.database_url, row_factory=dict_row) as connection:
+            with connection.transaction():
+                connection.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (user_id,))
+                is_first_key = connection.execute("SELECT 1 FROM device_public_keys WHERE user_id = %s LIMIT 1", (user_id,)).fetchone() is None
+                connection.execute("""
+                    INSERT INTO device_public_keys VALUES (%s, %s, %s, %s, %s)
+                    ON CONFLICT(user_id, device_id) DO UPDATE SET
+                      public_key_jwk = excluded.public_key_jwk, fingerprint = excluded.fingerprint,
+                      verified_at = excluded.verified_at
+                """, (user_id, device_id, public_key_jwk, fingerprint, now))
+        return DeviceKeyRecord(device_id, public_key_jwk, fingerprint, now), is_first_key
 
     # Adapt the compact SQLite implementation at the connection boundary.
     @contextmanager

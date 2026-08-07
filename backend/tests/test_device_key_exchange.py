@@ -55,6 +55,24 @@ def test_device_must_prove_private_key_ownership(monkeypatch, tmp_path):
     assert error.value.status_code == 403
 
 
+def test_first_verified_key_bootstraps_legacy_account_without_keys(monkeypatch, tmp_path):
+    main = load_app(monkeypatch, tmp_path)
+    user = "legacy-user"
+    old_device = "device-0000000001"
+    bootstrap = "device-0000000002"
+    later = "device-0000000003"
+    main.register_current_device(DeviceRegistrationRequestModel(deviceId=old_device, name="Stary klient"), user)
+    registration = main.register_current_device(DeviceRegistrationRequestModel(deviceId=bootstrap, name="Prvni s klicem"), user)
+    assert registration.trustStatus == "pending"
+
+    register_and_publish(main, user, bootstrap)
+    assert main.device_store.is_active(user, bootstrap) is True
+    assert any(item["event_type"] == "device_bootstrap_trusted" for item in main.key_exchange_store.list_audit(user))
+
+    register_and_publish(main, user, later)
+    assert main.device_store.is_active(user, later) is False
+
+
 def test_transfers_are_one_time_and_isolated_by_user(monkeypatch, tmp_path):
     main = load_app(monkeypatch, tmp_path)
     source = "device-0000000001"

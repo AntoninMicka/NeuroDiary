@@ -468,7 +468,10 @@ def publish_current_device_key(
     if not key_exchange_store.consume_challenge(payload.challengeId, user_id, payload.deviceId, jwk_json, secret_hash):
         raise HTTPException(status_code=403, detail="Device key ownership proof is invalid or expired.")
     fingerprint = hashlib.sha256(jwk_json.encode()).hexdigest()
-    record = key_exchange_store.put_key(user_id, payload.deviceId, jwk_json, fingerprint)
+    record, is_bootstrap_device = key_exchange_store.put_key_with_bootstrap(user_id, payload.deviceId, jwk_json, fingerprint)
+    if is_bootstrap_device:
+        device_store.trust(user_id, payload.deviceId)
+        audit_security(user_id, payload.deviceId, "device_bootstrap_trusted", fingerprint=fingerprint)
     audit_security(user_id, payload.deviceId, "device_key_verified", fingerprint=fingerprint)
     return DevicePublicKeyModel(deviceId=record.device_id, publicKeyJwk=json.loads(record.public_key_jwk), fingerprint=record.fingerprint, verifiedAt=record.verified_at)
 

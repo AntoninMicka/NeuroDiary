@@ -1584,8 +1584,11 @@ function downloadGeneratedPrivateKey() {
 }
 
 async function ensureCurrentDeviceRegistered() {
-  const registration = await registerCurrentDevice(syncSettings);
+  let registration = await registerCurrentDevice(syncSettings);
   await ensureDeviceExchangeKeyPublished(syncSettings);
+  if (registration.trustStatus === "pending") {
+    registration = await registerCurrentDevice(syncSettings);
+  }
   if (registration.trustStatus === "pending") {
     const transfer = await consumeDeviceKeyTransfer(syncSettings);
     if (transfer) {
