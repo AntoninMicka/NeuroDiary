@@ -169,14 +169,14 @@ function buildDayTable(dateKey, entry, medicationColorMap) {
   return `
     <section class="day-sheet">
       <div class="day-heading">
-        <div>
-          <p class="day-title">${escapeHtml(formatLongDate(dateKey))}</p>
-          <p class="day-subtitle">
+        <p class="day-title">
+          <span>${escapeHtml(formatLongDate(dateKey))}</span>
+          <span class="day-subtitle">
             Spanek: ${escapeHtml(entry ? formatSleepQuality(entry.sleepQuality) : "Bez zaznamu")}
             · Den: ${escapeHtml(entry ? formatOverallStatus(entry.overallStatus) : "Bez zaznamu")}
             · Kvalita dat: ${escapeHtml(quality.label)} (${quality.hourCoveragePercent} % hodin)
-          </p>
-        </div>
+          </span>
+        </p>
       </div>
 
       <table class="diary-table">
@@ -811,8 +811,7 @@ export function buildDoctorReportHtml({
         }
         .day-heading {
           display: flex;
-          justify-content: space-between;
-          align-items: end;
+          align-items: baseline;
           margin-bottom: 2px;
         }
         .day-title {
@@ -820,10 +819,12 @@ export function buildDoctorReportHtml({
           font-size: 10px;
           font-weight: 700;
           color: var(--blue);
+          white-space: nowrap;
         }
         .day-subtitle {
-          margin: 1px 0 0;
+          margin-left: 5px;
           font-size: 8px;
+          font-weight: 400;
           color: var(--muted);
         }
         .diary-table,
@@ -886,11 +887,11 @@ export function buildDoctorReportHtml({
           display: flex;
           align-items: center;
           padding: 0 0 0 4px;
-          min-height: 38px;
+          min-height: 26px;
         }
         .medication-track {
           position: relative;
-          min-height: 38px;
+          min-height: 26px;
           border: 1px solid var(--line);
           background: #fff;
           overflow: hidden;
@@ -911,7 +912,7 @@ export function buildDoctorReportHtml({
           position: absolute;
           left: 0;
           right: 0;
-          top: 18px;
+          top: 12px;
           border-top: 1px dashed var(--line);
         }
         .medication-marker {
@@ -926,7 +927,7 @@ export function buildDoctorReportHtml({
           color: var(--medication-color);
         }
         .medication-marker.medication-lane-1 {
-          top: 20px;
+          top: 14px;
         }
         .medication-dot {
           display: inline-block;
@@ -939,7 +940,9 @@ export function buildDoctorReportHtml({
           box-shadow: 0 0 0 1px #fff;
         }
         .medication-caption {
-          display: block;
+          display: flex;
+          align-items: baseline;
+          gap: 2px;
           min-width: 0;
           margin-top: 0;
           font-size: 6px;
@@ -948,7 +951,8 @@ export function buildDoctorReportHtml({
         }
         .medication-caption strong,
         .medication-caption span {
-          display: block;
+          display: inline;
+          white-space: nowrap;
         }
         .medication-caption strong {
           font-weight: 700;
