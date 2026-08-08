@@ -338,3 +338,8 @@ Po uspesnem deployi prihlaseni aktivujes takto:
 4. v panelu `Udaje -> Cloud sync` se objevi sekce prihlaseni
 5. prihlas se pres Google nebo Apple
 6. po prihlaseni uz neni potreba rucne vyplnovat API token
+
+GitHub Actions načítá `NEURODIARY_ADMIN_EMAILS` a
+`NEURODIARY_ADMIN_ALERT_EMAIL` přednostně z repository Secrets. Pro zpětnou
+kompatibilitu přijme stejné názvy také z repository Variables. Limity záloh a
+ID Cloud SQL instance lze zadat oběma způsoby; Secrets mají vždy přednost.

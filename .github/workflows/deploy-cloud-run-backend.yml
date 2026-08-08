@@ -19,6 +19,7 @@ env:
   GCP_REGION: ${{ vars.GCP_REGION }}
   GAR_REPOSITORY: ${{ vars.GAR_REPOSITORY }}
   CLOUD_RUN_SERVICE: ${{ vars.CLOUD_RUN_SERVICE }}
+  CLOUD_SQL_INSTANCE_ID: ${{ secrets.NEURODIARY_CLOUD_SQL_INSTANCE || vars.NEURODIARY_CLOUD_SQL_INSTANCE }}
   IMAGE_NAME: neurodiary-sync
 
 jobs:
@@ -55,6 +56,26 @@ jobs:
       - name: Push container image
         run: docker push "${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GAR_REPOSITORY}/${IMAGE_NAME}:${GITHUB_SHA}"
 
+      - name: Create database recovery point before migration
+        if: env.CLOUD_SQL_INSTANCE_ID != ''
+        run: |
+          gcloud sql backups create \
+            --instance="${CLOUD_SQL_INSTANCE_ID}" \
+            --description="NeuroDiary pre-update ${GITHUB_SHA}" \
+            --quiet
+
+          mapfile -t OLD_BACKUPS < <(
+            gcloud sql backups list \
+              --instance="${CLOUD_SQL_INSTANCE_ID}" \
+              --filter="type=ON_DEMAND AND description~'^NeuroDiary pre-update '" \
+              --sort-by='~endTime' \
+              --format='value(id)' | tail -n +4
+          )
+          for backup_id in "${OLD_BACKUPS[@]}"; do
+            [ -n "${backup_id}" ] || continue
+            gcloud sql backups delete "${backup_id}" --instance="${CLOUD_SQL_INSTANCE_ID}" --quiet
+          done
+
       - name: Deploy to Cloud Run
         id: deploy
         uses: google-github-actions/deploy-cloudrun@v3
@@ -75,16 +96,18 @@ jobs:
             NEURODIARY_VAPID_PUBLIC_KEY=${{ vars.NEURODIARY_VAPID_PUBLIC_KEY }}
             NEURODIARY_VAPID_SUBJECT=${{ vars.NEURODIARY_VAPID_SUBJECT }}
             NEURODIARY_PUSH_ENDPOINT_HOSTS=${{ vars.NEURODIARY_PUSH_ENDPOINT_HOSTS }}
-            NEURODIARY_ADMIN_EMAILS=${{ vars.NEURODIARY_ADMIN_EMAILS }}
-            NEURODIARY_ADMIN_ALERT_EMAIL=${{ vars.NEURODIARY_ADMIN_ALERT_EMAIL }}
+            NEURODIARY_ADMIN_EMAILS=${{ secrets.NEURODIARY_ADMIN_EMAILS || vars.NEURODIARY_ADMIN_EMAILS }}
+            NEURODIARY_ADMIN_ALERT_EMAIL=${{ secrets.NEURODIARY_ADMIN_ALERT_EMAIL || vars.NEURODIARY_ADMIN_ALERT_EMAIL }}
             NEURODIARY_GCP_PROJECT_ID=${{ env.GCP_PROJECT_ID }}
             NEURODIARY_GCP_REGION=${{ env.GCP_REGION }}
             NEURODIARY_CLOUD_RUN_SERVICE=${{ env.CLOUD_RUN_SERVICE }}
-            NEURODIARY_CLOUD_SQL_INSTANCE=${{ vars.NEURODIARY_CLOUD_SQL_INSTANCE }}
+            NEURODIARY_CLOUD_SQL_INSTANCE=${{ env.CLOUD_SQL_INSTANCE_ID }}
+            NEURODIARY_UPDATE_TRIGGER=${{ vars.NEURODIARY_UPDATE_TRIGGER || 'neurodiary-cloud-pull' }}
+            NEURODIARY_UPDATE_SCHEDULER=${{ vars.NEURODIARY_UPDATE_SCHEDULER || 'neurodiary-cloud-pull' }}
             NEURODIARY_GMAIL_SEND_ENABLED=${{ vars.NEURODIARY_GMAIL_SEND_ENABLED }}
             NEURODIARY_GMAIL_OAUTH_VERIFIED=${{ vars.NEURODIARY_GMAIL_OAUTH_VERIFIED }}
-            NEURODIARY_MANUAL_BACKUP_LIMIT=${{ vars.NEURODIARY_MANUAL_BACKUP_LIMIT }}
-            NEURODIARY_BACKUP_RETENTION_COUNT=${{ vars.NEURODIARY_BACKUP_RETENTION_COUNT }}
+            NEURODIARY_MANUAL_BACKUP_LIMIT=${{ secrets.NEURODIARY_MANUAL_BACKUP_LIMIT || vars.NEURODIARY_MANUAL_BACKUP_LIMIT || '3' }}
+            NEURODIARY_BACKUP_RETENTION_COUNT=${{ secrets.NEURODIARY_BACKUP_RETENTION_COUNT || vars.NEURODIARY_BACKUP_RETENTION_COUNT || '7' }}
             NEURODIARY_VERSION=${{ github.sha }}
           env_vars_update_strategy: merge
           flags: >-
