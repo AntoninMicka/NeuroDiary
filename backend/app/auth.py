@@ -95,6 +95,9 @@ class AuthManager:
         )
 
     def resolve_authorization(self, authorization: str | None) -> str:
+        return self.resolve_authenticated_user(authorization).user_id
+
+    def resolve_authenticated_user(self, authorization: str | None) -> AuthenticatedUser:
         if not authorization:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -102,7 +105,12 @@ class AuthManager:
             )
 
         if self.api_token and authorization == f"Bearer {self.api_token}":
-            return LEGACY_API_TOKEN_USER_ID
+            return AuthenticatedUser(
+                provider="cloud-token",
+                user_id=LEGACY_API_TOKEN_USER_ID,
+                email="",
+                name="Legacy cloud token",
+            )
 
         if not authorization.startswith("Bearer "):
             raise HTTPException(
@@ -116,7 +124,7 @@ class AuthManager:
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Missing or invalid authentication token.",
             )
-        return user.user_id
+        return user
 
     def exchange_identity_token(
         self,

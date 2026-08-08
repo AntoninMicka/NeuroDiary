@@ -1,0 +1,41 @@
+import { getAuthorizationHeaderValue } from "./authService.js";
+
+async function request(path, options = {}) {
+  const authorization = getAuthorizationHeaderValue();
+  if (!authorization) throw new Error("Pro administraci je nutné přihlášení.");
+  const response = await fetch(path, {
+    ...options,
+    headers: {
+      Authorization: authorization,
+      "Content-Type": "application/json",
+      ...(options.headers ?? {}),
+    },
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    const error = new Error(payload?.detail ?? `Administrátorský požadavek selhal (${response.status}).`);
+    error.status = response.status;
+    throw error;
+  }
+  return payload;
+}
+
+export async function fetchAdminStatus() {
+  const payload = await request("/api/v1/admin/status");
+  return {
+    ...(payload.cloud ?? {}),
+    administrator: payload.administrator,
+    application: payload.application ?? {},
+    schemaVersion: payload.application?.schemaVersion,
+    gmail: payload.gmail ?? {},
+    alerts: payload.alerts ?? {},
+  };
+}
+
+export function createCloudBackup() {
+  return request("/api/v1/admin/backups", { method: "POST" });
+}
+
+export function deleteCloudBackup(backupId) {
+  return request(`/api/v1/admin/backups/${encodeURIComponent(backupId)}?confirm=true`, { method: "DELETE" });
+}

@@ -18,7 +18,8 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 
-from .auth import AuthManager
+from .auth import AuthManager, AuthenticatedUser
+from .cloud_admin import CloudAdminService
 from .models import (
     AuthConfigResponseModel,
     AuthSessionResponseModel,
@@ -77,6 +78,11 @@ CORS_ORIGINS = [
     if origin.strip()
 ]
 PUSH_SCHEDULER_TOKEN = os.getenv("NEURODIARY_PUSH_SCHEDULER_TOKEN", "").strip()
+ADMIN_EMAILS = {
+    email.strip().lower()
+    for email in os.getenv("NEURODIARY_ADMIN_EMAILS", "").split(",")
+    if email.strip()
+}
 
 store = create_sync_store(database_url=DATABASE_URL or None, database_path=DATABASE_PATH)
 device_store = create_device_store(database_url=DATABASE_URL or None, database_path=DATABASE_PATH)
@@ -84,6 +90,7 @@ key_exchange_store = create_key_exchange_store(database_url=DATABASE_URL or None
 push_store = create_push_store(database_url=DATABASE_URL or None, database_path=DATABASE_PATH)
 push_service = PushService()
 auth_manager = AuthManager()
+cloud_admin_service = CloudAdminService()
 logger = logging.getLogger("neurodiary")
 if not logger.handlers:
     handler = logging.StreamHandler()
@@ -165,6 +172,15 @@ def verify_bearer_token(
     return auth_manager.resolve_authorization(authorization)
 
 
+def verify_admin(
+    authorization: Annotated[str | None, Header()] = None,
+) -> AuthenticatedUser:
+    user = auth_manager.resolve_authenticated_user(authorization)
+    if not user.email or user.email.lower() not in ADMIN_EMAILS:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Administrátorský přístup byl zamítnut.")
+    return user
+
+
 def verify_trusted_device(
     user_id: Annotated[str, Depends(verify_bearer_token)],
     x_device_id: Annotated[str | None, Header(alias="X-Device-ID")] = None,
@@ -223,6 +239,57 @@ def api_metadata() -> dict[str, object]:
             "webPush": push_service.enabled,
         },
     }
+
+
+@app.get("/api/v1/admin/status")
+def admin_status(admin: Annotated[AuthenticatedUser, Depends(verify_admin)]) -> dict[str, object]:
+    return {
+        "administrator": admin.email,
+        "application": {
+            "version": APP_VERSION,
+            "storage": "postgres" if DATABASE_URL else "sqlite",
+            "gmailEnabled": auth_manager.google_enabled,
+            "adminCount": len(ADMIN_EMAILS),
+            "schemaVersion": "1",
+        },
+        "cloud": cloud_admin_service.get_status(),
+        "gmail": {
+            "enabled": os.getenv("NEURODIARY_GMAIL_SEND_ENABLED", "false").lower() == "true",
+            "oauthVerified": os.getenv("NEURODIARY_GMAIL_OAUTH_VERIFIED", "false").lower() == "true",
+        },
+        "alerts": {
+            "configured": bool(os.getenv("NEURODIARY_ADMIN_ALERT_EMAIL", "").strip()),
+            "recipient": os.getenv("NEURODIARY_ADMIN_ALERT_EMAIL", "").strip(),
+        },
+    }
+
+
+@app.post("/api/v1/admin/backups")
+def admin_create_backup(
+    admin: Annotated[AuthenticatedUser, Depends(verify_admin)],
+) -> dict[str, object]:
+    try:
+        backup = cloud_admin_service.create_backup(f"NeuroDiary manual backup by {admin.email}")
+    except RuntimeError as error:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(error)) from error
+    log_event("WARNING", "admin_backup_created", administrator=admin.email, backupId=str(backup.get("id", "")))
+    return {"status": "created", "backup": backup}
+
+
+@app.delete("/api/v1/admin/backups/{backup_id}")
+def admin_delete_backup(
+    backup_id: str,
+    confirm: bool,
+    admin: Annotated[AuthenticatedUser, Depends(verify_admin)],
+) -> dict[str, str]:
+    if not confirm:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Smazání zálohy nebylo potvrzeno.")
+    try:
+        cloud_admin_service.delete_backup(backup_id)
+    except RuntimeError as error:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(error)) from error
+    log_event("WARNING", "admin_backup_deleted", administrator=admin.email, backupId=backup_id)
+    return {"status": "deleted", "backupId": backup_id}
 
 
 @app.get("/api/v1/auth/config", response_model=AuthConfigResponseModel)

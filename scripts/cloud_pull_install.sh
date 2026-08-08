@@ -24,6 +24,7 @@ UPDATE_TIME_ZONE="${UPDATE_TIME_ZONE:-Europe/Prague}"
 UPDATE_TRIGGER_NAME="${UPDATE_TRIGGER_NAME:-neurodiary-cloud-pull}"
 UPDATE_SCHEDULER_JOB="${UPDATE_SCHEDULER_JOB:-neurodiary-cloud-pull}"
 UPDATE_SERVICE_ACCOUNT_NAME="${UPDATE_SERVICE_ACCOUNT_NAME:-neurodiary-cloud-updater}"
+CLOUD_SQL_INSTANCE="${CLOUD_SQL_INSTANCE:-}"
 
 prompt_value() {
   local variable_name="$1"
@@ -117,6 +118,9 @@ ensure_service_account() {
     roles/run.admin
     roles/serviceusage.serviceUsageConsumer
   )
+  if [[ -n "${CLOUD_SQL_INSTANCE}" ]]; then
+    roles+=(roles/cloudsql.editor)
+  fi
   for role in "${roles[@]}"; do
     gcloud projects add-iam-policy-binding "${GCP_PROJECT_ID}" \
       --member="serviceAccount:${updater_email}" \
@@ -138,7 +142,7 @@ ensure_service_account() {
 ensure_update_trigger() {
   local updater_email="$1"
   local image_uri="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GAR_REPOSITORY}/${IMAGE_NAME}"
-  local substitutions="_GIT_REPOSITORY=${UPDATE_GIT_REPOSITORY},_GIT_BRANCH=${UPDATE_GIT_BRANCH},_GIT_TAG_LIMIT=${UPDATE_GIT_TAG_LIMIT},_GCP_REGION=${GCP_REGION},_CLOUD_RUN_SERVICE=${CLOUD_RUN_SERVICE},_IMAGE_URI=${image_uri}"
+  local substitutions="_GIT_REPOSITORY=${UPDATE_GIT_REPOSITORY},_GIT_BRANCH=${UPDATE_GIT_BRANCH},_GIT_TAG_LIMIT=${UPDATE_GIT_TAG_LIMIT},_GCP_REGION=${GCP_REGION},_CLOUD_RUN_SERVICE=${CLOUD_RUN_SERVICE},_CLOUD_SQL_INSTANCE=${CLOUD_SQL_INSTANCE},_IMAGE_URI=${image_uri}"
   local service_account_resource="projects/${GCP_PROJECT_ID}/serviceAccounts/${updater_email}"
 
   if gcloud builds triggers describe "${UPDATE_TRIGGER_NAME}" --region="${GCP_REGION}" >/dev/null 2>&1; then
@@ -224,6 +228,10 @@ main() {
   prompt_value "GCP_REGION" "Google Cloud region"
   gcloud config set project "${GCP_PROJECT_ID}" >/dev/null
   select_installation
+  local detected_sql_instance
+  detected_sql_instance="$(gcloud run services describe "${CLOUD_RUN_SERVICE}" --region="${GCP_REGION}" --format='value(spec.template.metadata.annotations.run.googleapis.com/cloudsql-instances)' 2>/dev/null || true)"
+  CLOUD_SQL_INSTANCE="${CLOUD_SQL_INSTANCE:-${detected_sql_instance##*:}}"
+  prompt_value "CLOUD_SQL_INSTANCE" "Cloud SQL instance ID for pre-update backups (empty disables it)"
   prompt_value "GAR_REPOSITORY" "Artifact Registry repository"
   prompt_value "IMAGE_NAME" "Container image name"
   prompt_value "UPDATE_GIT_REPOSITORY" "Public HTTPS Git repository"

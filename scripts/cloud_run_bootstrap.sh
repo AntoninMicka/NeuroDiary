@@ -37,6 +37,12 @@ RUNTIME_SERVICE_ACCOUNT="${RUNTIME_SERVICE_ACCOUNT:-}"
 BILLING_ACCOUNT_ID="${BILLING_ACCOUNT_ID:-}"
 ENABLE_GOOGLE_AUTH="${ENABLE_GOOGLE_AUTH:-true}"
 ENABLE_GMAIL_SEND="${ENABLE_GMAIL_SEND:-true}"
+ENABLE_WEB_ADMIN="${ENABLE_WEB_ADMIN:-true}"
+NEURODIARY_ADMIN_EMAILS="${NEURODIARY_ADMIN_EMAILS:-}"
+NEURODIARY_ADMIN_ALERT_EMAIL="${NEURODIARY_ADMIN_ALERT_EMAIL:-}"
+NEURODIARY_GMAIL_OAUTH_VERIFIED="${NEURODIARY_GMAIL_OAUTH_VERIFIED:-false}"
+NEURODIARY_MANUAL_BACKUP_LIMIT="${NEURODIARY_MANUAL_BACKUP_LIMIT:-3}"
+NEURODIARY_BACKUP_RETENTION_COUNT="${NEURODIARY_BACKUP_RETENTION_COUNT:-7}"
 ENABLE_APPLE_AUTH="${ENABLE_APPLE_AUTH:-false}"
 ENABLE_LEGACY_API_TOKEN="${ENABLE_LEGACY_API_TOKEN:-false}"
 NEURODIARY_SESSION_SECRET="${NEURODIARY_SESSION_SECRET:-}"
@@ -242,6 +248,17 @@ function collect_configuration() {
   fi
   prompt_choice "ENABLE_APPLE_AUTH" "Ma skript pripravit prihlaseni pres Apple ID?" "true false"
   prompt_choice "ENABLE_LEGACY_API_TOKEN" "Chces ponechat i legacy bearer token fallback?" "true false"
+  prompt_choice "ENABLE_WEB_ADMIN" "Ma byt dostupna webova administrace cloudove instalace?" "true false"
+
+  if [[ "${ENABLE_WEB_ADMIN}" == "true" ]]; then
+    prompt_value "NEURODIARY_ADMIN_EMAILS" "E-maily spravcu oddelene carkou. Prihlaseni jinym uctem administraci nezobrazi." "admin@example.com"
+    prompt_optional_value "NEURODIARY_ADMIN_ALERT_EMAIL" "E-mail pro provozni upozorneni." "${NEURODIARY_ADMIN_EMAILS%%,*}"
+    prompt_optional_value "NEURODIARY_MANUAL_BACKUP_LIMIT" "Maximalni pocet rucnich Cloud SQL zaloh." "3"
+  fi
+
+  if [[ "${ENABLE_GMAIL_SEND}" == "true" ]]; then
+    prompt_choice "NEURODIARY_GMAIL_OAUTH_VERIFIED" "Je OAuth consent pro gmail.send jiz schvaleny Googlem?" "false true"
+  fi
 
   if [[ "${ENABLE_GOOGLE_AUTH}" == "true" || "${ENABLE_APPLE_AUTH}" == "true" ]]; then
     auto_generate_secret "NEURODIARY_SESSION_SECRET" "session auth podpis"
@@ -268,6 +285,9 @@ function collect_configuration() {
   prompt_choice "ALLOW_UNAUTHENTICATED" "Ma byt Cloud Run endpoint verejne dostupny a chraneny jen bearer tokenem?" "true false"
   prompt_optional_value "CLOUD_RUN_DEPLOY_FLAGS" "Dalsi volitelne Cloud Run flagy." "--min-instances=0 --max-instances=3"
   prompt_optional_value "RUNTIME_SERVICE_ACCOUNT" "Volitelny runtime service account pro Cloud Run." "neurodiary-runtime@my-project.iam.gserviceaccount.com"
+  if [[ "${ENABLE_WEB_ADMIN}" == "true" && -z "${RUNTIME_SERVICE_ACCOUNT}" ]]; then
+    RUNTIME_SERVICE_ACCOUNT="neurodiary-runtime@${GCP_PROJECT_ID}.iam.gserviceaccount.com"
+  fi
   prompt_optional_value "BILLING_ACCOUNT_ID" "Volitelny billing account pro pripojeni projektu. Pokud ho nezadas, skript billing jen zkontroluje." "000000-000000-000000"
 
   prompt_choice "CREATE_GITHUB_WIF" "Ma skript rovnou vytvorit Workload Identity Federation pro GitHub Actions?" "true false"
@@ -305,6 +325,7 @@ function collect_configuration() {
 
     prompt_optional_value "POSTGRES_STORAGE_GB" "Velikost disku v GB." "10"
     prompt_optional_value "POSTGRES_AVAILABILITY_TYPE" "Typ dostupnosti instance." "zonal"
+    prompt_optional_value "NEURODIARY_BACKUP_RETENTION_COUNT" "Pocet automatickych zaloh, ktere ma Cloud SQL uchovavat." "7"
     prompt_optional_value "POSTGRES_INSTANCE_FLAGS" "Dalsi raw flagy pro gcloud sql instances create." "--edition=enterprise"
   fi
 
@@ -500,6 +521,28 @@ function ensure_deploy_service_account() {
   fi
 }
 
+function ensure_runtime_service_account() {
+  if [[ -z "${RUNTIME_SERVICE_ACCOUNT}" ]]; then
+    return
+  fi
+
+  local runtime_name="${RUNTIME_SERVICE_ACCOUNT%@*}"
+  if ! gcloud iam service-accounts describe "${RUNTIME_SERVICE_ACCOUNT}" >/dev/null 2>&1; then
+    log_step "Creating runtime service account ${RUNTIME_SERVICE_ACCOUNT}"
+    gcloud iam service-accounts create "${runtime_name}" --display-name="NeuroDiary Runtime"
+  fi
+
+  if [[ "${ENABLE_WEB_ADMIN}" == "true" ]]; then
+    log_step "Granting read-only cloud status and controlled backup access"
+    local role
+    for role in roles/run.viewer roles/cloudbuild.builds.viewer roles/cloudsql.editor; do
+      gcloud projects add-iam-policy-binding "${GCP_PROJECT_ID}" \
+        --member="serviceAccount:${RUNTIME_SERVICE_ACCOUNT}" \
+        --role="${role}" >/dev/null
+    done
+  fi
+}
+
 function ensure_workload_identity() {
   if [[ "${CREATE_GITHUB_WIF}" != "true" ]]; then
     return
@@ -566,6 +609,12 @@ function ensure_cloud_sql() {
       --availability-type="${POSTGRES_AVAILABILITY_TYPE:-zonal}" \
       ${POSTGRES_INSTANCE_FLAGS:-}
   fi
+
+  log_step "Applying Cloud SQL automated-backup retention (${NEURODIARY_BACKUP_RETENTION_COUNT})"
+  gcloud sql instances patch "${POSTGRES_INSTANCE_NAME}" \
+    --backup-start-time="03:00" \
+    --retained-backups-count="${NEURODIARY_BACKUP_RETENTION_COUNT}" \
+    --quiet >/dev/null
 
   log_step "Ensuring Cloud SQL database ${POSTGRES_DATABASE_NAME}"
   if ! gcloud sql databases describe "${POSTGRES_DATABASE_NAME}" --instance="${POSTGRES_INSTANCE_NAME}" >/dev/null 2>&1; then
@@ -651,6 +700,13 @@ function configure_github_actions() {
   gh variable set NEURODIARY_VAPID_PUBLIC_KEY --repo "${GITHUB_REPOSITORY}" --body "${NEURODIARY_VAPID_PUBLIC_KEY}"
   gh variable set NEURODIARY_VAPID_SUBJECT --repo "${GITHUB_REPOSITORY}" --body "${NEURODIARY_VAPID_SUBJECT}"
   gh variable set NEURODIARY_PUSH_ENDPOINT_HOSTS --repo "${GITHUB_REPOSITORY}" --body "${NEURODIARY_PUSH_ENDPOINT_HOSTS}"
+  gh variable set NEURODIARY_ADMIN_EMAILS --repo "${GITHUB_REPOSITORY}" --body "${NEURODIARY_ADMIN_EMAILS}"
+  gh variable set NEURODIARY_ADMIN_ALERT_EMAIL --repo "${GITHUB_REPOSITORY}" --body "${NEURODIARY_ADMIN_ALERT_EMAIL}"
+  gh variable set NEURODIARY_CLOUD_SQL_INSTANCE --repo "${GITHUB_REPOSITORY}" --body "${POSTGRES_INSTANCE_NAME:-}"
+  gh variable set NEURODIARY_GMAIL_SEND_ENABLED --repo "${GITHUB_REPOSITORY}" --body "${ENABLE_GMAIL_SEND}"
+  gh variable set NEURODIARY_GMAIL_OAUTH_VERIFIED --repo "${GITHUB_REPOSITORY}" --body "${NEURODIARY_GMAIL_OAUTH_VERIFIED}"
+  gh variable set NEURODIARY_MANUAL_BACKUP_LIMIT --repo "${GITHUB_REPOSITORY}" --body "${NEURODIARY_MANUAL_BACKUP_LIMIT}"
+  gh variable set NEURODIARY_BACKUP_RETENTION_COUNT --repo "${GITHUB_REPOSITORY}" --body "${NEURODIARY_BACKUP_RETENTION_COUNT}"
 
   if [[ "${DATABASE_MODE}" == "postgres" ]]; then
     gh variable set CLOUD_RUN_DEPLOY_FLAGS --repo "${GITHUB_REPOSITORY}" --body "--add-cloudsql-instances=${CLOUD_SQL_INSTANCE} ${CLOUD_RUN_DEPLOY_FLAGS}"
@@ -709,6 +765,16 @@ function deploy_cloud_run() {
     "NEURODIARY_VAPID_PRIVATE_KEY=${NEURODIARY_VAPID_PRIVATE_KEY}"
     "NEURODIARY_VAPID_SUBJECT=${NEURODIARY_VAPID_SUBJECT}"
     "NEURODIARY_PUSH_SCHEDULER_TOKEN=${NEURODIARY_PUSH_SCHEDULER_TOKEN}"
+    "NEURODIARY_ADMIN_EMAILS=${NEURODIARY_ADMIN_EMAILS}"
+    "NEURODIARY_ADMIN_ALERT_EMAIL=${NEURODIARY_ADMIN_ALERT_EMAIL}"
+    "NEURODIARY_GCP_PROJECT_ID=${GCP_PROJECT_ID}"
+    "NEURODIARY_GCP_REGION=${GCP_REGION}"
+    "NEURODIARY_CLOUD_RUN_SERVICE=${CLOUD_RUN_SERVICE}"
+    "NEURODIARY_CLOUD_SQL_INSTANCE=${POSTGRES_INSTANCE_NAME:-}"
+    "NEURODIARY_GMAIL_SEND_ENABLED=${ENABLE_GMAIL_SEND}"
+    "NEURODIARY_GMAIL_OAUTH_VERIFIED=${NEURODIARY_GMAIL_OAUTH_VERIFIED}"
+    "NEURODIARY_MANUAL_BACKUP_LIMIT=${NEURODIARY_MANUAL_BACKUP_LIMIT}"
+    "NEURODIARY_BACKUP_RETENTION_COUNT=${NEURODIARY_BACKUP_RETENTION_COUNT}"
   )
 
   if [[ "${ENABLE_LEGACY_API_TOKEN}" == "true" && -n "${NEURODIARY_API_TOKEN}" ]]; then
@@ -804,6 +870,13 @@ function print_summary() {
   echo "  NEURODIARY_GOOGLE_CLIENT_ID=${NEURODIARY_GOOGLE_CLIENT_ID:-<leave empty if Google login is disabled>}"
   echo "  NEURODIARY_APPLE_CLIENT_ID=${NEURODIARY_APPLE_CLIENT_ID:-<leave empty if Apple login is disabled>}"
   echo "  NEURODIARY_APPLE_REDIRECT_PATH=${NEURODIARY_APPLE_REDIRECT_PATH}"
+  echo "  NEURODIARY_ADMIN_EMAILS=${NEURODIARY_ADMIN_EMAILS}"
+  echo "  NEURODIARY_ADMIN_ALERT_EMAIL=${NEURODIARY_ADMIN_ALERT_EMAIL}"
+  echo "  NEURODIARY_CLOUD_SQL_INSTANCE=${POSTGRES_INSTANCE_NAME:-}"
+  echo "  NEURODIARY_GMAIL_SEND_ENABLED=${ENABLE_GMAIL_SEND}"
+  echo "  NEURODIARY_GMAIL_OAUTH_VERIFIED=${NEURODIARY_GMAIL_OAUTH_VERIFIED}"
+  echo "  NEURODIARY_MANUAL_BACKUP_LIMIT=${NEURODIARY_MANUAL_BACKUP_LIMIT}"
+  echo "  NEURODIARY_BACKUP_RETENTION_COUNT=${NEURODIARY_BACKUP_RETENTION_COUNT}"
   echo
   echo "GitHub Actions -> Secrets"
   if [[ "${ENABLE_LEGACY_API_TOKEN}" == "true" && -n "${NEURODIARY_API_TOKEN}" ]]; then
@@ -858,6 +931,7 @@ ensure_github_auth
 ensure_github_repo_access
 enable_apis
 ensure_artifact_registry
+ensure_runtime_service_account
 ensure_deploy_service_account
 ensure_workload_identity
 ensure_cloud_sql

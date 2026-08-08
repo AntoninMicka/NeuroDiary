@@ -96,6 +96,7 @@ import {
   sharePlainReport,
 } from "./services/secureReportShare.js";
 import { sendGmailMessage } from "./services/gmailService.js";
+import { createCloudBackup, deleteCloudBackup, fetchAdminStatus } from "./services/adminService.js";
 import { generateRecoverySecret } from "./services/e2eCrypto.js";
 import {
   deleteContact,
@@ -166,6 +167,13 @@ function formatDateTimeLocal(date) {
   return `${formatDateKey(date)}T${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
 
+function formatAdminTimestamp(value) {
+  if (!value) return "neuvedeno";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("cs-CZ", { dateStyle: "medium", timeStyle: "short" }).format(date);
+}
+
 function loadPendingSyncChanges() {
   try {
     return globalThis.localStorage?.getItem(PENDING_SYNC_CHANGES_STORAGE_KEY) === "true";
@@ -214,6 +222,9 @@ const contactEditor = reactive({ id: "", name: "", email: "", publicKeyPem: "" }
 const generatedContactPrivateKey = ref("");
 const reportSharePassword = ref("");
 const encryptOneTimeReport = ref(false);
+const adminStatus = ref(null);
+const adminError = ref("");
+const isAdminBusy = ref(false);
 const trustedDevices = ref([]);
 const pendingDeviceKeyRequests = ref([]);
 const rotationTargetDeviceIds = ref([]);
@@ -320,8 +331,9 @@ const PANEL_ITEMS = [
   { id: "sekce-souhrn", label: "Souhrn" },
   { id: "sekce-manualy", label: "Manualy" },
   { id: "sekce-kontakty", label: "Kontakty" },
+  { id: "sekce-admin", label: "Administrace" },
 ];
-const PRIMARY_PANEL_ITEMS = PANEL_ITEMS.filter((item) => !["sekce-matice", "sekce-kontakty"].includes(item.id));
+const PRIMARY_PANEL_ITEMS = PANEL_ITEMS.filter((item) => !["sekce-matice", "sekce-kontakty", "sekce-admin"].includes(item.id));
 const DATE_NAV_PANEL_IDS = new Set([
   "sekce-udaje",
   "sekce-matice",
@@ -579,6 +591,7 @@ onMounted(async () => {
   }
   setBootstrapStatus("Inicializace byla dokončena.");
   isReady.value = true;
+  void refreshAdminConsole({ silent: true });
   await refreshLocalBackups();
   await createAutomaticLocalBackupIfDue();
   await checkDueMedicationReminders();
@@ -1829,6 +1842,7 @@ async function signInWithGoogleCredential(credential) {
     applyAuthenticatedAccount(session.user);
     await ensureCurrentDeviceRegistered();
     await tryAutoRecoverLocalSyncKey();
+    await refreshAdminConsole({ silent: true });
     storageMessage.value = `Prihlaseni pres Google uspesne: ${session.user.email || session.user.name}.`;
   } catch (error) {
     console.error("Google sign-in failed", error);
@@ -1855,6 +1869,7 @@ async function signInWithApple() {
     applyAuthenticatedAccount(session.user);
     await ensureCurrentDeviceRegistered();
     await tryAutoRecoverLocalSyncKey();
+    await refreshAdminConsole({ silent: true });
     storageMessage.value = `Prihlaseni pres Apple uspesne: ${session.user.email || session.user.name}.`;
   } catch (error) {
     console.error("Apple sign-in failed", error);
@@ -1877,9 +1892,58 @@ async function signOut() {
   }
   clearAuthSession();
   authSession.value = null;
+  adminStatus.value = null;
+  adminError.value = "";
+  if (activePanelId.value === "sekce-admin") activePanelId.value = "sekce-home";
   webPushStatus.value = "needs-auth";
   applyAuthenticatedAccount(null);
   storageMessage.value = "Prihlaseni bylo odpojeno. Lokalni data zustala zachovana.";
+}
+
+async function refreshAdminConsole({ silent = false } = {}) {
+  if (!authSession.value?.user) {
+    adminStatus.value = null;
+    adminError.value = "";
+    return;
+  }
+  isAdminBusy.value = true;
+  try {
+    adminStatus.value = await fetchAdminStatus();
+    adminError.value = "";
+  } catch (error) {
+    adminStatus.value = null;
+    adminError.value = error.status === 403 ? "" : error.message;
+    if (!silent && error.status !== 403) storageMessage.value = error.message;
+  } finally {
+    isAdminBusy.value = false;
+  }
+}
+
+async function createAdminBackup() {
+  isAdminBusy.value = true;
+  try {
+    await createCloudBackup();
+    await refreshAdminConsole({ silent: true });
+    storageMessage.value = "Cloudová záloha byla spuštěna.";
+  } catch (error) {
+    adminError.value = error.message;
+  } finally {
+    isAdminBusy.value = false;
+  }
+}
+
+async function removeAdminBackup(backup) {
+  if (!globalThis.confirm(`Opravdu odstranit cloudovou zálohu ${backup.id}? Tuto operaci nelze vrátit.`)) return;
+  isAdminBusy.value = true;
+  try {
+    await deleteCloudBackup(backup.id);
+    await refreshAdminConsole({ silent: true });
+    storageMessage.value = `Cloudová záloha ${backup.id} byla odstraněna.`;
+  } catch (error) {
+    adminError.value = error.message;
+  } finally {
+    isAdminBusy.value = false;
+  }
 }
 
 async function tryAutoRecoverLocalSyncKey() {
@@ -2663,6 +2727,9 @@ function syncFloatingMenuHeight() {
                 <button class="utility-menu-item" type="button" role="menuitem" @click="handleUtilityAction(() => selectPanel('sekce-kontakty'))">
                   Kontakty
                 </button>
+                <button v-if="adminStatus" class="utility-menu-item" type="button" role="menuitem" @click="handleUtilityAction(() => selectPanel('sekce-admin'))">
+                  Administrace cloudu
+                </button>
                 <button class="utility-menu-item" type="button" role="menuitem" @click="openBootstrapLogPanel">
                   Diagnostika startu
                 </button>
@@ -3066,6 +3133,80 @@ function syncFloatingMenuHeight() {
               <span>Bez tohoto tajemstvi nepujde na novem zarizeni data desifrovat.</span>
             </div>
           </div>
+        </section>
+
+        <section v-else-if="activePanelId === 'sekce-admin'" class="panel panel-wide layout-profile">
+          <div class="panel-heading">
+            <div>
+              <p class="section-kicker">Administrace</p>
+              <h2>Stav cloudové instalace</h2>
+            </div>
+            <button class="ghost-button" type="button" :disabled="isAdminBusy" @click="refreshAdminConsole()">
+              {{ isAdminBusy ? "Načítám…" : "Obnovit stav" }}
+            </button>
+          </div>
+
+          <p v-if="adminError" class="sync-warning-card">{{ adminError }}</p>
+          <template v-if="adminStatus">
+            <div class="admin-status-grid">
+              <article class="admin-status-card">
+                <span>Cloud Run</span>
+                <strong>{{ adminStatus.cloudRun?.ready ? "V pořádku" : "Vyžaduje kontrolu" }}</strong>
+                <small>{{ adminStatus.service }} · {{ adminStatus.region }}</small>
+                <small>Revize: {{ adminStatus.cloudRun?.latestReadyRevision || adminStatus.revision || "neuvedena" }}</small>
+              </article>
+              <article class="admin-status-card">
+                <span>Poslední aktualizace</span>
+                <strong>{{ adminStatus.latestBuild?.status || "Bez záznamu" }}</strong>
+                <small>{{ formatAdminTimestamp(adminStatus.latestBuild?.finishTime || adminStatus.latestBuild?.createTime) }}</small>
+                <a v-if="adminStatus.latestBuild?.logUrl" :href="adminStatus.latestBuild.logUrl" target="_blank" rel="noopener noreferrer">Otevřít protokol sestavení</a>
+              </article>
+              <article class="admin-status-card">
+                <span>Databáze a migrace</span>
+                <strong>{{ adminStatus.sqlInstance || "Lokální SQLite" }}</strong>
+                <small>Schéma: {{ adminStatus.schemaVersion || "automaticky spravované" }}</small>
+                <small>Strategie: bezpečné dopředné migrace před převodem provozu</small>
+              </article>
+              <article class="admin-status-card">
+                <span>Gmail</span>
+                <strong>{{ adminStatus.gmail?.enabled ? "Odesílání zapnuto" : "Vypnuto" }}</strong>
+                <small>{{ adminStatus.gmail?.oauthVerified ? "OAuth aplikace je označena jako ověřená" : "Ověření OAuth je třeba zkontrolovat v Google Cloud" }}</small>
+              </article>
+              <article class="admin-status-card">
+                <span>Administrátorská upozornění</span>
+                <strong>{{ adminStatus.alerts?.configured ? "Příjemce nastaven" : "Nenastavena" }}</strong>
+                <small>{{ adminStatus.alerts?.recipient || "Chybí e-mail příjemce" }}</small>
+              </article>
+            </div>
+
+            <div v-if="adminStatus.warnings?.length" class="sync-warning-card">
+              <strong>Upozornění</strong>
+              <ul><li v-for="warning in adminStatus.warnings" :key="warning">{{ warning }}</li></ul>
+            </div>
+
+            <section class="sync-settings-card">
+              <div class="panel-heading sync-settings-heading">
+                <div>
+                  <h3>Cloud SQL zálohy</h3>
+                  <p class="panel-tip">Automatické zálohy se drží v nastaveném limitu. Ručních záloh může být nejvýše {{ adminStatus.backupPolicy?.manualLimit ?? 3 }}.</p>
+                </div>
+                <button class="primary-button" type="button" :disabled="isAdminBusy || !adminStatus.sqlInstance" @click="createAdminBackup">
+                  Vytvořit zálohu
+                </button>
+              </div>
+              <ul v-if="adminStatus.backups?.length" class="backup-history-list">
+                <li v-for="backup in adminStatus.backups" :key="backup.id">
+                  <div>
+                    <strong>Záloha {{ backup.id }}</strong>
+                    <span>{{ backup.type === "ON_DEMAND" ? "ruční" : "automatická" }} · {{ backup.status }}</span>
+                    <small>{{ formatAdminTimestamp(backup.endTime || backup.startTime) }}</small>
+                  </div>
+                  <button v-if="backup.type === 'ON_DEMAND'" class="ghost-button utility-menu-item-danger" type="button" :disabled="isAdminBusy" @click="removeAdminBackup(backup)">Smazat</button>
+                </li>
+              </ul>
+              <p v-else class="panel-tip">Cloud SQL zatím nevrátil žádnou zálohu.</p>
+            </section>
+          </template>
         </section>
 
         <section v-else-if="activePanelId === 'sekce-kontakty'" class="panel panel-wide layout-profile">

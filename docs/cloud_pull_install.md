@@ -38,6 +38,12 @@ cp scripts/cloud_pull.env.example scripts/cloud_pull.env
 bash scripts/cloud_pull_install.sh scripts/cloud_pull.env
 ```
 
+Pokud je nastavené `CLOUD_SQL_INSTANCE`, aktualizátor před nasazením nové revize
+vytvoří Cloud SQL zálohu. Uchovává nejvýše tři vlastní zálohy s popisem
+`NeuroDiary pre-update`; jiné ruční zálohy nemaže. Nová revize nejprve proběhne
+bez provozu, provede dopřednou inicializaci schématu a provoz převezme až po
+úspěšných kontrolách `/readyz` a `/healthz`.
+
 Skript interaktivne:
 
 - vybere Google Cloud projekt a region,

@@ -803,6 +803,32 @@ select[aria-invalid="true"] {
   gap: 0.75rem;
 }
 
+.admin-status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 0.75rem;
+}
+
+.admin-status-card {
+  display: grid;
+  gap: 0.3rem;
+  padding: 1rem;
+  border: 1px solid rgba(31, 41, 51, 0.1);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.48);
+}
+
+.admin-status-card > span,
+.admin-status-card small,
+.backup-history-list li div {
+  color: var(--muted);
+}
+
+.backup-history-list li div {
+  display: grid;
+  gap: 0.15rem;
+}
+
 .sync-settings-heading {
   margin-bottom: 0.85rem;
 }
