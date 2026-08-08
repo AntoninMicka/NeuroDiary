@@ -2,21 +2,21 @@
   <section class="panel panel-wide">
     <div class="panel-heading">
       <div>
-        <p class="section-kicker">Manualy</p>
-        <h2>Uzivatelsky a spravcovsky manual</h2>
+        <p class="section-kicker">Manuály</p>
+        <h2>Uživatelský a správcovský manuál</h2>
       </div>
-      <p class="panel-tip">Offline napoveda primo v aplikaci pro bezny provoz i spravu dat.</p>
+      <p class="panel-tip">Offline nápověda přímo v aplikaci pro běžný provoz i správu dat.</p>
     </div>
 
     <div class="manual-grid">
       <article class="manual-card">
         <div class="manual-card-head">
-          <p class="manual-badge">Uzivatel</p>
-          <h3>Jak aplikaci bezne pouzivat</h3>
+          <p class="manual-badge">Uživatel</p>
+          <h3>Jak aplikaci běžně používat</h3>
         </div>
 
         <div class="manual-block">
-          <h4>1. Rychly zapis</h4>
+          <h4>1. Rychlý zápis</h4>
           <p>
             Na uvodni obrazovce vyberte aktualni stav. Zapis vzdy pouzije skutecny systemovy cas
             v okamziku stisknuti tlacitka. Planovana davka se zobrazi pouze od 10 minut pred jejim
@@ -26,7 +26,7 @@
         </div>
 
         <div class="manual-block">
-          <h4>2. Zpetny zapis v casovem karuselu</h4>
+          <h4>2. Zpětný zápis v časovém karuselu</h4>
           <p>
             Karusel na uvodni obrazovce se posouva po 5 minutach a umoznuje zapsat stav nejvyse
             10 hodin zpet. Stav plati pro celou hodinu obsahujici vybrany cas. Tlacitko
@@ -36,7 +36,7 @@
         </div>
 
         <div class="manual-block">
-          <h4>3. Hodinova matice a denni zapis</h4>
+          <h4>3. Hodinová matice a denní zápis</h4>
           <p>
             Hodinova matice zustava jako doplnkovy pohled v nabidce <strong>Vice</strong>. Pro bezne
             a zpetne zapisy pouzivejte prednostne rychly zapis a jeho karusel. V Dennim zapisu
@@ -45,7 +45,7 @@
         </div>
 
         <div class="manual-block">
-          <h4>4. Lecba</h4>
+          <h4>4. Léčba</h4>
           <p>
             Nejprve vytvorte pravidelny plan. Skutecne uzitou davku zapisujte pres rychly zapis.
             Pokud jste zapis zapomneli, pouzijte v povolene hodinove lhute casovy karusel.
@@ -56,7 +56,7 @@
         </div>
 
         <div class="manual-block">
-          <h4>5. Pripomenuti leku</h4>
+          <h4>5. Připomenutí léků</h4>
           <p>
             V Lecbe lze zapnout systemova upozorneni a zvolit pripomenuti v case davky nebo 5–30
             minut predem. Prohlizec musi mit povolene notifikace. Aktivni Web Push umi upozorneni
@@ -66,7 +66,7 @@
         </div>
 
         <div class="manual-block">
-          <h4>6. Casova osa, souhrn a trendy</h4>
+          <h4>6. Časová osa, souhrn a trendy</h4>
           <p>
             Denni casova osa zobrazuje zaznamenane stavy a stav planovanych davek. Nejde o stejny
             prvek jako petiminutovy karusel pro zpetny zapis. Souhrn ukazuje 7 a 30 dni. Trendy
@@ -98,12 +98,12 @@
 
       <article class="manual-card">
         <div class="manual-card-head">
-          <p class="manual-badge">Spravce</p>
-          <h3>Sprava dat a provozni postupy</h3>
+          <p class="manual-badge">Správce</p>
+          <h3>Správa dat a provozní postupy</h3>
         </div>
 
         <div class="manual-block">
-          <h4>1. Uloziste dat</h4>
+          <h4>1. Úložiště dat</h4>
           <p>
             Aplikace pracuje primarne offline. Podle prostredi muze pouzit SQLite uloziste nebo
             fallback vrstvu nad <code>localStorage</code>. Aktualni rezim je viditelny v horni liste.
@@ -142,7 +142,7 @@
         </div>
 
         <div class="manual-block">
-          <h4>5. Doporuceny provoz</h4>
+          <h4>5. Doporučený provoz</h4>
           <p>
             Pred aktualizaci aplikace nebo testovanim nove verze vytvorte export databaze. Pri
             sdileni reportu kontrolujte, zda neobsahuje vice osobnich udaju, nez je potreba.
@@ -159,7 +159,7 @@
         </div>
 
         <div class="manual-block">
-          <h4>7. Omezeni prototypu</h4>
+          <h4>7. Omezení prototypu</h4>
           <p>
             Soucasna verze je prototyp. Klinicka interpretace statistik, dlouhodobych trendu a
             reportovych metrik musi byt overena se specializovanym lekarem.

@@ -102,10 +102,10 @@ test("doctor report can omit daily trend and wearing-off observations", () => {
     includeWearingOff: false,
     includeWeeklyCharts: false,
   });
-  assert.doesNotMatch(html, /<h3>Denni trend<\/h3>/);
+  assert.doesNotMatch(html, /<h3>Denní trend<\/h3>/);
   assert.doesNotMatch(html, /Orientační wearing-off pozorování/);
   assert.doesNotMatch(html, /class="weekly-hour-chart"/);
-  assert.match(html, /<h3>Hodinovy souhrn<\/h3>/);
+  assert.match(html, /<h3>Hodinový souhrn<\/h3>/);
 });
 
 test("doctor report excludes today unless including it is enabled", () => {
@@ -178,7 +178,7 @@ test("doctor report renders 25-week hourly charts and marks treatment-plan chang
     selectedDate: "2026-03-07",
   });
   assert.doesNotMatch(html, /Nejcastejsi hodnota/);
-  assert.match(html, /25x7 dni/);
+  assert.match(html, /25× 7 dní/);
   assert.match(html, /class="chart-plan-change"/);
   assert.match(html, /Od 15\. 02\. 2026: Levodopa 100 mg/);
   assert.equal((html.match(/class="weekly-hour-chart"/g) ?? []).length, TRACKING_HOURS.length);

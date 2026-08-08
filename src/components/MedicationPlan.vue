@@ -110,7 +110,7 @@ function submitForm() {
     return;
   }
   if (form.validTo && form.validTo < form.validFrom) {
-    formMessage.value = "Konec platnosti nesmi byt pred jejim zacatkem.";
+    formMessage.value = "Konec platnosti nesmí být před jejím začátkem.";
     return;
   }
 
@@ -119,7 +119,7 @@ function submitForm() {
   if (props.treatmentPlan.some(
     (item) => buildMedicationDuplicateKey(item) === duplicateKey && periodsOverlap(item, candidate),
   )) {
-    formMessage.value = "Stejna davka se stejnym casem uz v tomto obdobi existuje.";
+    formMessage.value = "Stejná dávka se stejným časem už v tomto období existuje.";
     return;
   }
 
@@ -135,15 +135,15 @@ function getRecordedMedicationDetail(medication) {
     (dose) => dose.recordedMedication?.id === medication.id,
   );
   return {
-    plannedTime: plannedDose?.planItem.time ?? "neplanovana",
+    plannedTime: plannedDose?.planItem.time ?? "neplánovaná",
     actualTime: medication.takenAt
       ? new Intl.DateTimeFormat("cs-CZ", { hour: "2-digit", minute: "2-digit" }).format(new Date(medication.takenAt))
       : medication.time,
     recordedAt: medication.recordedAt
       ? new Intl.DateTimeFormat("cs-CZ", { dateStyle: "short", timeStyle: "short" }).format(new Date(medication.recordedAt))
-      : "neznamy",
+      : "neznámý",
     statusKey: plannedDose?.statusKey ?? "unplanned",
-    statusLabel: plannedDose?.statusLabel ?? "Neplanovana davka",
+    statusLabel: plannedDose?.statusLabel ?? "Neplánovaná dávka",
   };
 }
 </script>
@@ -152,26 +152,26 @@ function getRecordedMedicationDetail(medication) {
   <section class="panel">
     <div class="panel-heading">
       <div>
-        <p class="section-kicker">Lecba</p>
-        <h2>Plan medikace</h2>
+        <p class="section-kicker">Léčba</p>
+        <h2>Plán medikace</h2>
       </div>
     </div>
 
     <form class="stack-form" @submit.prevent="submitForm">
       <label>
-        <span>Nazev</span>
+        <span>Název</span>
         <input v-model="form.name" type="text" maxlength="100" required placeholder="Levodopa" :aria-invalid="Boolean(errors.name)" />
         <small v-if="errors.name" class="form-error">{{ errors.name }}</small>
       </label>
 
       <label>
-        <span>Davka</span>
+        <span>Dávka</span>
         <input v-model="form.dose" type="text" maxlength="50" required placeholder="100 mg" :aria-invalid="Boolean(errors.dose)" />
         <small v-if="errors.dose" class="form-error">{{ errors.dose }}</small>
       </label>
 
       <label>
-        <span>Cas</span>
+        <span>Čas</span>
         <input v-model="form.time" type="time" required :aria-invalid="Boolean(errors.time)" />
         <small v-if="errors.time" class="form-error">{{ errors.time }}</small>
       </label>
@@ -182,25 +182,25 @@ function getRecordedMedicationDetail(medication) {
       </label>
 
       <label>
-        <span>Platnost do (volitelne)</span>
+        <span>Platnost do (volitelně)</span>
         <input v-model="form.validTo" type="date" :min="form.validFrom" />
       </label>
 
-      <button class="primary-button" type="submit">Pridat verzi planu</button>
+      <button class="primary-button" type="submit">Přidat verzi plánu</button>
       <p v-if="formMessage" class="form-error" role="alert">{{ formMessage }}</p>
     </form>
 
-    <p class="panel-tip">Pro vybrany den se pouziji pouze davky, jejichz obdobi platnosti tento den zahrnuje.</p>
+    <p class="panel-tip">Pro vybraný den se použijí pouze dávky, jejichž období platnosti tento den zahrnuje.</p>
 
     <div class="medication-reminder-card">
       <div>
-        <strong>Pripomenuti leku</strong>
+        <strong>Připomenutí léku</strong>
         <p v-if="notificationsSupported" class="panel-tip">
-          Systemova upozorneni ve Firefoxu a Chromu. Opravneni:
-          {{ notificationPermission === "granted" ? "povoleno" : notificationPermission === "denied" ? "zakazano" : "nezadano" }}.
+          Systémová upozornění ve Firefoxu a Chromu. Oprávnění:
+          {{ notificationPermission === "granted" ? "povoleno" : notificationPermission === "denied" ? "zakázáno" : "nezadáno" }}.
         </p>
         <p v-else class="form-error">
-          Tento prohlizec nebo nezabezpecene HTTP pripojeni systemova upozorneni nepodporuje.
+          Tento prohlížeč nebo nezabezpečené HTTP připojení systémová upozornění nepodporuje.
         </p>
       </div>
       <label class="reminder-toggle">
@@ -219,43 +219,43 @@ function getRecordedMedicationDetail(medication) {
           :disabled="!reminderEnabled"
           @change="emit('update-reminder-lead-minutes', Number($event.target.value))"
         >
-          <option :value="0">V cas davky</option>
-          <option :value="5">5 minut predem</option>
-          <option :value="10">10 minut predem</option>
-          <option :value="15">15 minut predem</option>
-          <option :value="30">30 minut predem</option>
+          <option :value="0">V čas dávky</option>
+          <option :value="5">5 minut předem</option>
+          <option :value="10">10 minut předem</option>
+          <option :value="15">15 minut předem</option>
+          <option :value="30">30 minut předem</option>
         </select>
       </label>
       <p class="panel-tip medication-reminder-note">
         <template v-if="webPushStatus === 'active'">
-          Web Push je aktivni. Obecna pripominka muze dorazit i po uplnem zavreni aplikace.
+          Web Push je aktivní. Obecná připomínka může dorazit i po úplném zavření aplikace.
         </template>
         <template v-else-if="webPushAvailable">
-          Lokalni rezim vyzaduje otevrenou aplikaci. Web Push ceka na prihlaseni nebo dokonceni registrace.
+          Lokální režim vyžaduje otevřenou aplikaci. Web Push čeká na přihlášení nebo dokončení registrace.
         </template>
         <template v-else>
-          Lokalni rezim vyzaduje otevrenou aplikaci. Serverovy Web Push zatim neni dostupny.
+          Lokální režim vyžaduje otevřenou aplikaci. Serverový Web Push zatím není dostupný.
         </template>
         <span v-if="webPushMessage"> {{ webPushMessage }}</span>
       </p>
     </div>
 
-    <div class="adherence-summary" aria-label="Souhrn dodrzeni lecby">
+    <div class="adherence-summary" aria-label="Souhrn dodržení léčby">
       <div>
         <strong>{{ adherence.summary.takenCount }}/{{ adherence.summary.plannedCount }}</strong>
-        <span>uzitych planovanych davek</span>
+        <span>užitých plánovaných dávek</span>
       </div>
       <div>
         <strong>{{ adherence.summary.missedCount }}</strong>
-        <span>vynechanych</span>
+        <span>vynechaných</span>
       </div>
       <div>
         <strong>{{ adherence.summary.upcomingCount }}</strong>
-        <span>cekajicich</span>
+        <span>čekajících</span>
       </div>
       <div>
         <strong>{{ adherence.summary.adherencePercent === null ? "—" : `${adherence.summary.adherencePercent} %` }}</strong>
-        <span>adherence uzavrenych davek</span>
+        <span>adherence uzavřených dávek</span>
       </div>
     </div>
 
@@ -265,9 +265,9 @@ function getRecordedMedicationDetail(medication) {
           <strong>{{ dose.planItem.time }} - {{ dose.planItem.name }}</strong>
           <span>
             {{ dose.planItem.dose }}
-            · platnost {{ dose.planItem.validFrom || "bez zacatku" }} – {{ dose.planItem.validTo || "bez konce" }}
+            · platnost {{ dose.planItem.validFrom || "bez začátku" }} – {{ dose.planItem.validTo || "bez konce" }}
             <template v-if="dose.recordedMedication">
-              · skutecne {{ dose.recordedMedication.time }}
+              · skutečně {{ dose.recordedMedication.time }}
             </template>
           </span>
         </div>
@@ -276,18 +276,18 @@ function getRecordedMedicationDetail(medication) {
           {{ dose.statusLabel }}
         </span>
         <button type="button" @click="emit('end-plan-item', dose.planItem.id, selectedDate)">
-          Ukoncit po tomto dni
+          Ukončit po tomto dni
         </button>
       </li>
     </ul>
 
     <details v-if="historicalPlanItems.length" class="plan-history">
-      <summary>Ostatni verze planu ({{ historicalPlanItems.length }})</summary>
+      <summary>Ostatní verze plánu ({{ historicalPlanItems.length }})</summary>
       <ul class="list">
         <li v-for="item in historicalPlanItems" :key="item.id">
           <div class="medication-copy">
             <strong>{{ item.time }} - {{ item.name }}</strong>
-            <span>{{ item.dose }} · {{ item.validFrom || "bez zacatku" }} – {{ item.validTo || "bez konce" }}</span>
+            <span>{{ item.dose }} · {{ item.validFrom || "bez začátku" }} – {{ item.validTo || "bez konce" }}</span>
           </div>
         </li>
       </ul>
@@ -295,8 +295,8 @@ function getRecordedMedicationDetail(medication) {
 
     <div class="panel-heading medication-record-heading">
       <div>
-        <p class="section-kicker">Aktualni den</p>
-        <h3>Vsechny zapsane davky</h3>
+        <p class="section-kicker">Aktuální den</p>
+        <h3>Všechny zapsané dávky</h3>
       </div>
     </div>
 
@@ -307,8 +307,8 @@ function getRecordedMedicationDetail(medication) {
           <span>{{ medication.dose }}</span>
           <span>
             Plan {{ getRecordedMedicationDetail(medication).plannedTime }}
-            · skutecne {{ getRecordedMedicationDetail(medication).actualTime }}
-            · zapsano {{ getRecordedMedicationDetail(medication).recordedAt }}
+            · skutečně {{ getRecordedMedicationDetail(medication).actualTime }}
+            · zapsáno {{ getRecordedMedicationDetail(medication).recordedAt }}
           </span>
         </div>
 

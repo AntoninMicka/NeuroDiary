@@ -44,9 +44,9 @@ function formatResponse(value) {
     <div class="panel-heading">
       <div>
         <p class="section-kicker">Wearing-off</p>
-        <h2>Opakovane zhorseni kolem davek</h2>
+        <h2>Opakované zhoršení kolem dávek</h2>
         <p class="panel-tip">
-          Orientacni pozorovani z dostatecnych a kompletnich dni. Nejde o diagnozu ani doporuceni ke zmene lecby.
+          Orientační pozorování z dostatečných a kompletních dní. Nejde o diagnózu ani doporučení ke změně léčby.
         </p>
       </div>
     </div>
@@ -54,31 +54,31 @@ function formatResponse(value) {
     <div class="trend-summary-grid">
       <article>
         <strong>{{ analysis.reliableDays }}/{{ analysis.days }}</strong>
-        <span>spolehlivych dni</span>
+        <span>spolehlivých dní</span>
       </article>
       <article>
         <strong>{{ analysis.evaluatedDoses }}</strong>
-        <span>davek s daty pred uzitim</span>
+        <span>dávek s daty před užitím</span>
       </article>
       <article>
         <strong>{{ formatPercent(analysis.candidatePercent) }}</strong>
-        <span>kandidatu na wearing-off</span>
+        <span>kandidátů na wearing-off</span>
       </article>
       <article>
         <strong>{{ formatResponse(analysis.medianResponseMinutes) }}</strong>
-        <span>median do prvniho ON/dyskineze po davce</span>
+        <span>medián do prvního ON/dyskineze po dávce</span>
       </article>
     </div>
 
     <p v-if="!analysis.hasEnoughData" class="trend-quality-note is-warning">
-      Pro stabilnejsi interpretaci je potreba alespon 7 spolehlivych dni a 5 davek s hodinovymi daty pred uzitim.
+      Pro stabilnější interpretaci je potřeba alespoň 7 spolehlivých dní a 5 dávek s hodinovými daty před užitím.
     </p>
 
     <div v-if="analysis.groups.length" class="wearing-off-table">
-      <div class="wearing-off-table-head">Planovana davka</div>
-      <div class="wearing-off-table-head">Zhorseni pred davkou</div>
-      <div class="wearing-off-table-head">Kandidat po ON/dyskinezi</div>
-      <div class="wearing-off-table-head">Navrat do ON/dyskineze</div>
+      <div class="wearing-off-table-head">Plánovaná dávka</div>
+      <div class="wearing-off-table-head">Zhoršení před dávkou</div>
+      <div class="wearing-off-table-head">Kandidát po ON/dyskinezi</div>
+      <div class="wearing-off-table-head">Návrat do ON/dyskineze</div>
 
       <template v-for="group in analysis.groups" :key="group.key">
         <div>
@@ -87,38 +87,38 @@ function formatResponse(value) {
         </div>
         <div>
           <strong>{{ formatPercent(group.worseningPercent) }}</strong>
-          <span>{{ group.worseningCount }}/{{ group.evaluatedCount }} pozorovani</span>
+          <span>{{ group.worseningCount }}/{{ group.evaluatedCount }} pozorování</span>
         </div>
         <div>
           <strong>{{ formatPercent(group.candidatePercent) }}</strong>
-          <span>{{ group.candidateCount }}/{{ group.evaluatedCount }} pozorovani</span>
+          <span>{{ group.candidateCount }}/{{ group.evaluatedCount }} pozorování</span>
         </div>
         <div>
           <strong>{{ formatResponse(group.medianResponseMinutes) }}</strong>
-          <span>{{ group.responseSampleCount }} mereni</span>
+          <span>{{ group.responseSampleCount }} měření</span>
         </div>
       </template>
     </div>
-    <p v-else class="panel-tip">Ve zvolenem obdobi nejsou vyhodnotitelne planovane davky.</p>
+    <p v-else class="panel-tip">Ve zvoleném období nejsou vyhodnotitelné plánované dávky.</p>
 
     <div v-if="analysis.recurringHours.length" class="wearing-off-patterns">
-      <h3>Opakujici se denni doby se zhorsenim</h3>
+      <h3>Opakující se denní doby se zhoršením</h3>
       <ul class="list">
         <li v-for="pattern in analysis.recurringHours" :key="pattern.hourLabel">
           <strong>{{ pattern.hourLabel }}:00</strong>
           <span>
-            MID/OFF v {{ pattern.worseningPercent }} % zaznamenanych dni
-            · ciste OFF {{ pattern.offPercent }} %
-            · {{ pattern.observedDays }} pozorovani
+            MID/OFF v {{ pattern.worseningPercent }} % zaznamenaných dní
+            · čistě OFF {{ pattern.offPercent }} %
+            · {{ pattern.observedDays }} pozorování
           </span>
         </li>
       </ul>
     </div>
 
     <p class="panel-tip wearing-off-method">
-      Kandidat znamena, ze se v poslednich 2 hodinach pred planovanou davkou objevil MID/OFF a v predchozich
-      4 hodinach byl zaznamenan ON nebo dyskineze. Navrat po davce se odhaduje z hodinovych zaznamu,
-      proto ma presnost priblizne jednu hodinu.
+      Kandidát znamená, že se v posledních 2 hodinách před plánovanou dávkou objevil MID/OFF a v předchozích
+      4 hodinách byl zaznamenán ON nebo dyskineze. Návrat po dávce se odhaduje z hodinových záznamů,
+      proto má přesnost přibližně jednu hodinu.
     </p>
   </section>
 </template>

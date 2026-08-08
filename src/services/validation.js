@@ -28,15 +28,15 @@ export function validateMedicationInput(payload = {}) {
   const errors = {};
 
   if (!value.name) {
-    errors.name = "Zadejte nazev leku.";
+    errors.name = "Zadejte název léku.";
   } else if (value.name.length > 100) {
-    errors.name = "Nazev leku muze mit nejvyse 100 znaku.";
+    errors.name = "Název léku může mít nejvýše 100 znaků.";
   }
 
   if (!value.dose) {
-    errors.dose = "Zadejte davku.";
+    errors.dose = "Zadejte dávku.";
   } else if (value.dose.length > 50) {
-    errors.dose = "Davka muze mit nejvyse 50 znaku.";
+    errors.dose = "Dávka může mít nejvýše 50 znaků.";
   }
 
   if (!isValidTime(value.time)) {
@@ -56,7 +56,7 @@ export function validateBirthYear(value, currentYear = new Date().getFullYear())
     return { isValid: true, value: "", message: "" };
   }
   if (!/^\d{4}$/.test(normalizedValue)) {
-    return { isValid: false, value: normalizedValue, message: "Rok narozeni musi mit ctyri cislice." };
+    return { isValid: false, value: normalizedValue, message: "Rok narození musí mít čtyři číslice." };
   }
 
   const year = Number(normalizedValue);

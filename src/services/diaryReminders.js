@@ -52,10 +52,10 @@ export async function checkDiaryCompletionReminder({ entry, dateKey, settings, n
   }
   const quality = evaluateDayQuality(entry, dateKey, { todayDate: dateKey, now });
   const registration = await globalThis.navigator.serviceWorker.ready;
-  await registration.showNotification("Doplnte dnesni denik", {
+  await registration.showNotification("Doplňte dnešní deník", {
     body: quality.missingHourLabels.length
-      ? `Chybi ${quality.missingHourLabels.length} hodinovych zaznamu.`
-      : "Chybi denni hodnoceni.",
+      ? `Chybí ${quality.missingHourLabels.length} hodinových záznamů.`
+      : "Chybí denní hodnocení.",
     icon: "/icons/icon-192.svg",
     badge: "/icons/icon-192.svg",
     tag: `diary-completion-${dateKey}`,

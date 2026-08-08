@@ -50,25 +50,25 @@ const canGoForward = computed(() => props.selectedDate < todayKey);
   <section class="panel panel-wide">
     <div class="panel-heading">
       <div>
-        <p class="section-kicker">Hodinova matice</p>
-        <h2>Hodnoceni vlastniho stavu hybnosti</h2>
+        <p class="section-kicker">Hodinová matice</p>
+        <h2>Hodnocení vlastního stavu hybnosti</h2>
         <p class="panel-tip">{{ selectedDateLabel }}</p>
       </div>
       <p class="panel-tip">
         {{
           isEditable
-            ? "Upravit lze hodiny spadajici do poslednich 10 hodin."
-            : "Tento den uz nespadá do desetihodinového okna a je jen pro cteni."
+            ? "Upravit lze hodiny spadající do posledních 10 hodin."
+            : "Tento den už nespadá do desetihodinového okna a je jen pro čtení."
         }}
       </p>
     </div>
 
     <div class="matrix-date-toolbar">
       <button class="ghost-button" type="button" @click="emit('select-date', shiftDateKey(props.selectedDate, -1))">
-        Predchozi den
+        Předchozí den
       </button>
       <label class="matrix-date-picker">
-        <span>Zobrazeny den</span>
+        <span>Zobrazený den</span>
         <input
           :value="props.selectedDate"
           type="date"
@@ -77,7 +77,7 @@ const canGoForward = computed(() => props.selectedDate < todayKey);
         />
       </label>
       <button class="ghost-button" type="button" :disabled="!canGoForward" @click="emit('select-date', shiftDateKey(props.selectedDate, 1))">
-        Dalsi den
+        Další den
       </button>
       <button class="ghost-button" type="button" :disabled="props.selectedDate === todayKey" @click="emit('select-date', todayKey)">
         Dnes
@@ -85,7 +85,7 @@ const canGoForward = computed(() => props.selectedDate < todayKey);
     </div>
 
     <p v-if="!isEditable" class="matrix-readonly-note">
-      Zobrazeny den nema zadnou hodinu v povolenem desetihodinovem okne.
+      Zobrazený den nemá žádnou hodinu v povoleném desetihodinovém okně.
     </p>
 
     <div class="legend-card">

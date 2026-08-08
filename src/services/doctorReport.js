@@ -84,7 +84,7 @@ function buildMatrixRows(entry) {
 
   rows.push(`
     <tr>
-      <th>Spanek</th>
+      <th>Spánek</th>
       ${TRACKING_HOURS.map((hourLabel) => {
         const isSleep = entry?.hours?.[hourLabel] === "sleep";
         return `<td class="${isSleep ? "filled state-sleep" : ""}">${isSleep ? "S" : ""}</td>`;
@@ -163,7 +163,7 @@ function buildMedicationTimelineRow(entry, medicationColorMap) {
 }
 
 function buildDayTable(dateKey, entry, medicationColorMap) {
-  const note = entry?.notes?.trim() || "Bez poznamek.";
+  const note = entry?.notes?.trim() || "Bez poznámek.";
   const quality = evaluateDayQuality(entry, dateKey);
 
   return `
@@ -172,8 +172,8 @@ function buildDayTable(dateKey, entry, medicationColorMap) {
         <p class="day-title">
           <span>${escapeHtml(formatLongDate(dateKey))}</span>
           <span class="day-subtitle">
-            Spanek: ${escapeHtml(entry ? formatSleepQuality(entry.sleepQuality) : "Bez zaznamu")}
-            · Den: ${escapeHtml(entry ? formatOverallStatus(entry.overallStatus) : "Bez zaznamu")}
+            Spánek: ${escapeHtml(entry ? formatSleepQuality(entry.sleepQuality) : "Bez záznamu")}
+            · Den: ${escapeHtml(entry ? formatOverallStatus(entry.overallStatus) : "Bez záznamu")}
             · Kvalita dat: ${escapeHtml(quality.label)} (${quality.hourCoveragePercent} % hodin)
           </span>
         </p>
@@ -196,7 +196,7 @@ function buildDayTable(dateKey, entry, medicationColorMap) {
       </table>
 
       <div class="medication-timeline">
-        <div class="medication-label">Lecba</div>
+        <div class="medication-label">Léčba</div>
         <div class="medication-track">
           <div class="medication-grid"></div>
           <div class="medication-axis"></div>
@@ -205,7 +205,7 @@ function buildDayTable(dateKey, entry, medicationColorMap) {
       </div>
 
       <div class="day-note">
-        <strong>Poznamka:</strong> ${escapeHtml(note)}
+        <strong>Poznámka:</strong> ${escapeHtml(note)}
       </div>
     </section>
   `;
@@ -392,7 +392,7 @@ function buildTrendRows(entries, selectedDate) {
         return `
           <tr>
             <td>${escapeHtml(formatLongDate(dateKey))}</td>
-            <td colspan="4">Bez zaznamu</td>
+            <td colspan="4">Bez záznamu</td>
           </tr>
         `;
       }
@@ -495,7 +495,7 @@ function buildHourWeeklyChart(entries, selectedDate, hourLabel, weekIntervals) {
   return `
     <article class="weekly-hour-chart">
       <h3>${escapeHtml(hourLabel)}:00</h3>
-      <svg viewBox="0 0 1000 146" role="img" aria-label="Tydenni pocty stavu pro hodinu ${escapeHtml(hourLabel)}">
+      <svg viewBox="0 0 1000 146" role="img" aria-label="Týdenní počty stavů pro hodinu ${escapeHtml(hourLabel)}">
         ${horizontalGrid}
         ${planChangeLines}
         ${stateLines}
@@ -511,7 +511,7 @@ function buildChartLegend() {
       ${HOUR_STATES.map((state) => `
         <span><i style="background:${STATE_CHART_COLORS[state.key]}"></i>${escapeHtml(state.shortLabel)}</span>
       `).join("")}
-      <span><i class="plan-change-line"></i>Zmena lecebneho planu</span>
+      <span><i class="plan-change-line"></i>Změna léčebného plánu</span>
     </div>
   `;
 }
@@ -526,8 +526,8 @@ function buildWeeklyChartsPages(entries, selectedDate, weekIntervals) {
       <section class="sheet charts-page">
         <header class="charts-header">
           <div>
-            <p class="section-label">Tydenni grafy · ${index + 1}-${Math.min(index + CHARTS_PER_PAGE, charts.length)} / ${charts.length}</p>
-            <h2>Vyskyt stavu po hodinach za ${ANALYSIS_WEEK_BLOCKS} tydnu</h2>
+            <p class="section-label">Týdenní grafy · ${index + 1}-${Math.min(index + CHARTS_PER_PAGE, charts.length)} / ${charts.length}</p>
+            <h2>Výskyt stavů po hodinách za ${ANALYSIS_WEEK_BLOCKS} týdnů</h2>
           </div>
           ${buildChartLegend()}
         </header>
@@ -560,7 +560,7 @@ function buildAnalysisPage(
       <header class="analysis-header">
         <div>
           <p class="section-label">Strana 2 · Nacrt analyz</p>
-          <h2>Souhrn za poslednich ${ANALYSIS_DAYS} dni</h2>
+          <h2>Souhrn za posledních ${ANALYSIS_DAYS} dní</h2>
           <p>Navrh dalsi reportove strany: rychly prehled trendu, stability a lecby.</p>
         </div>
       </header>
@@ -571,7 +571,7 @@ function buildAnalysisPage(
           <span>${escapeHtml(String(summary.reliableDays))} / ${ANALYSIS_DAYS}</span>
         </article>
         <article class="analysis-card">
-          <strong>Prumer davek / den</strong>
+          <strong>Průměr dávek / den</strong>
           <span>${escapeHtml(String(summary.averageDoses))}</span>
         </article>
         <article class="analysis-card">
@@ -600,12 +600,12 @@ function buildAnalysisPage(
 
       <section class="analysis-grid">
         ${includeDailyTrend ? `<article class="analysis-panel">
-          <h3>Denni trend</h3>
+          <h3>Denní trend</h3>
           <table class="trend-table">
             <thead>
               <tr>
                 <th>Datum</th>
-                <th>Spanek</th>
+                <th>Spánek</th>
                 <th>Den</th>
                 <th>Prevladajici stav</th>
                 <th>Davky</th>
@@ -616,16 +616,16 @@ function buildAnalysisPage(
         </article>` : ""}
 
         <article class="analysis-panel">
-          <h3>Hodinovy souhrn</h3>
+          <h3>Hodinový souhrn</h3>
           <table class="hour-summary-table">
             <thead>
               <tr>
-                <th rowspan="2">Cas</th>
-                <th colspan="5">7 dni</th>
+                <th rowspan="2">Čas</th>
+                <th colspan="5">7 dní</th>
                 <th rowspan="2" class="histogram-spacer-head"></th>
-                <th colspan="5">30 dni</th>
+                <th colspan="5">30 dní</th>
                 <th rowspan="2" class="histogram-spacer-head"></th>
-                <th colspan="${ANALYSIS_WEEK_BLOCKS}">${ANALYSIS_WEEK_BLOCKS}x7 dni</th>
+                <th colspan="${ANALYSIS_WEEK_BLOCKS}">${ANALYSIS_WEEK_BLOCKS}× 7 dní</th>
               </tr>
               <tr>
                 ${HOUR_STATES.map((state) => `<th>${escapeHtml(state.shortLabel)}</th>`).join("")}
@@ -1263,17 +1263,17 @@ export function buildDoctorReportHtml({
         <section class="sheet">
           <header class="header">
             <div class="header-main">
-              <h1>Hodnoceni vlastniho stavu hybnosti a rozpis lecby</h1>
+              <h1>Hodnocení vlastního stavu hybnosti a rozpis léčby</h1>
             </div>
             <section class="header-side">
               <div class="meta-cell">
-                <span class="meta-label">Obdobi</span>
+                <span class="meta-label">Období</span>
                 <div class="meta-value compact">
                   ${escapeHtml(formatNumericDate(dateKeys[0]))} - ${escapeHtml(formatNumericDate(reportEndDate))}
                 </div>
               </div>
               <div class="meta-cell">
-                <span class="meta-label">Vygenerovano</span>
+                <span class="meta-label">Vygenerováno</span>
                 <div class="meta-value">${escapeHtml(generatedAt)}</div>
               </div>
               <div class="meta-cell">
@@ -1281,7 +1281,7 @@ export function buildDoctorReportHtml({
                 <div class="meta-value">${escapeHtml(patientName || "Neuvedeno")}</div>
               </div>
               <div class="meta-cell">
-                <span class="meta-label">Rok narozeni</span>
+                <span class="meta-label">Rok narození</span>
                 <div class="meta-value">${escapeHtml(birthYear || "Neuvedeno")}</div>
               </div>
             </section>
@@ -1378,7 +1378,7 @@ export async function createDoctorReportPdfBlob(options) {
 
     const sheets = [...frame.contentDocument.querySelectorAll("main.page > .sheet")];
     if (!sheets.length) {
-      throw new Error("Report neobsahuje zadne strany.");
+      throw new Error("Report neobsahuje žádné strany.");
     }
     const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4", compress: true });
     for (let index = 0; index < sheets.length; index += 1) {

@@ -27,7 +27,7 @@ const qualityLabel = computed(() => {
     return "Mene nez 40 % dni ma dostatecna data — trend muze byt zavadejici.";
   }
   if (analysis.value.averageTrackedHours < 6) {
-    return "Dny obsahuji malo hodinovych zaznamu — vysledky berte orientacne.";
+    return "Dny obsahují málo hodinových záznamů — výsledky berte orientačně.";
   }
   return "Pokryti je dostatecne pro orientacni sledovani trendu.";
 });
@@ -51,16 +51,16 @@ function formatShortDate(dateKey) {
   <section class="panel panel-wide">
     <div class="panel-heading">
       <div>
-        <p class="section-kicker">Dlouhodobe trendy</p>
-        <h2>Vyvoj motorickych stavu</h2>
+        <p class="section-kicker">Dlouhodobé trendy</p>
+        <h2>Vývoj motorických stavů</h2>
         <p class="panel-tip">{{ analysis.fromDate }} – {{ analysis.toDate }}</p>
       </div>
       <label class="trend-period-picker">
-        <span>Obdobi</span>
+        <span>Období</span>
         <select v-model.number="periodDays">
-          <option :value="30">30 dni</option>
-          <option :value="90">90 dni</option>
-          <option :value="180">180 dni</option>
+          <option :value="30">30 dní</option>
+          <option :value="90">90 dní</option>
+          <option :value="180">180 dní</option>
           <option :value="365">1 rok</option>
         </select>
       </label>
@@ -69,19 +69,19 @@ function formatShortDate(dateKey) {
     <div class="trend-summary-grid">
       <article>
         <strong>{{ analysis.reliableDays }}/{{ analysis.days }}</strong>
-        <span>spolehlivych dni · {{ analysis.reliableCoveragePercent }} %</span>
+        <span>spolehlivých dní · {{ analysis.reliableCoveragePercent }} %</span>
       </article>
       <article>
         <strong>{{ analysis.averageTrackedHours.toFixed(1) }} h</strong>
-        <span>prumerne zaznamenano za aktivni den</span>
+        <span>průměrně zaznamenáno za aktivní den</span>
       </article>
       <article>
         <strong>{{ formatChange(analysis.onChange) }}</strong>
-        <span>zmena podilu ON ve druhe polovine</span>
+        <span>změna podílu ON ve druhé polovině</span>
       </article>
       <article>
         <strong>{{ formatChange(analysis.offChange) }}</strong>
-        <span>zmena podilu OFF ve druhe polovine</span>
+        <span>změna podílu OFF ve druhé polovině</span>
       </article>
     </div>
 
@@ -95,16 +95,16 @@ function formatShortDate(dateKey) {
         <span class="state-partial">MID</span>
         <span class="state-off">OFF</span>
         <span class="state-dyskinesia">D</span>
-        <span class="state-sleep">Spanek</span>
+        <span class="state-sleep">Spánek</span>
       </div>
 
       <div class="trend-week-list">
         <article v-for="bucket in analysis.buckets" :key="bucket.fromDate" class="trend-week-row">
           <div class="trend-week-label">
             <strong>{{ formatShortDate(bucket.fromDate) }}–{{ formatShortDate(bucket.toDate) }}</strong>
-            <span>{{ bucket.reliableDays }}/{{ bucket.dayCount }} spolehlivych dni · {{ bucket.trackedHours }} h</span>
+            <span>{{ bucket.reliableDays }}/{{ bucket.dayCount }} spolehlivých dní · {{ bucket.trackedHours }} h</span>
           </div>
-          <div class="trend-stacked-bar" :title="`${bucket.trackedHours} zaznamenanych hodin`">
+          <div class="trend-stacked-bar" :title="`${bucket.trackedHours} zaznamenaných hodin`">
             <span
               v-for="item in bucket.distribution"
               :key="`${bucket.fromDate}-${item.key}`"
@@ -114,13 +114,13 @@ function formatShortDate(dateKey) {
             <span v-if="bucket.trackedHours === 0" class="trend-empty-bar">Bez dat</span>
           </div>
           <div class="trend-week-meta">
-            <span>{{ bucket.medicationCount }} davek</span>
+            <span>{{ bucket.medicationCount }} dávek</span>
             <strong>{{ bucket.adherencePercent === null ? "—" : `${bucket.adherencePercent} %` }}</strong>
           </div>
         </article>
       </div>
       <p class="panel-tip">
-        Procento vpravo je orientacni adherence podle lecebneho planu platneho v danem tydnu.
+        Procento vpravo je orientační adherence podle léčebného plánu platného v daném týdnu.
       </p>
     </div>
 

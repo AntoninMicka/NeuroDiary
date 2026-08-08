@@ -122,8 +122,8 @@ export async function checkMedicationReminders({
       continue;
     }
 
-    await registration.showNotification(`Cas na lek: ${planItem.name}`, {
-      body: `${planItem.dose} · planovano na ${planItem.time}`,
+    await registration.showNotification(`Čas na lék: ${planItem.name}`, {
+      body: `${planItem.dose} · plánováno na ${planItem.time}`,
       icon: "/icons/icon-192.svg",
       badge: "/icons/icon-192.svg",
       tag: `medication-${reminderId}`,

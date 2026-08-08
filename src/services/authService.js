@@ -176,7 +176,7 @@ export async function requestGoogleGmailSendAccessToken(clientId) {
       },
       error_callback: (error) => {
         const aborted = error?.type === "popup_closed" || error?.type === "popup_failed_to_open";
-        const authError = new Error(aborted ? "Prihlaseni ke Gmailu bylo zruseno." : "Gmail autorizace se nepodarila.");
+        const authError = new Error(aborted ? "Přihlášení ke Gmailu bylo zrušeno." : "Autorizace Gmailu se nepodařila.");
         authError.name = aborted ? "AbortError" : "Error";
         reject(authError);
       },

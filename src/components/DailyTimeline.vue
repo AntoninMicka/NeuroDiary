@@ -125,12 +125,12 @@ const rows = computed(() =>
   <section :class="['panel', 'panel-wide', { 'timeline-compact': compact }]">
     <div class="panel-heading">
       <div>
-        <p class="section-kicker">Casova osa</p>
-        <h2>Denni casova osa</h2>
+        <p class="section-kicker">Časová osa</p>
+        <h2>Denní časová osa</h2>
       </div>
       <div class="timeline-toolbar">
         <p class="panel-tip">
-          {{ days === 1 ? "Aktualni den." : `Poslednich ${days} dni vcetne vybraneho dne. Klik na radek prepne denik.` }}
+          {{ days === 1 ? "Aktuální den." : `Posledních ${days} dní včetně vybraného dne. Kliknutím na řádek přepnete deník.` }}
         </p>
         <button
           :class="['ghost-button', 'timeline-today-button', { 'is-active': isTodaySelected }]"
@@ -142,11 +142,11 @@ const rows = computed(() =>
         </button>
       </div>
     </div>
-    <div v-if="compact" class="timeline-medication-legend" aria-label="Stav planovanych davek">
-      <span><i class="is-taken"></i> Uzito</span>
-      <span><i class="is-due"></i> Vzit nyni</span>
+    <div v-if="compact" class="timeline-medication-legend" aria-label="Stav plánovaných dávek">
+      <span><i class="is-taken"></i> Užito</span>
+      <span><i class="is-due"></i> Vzít nyní</span>
       <span><i class="is-missed"></i> Zapomenuto</span>
-      <span><i class="is-planned"></i> Planovano</span>
+      <span><i class="is-planned"></i> Plánováno</span>
     </div>
 
     <div class="timeline-axis">
@@ -179,8 +179,8 @@ const rows = computed(() =>
 
         <div class="timeline-meta">
           <strong>{{ row.dominantStateLabel }}</strong>
-          <span v-if="row.entry">{{ row.medications.length }} davek · {{ row.medicationSummary }}</span>
-          <span v-else>Bez zaznamu</span>
+          <span v-if="row.entry">{{ row.medications.length }} dávek · {{ row.medicationSummary }}</span>
+          <span v-else>Bez záznamu</span>
         </div>
 
         <div class="timeline-hours">

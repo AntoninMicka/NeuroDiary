@@ -323,13 +323,13 @@ const timelineMedicationDoses = computed(() =>
   }),
 );
 const PANEL_ITEMS = [
-  { id: "sekce-home", label: "Rychly zapis" },
-  { id: "sekce-matice", label: "Hodinova matice" },
-  { id: "sekce-osa", label: "Casova osa" },
-  { id: "sekce-prehled", label: "Denni zapis" },
-  { id: "sekce-leky", label: "Lecba" },
+  { id: "sekce-home", label: "Rychlý zápis" },
+  { id: "sekce-matice", label: "Hodinová matice" },
+  { id: "sekce-osa", label: "Časová osa" },
+  { id: "sekce-prehled", label: "Denní zápis" },
+  { id: "sekce-leky", label: "Léčba" },
   { id: "sekce-souhrn", label: "Souhrn" },
-  { id: "sekce-manualy", label: "Manualy" },
+  { id: "sekce-manualy", label: "Manuály" },
   { id: "sekce-kontakty", label: "Kontakty" },
   { id: "sekce-admin", label: "Administrace" },
 ];
@@ -365,7 +365,7 @@ const isQuickCaptureTimeValid = computed(() => isQuickCaptureDateValid(timelineS
 const quickCaptureStateLabel = computed(() => getStateDefinition(selectedStateKey.value).label);
 const quickCaptureMedicationLabel = computed(() => {
   const item = selectedTreatmentPlanItem.value;
-  return item ? `${item.name} ${item.dose}` : "Davku z planu";
+  return item ? `${item.name} ${item.dose}` : "Dávku z plánu";
 });
 const currentHourLabel = computed(() => getTrackableHourLabel(quickCaptureNow.value));
 const currentTimeLabel = computed(() =>
@@ -393,7 +393,7 @@ const syncStatusSummary = computed(() => {
     ? new Intl.DateTimeFormat("cs-CZ", { dateStyle: "medium", timeStyle: "short" }).format(
         new Date(syncSettings.lastSyncAt),
       )
-    : "zatim nikdy";
+    : "zatím nikdy";
 
   return `Revize ${revision} · posledni sync ${syncedAt}`;
 });
@@ -407,10 +407,10 @@ const integrityHeadline = computed(() => {
   }
 
   if (integritySummary.value.warningCount > 0) {
-    return `Nalezeno ${integritySummary.value.warningCount} varovani, ale zadne tvrde chyby.`;
+    return `Nalezeno ${integritySummary.value.warningCount} varování, ale žádné závažné chyby.`;
   }
 
-  return "Audit nenasel zadne chyby ani varovani.";
+  return "Audit nenašel žádné chyby ani varování.";
 });
 const effectiveSyncEndpoint = computed(() => getEffectiveSyncEndpoint(syncSettings));
 const hasSyncIdentity = computed(() =>
@@ -451,7 +451,7 @@ const showLegacyApiTokenField = computed(() => !isFederatedAuthEnabled.value || 
 const requiresSignedInUserForSync = computed(() => isFederatedAuthEnabled.value);
 const authSummary = computed(() => {
   if (!authSession.value?.user) {
-    return "Neprihlaseno";
+    return "Nepřihlášeno";
   }
 
   return authSession.value.user.email || authSession.value.user.name || authSession.value.user.userId;
@@ -634,7 +634,7 @@ watchEffect(() => {
 
   void renderRecoverySecretQr(recoveryQrCanvas.value, effectiveRecoverySecret.value).catch((error) => {
     console.error("Unable to render recovery QR", error);
-    storageMessage.value = `QR kod recovery secretu se nepodarilo pripravit: ${error.message}`;
+    storageMessage.value = `QR kód obnovovacího tajemství se nepodařilo připravit: ${error.message}`;
   });
 });
 
@@ -727,21 +727,21 @@ async function createManualLocalBackup() {
   try {
     await createLocalBackup(state, { reason: "manual" });
     await refreshLocalBackups();
-    storageMessage.value = "Lokalni zaloha byla vytvorena.";
+    storageMessage.value = "Lokální záloha byla vytvořena.";
   } catch (error) {
-    storageMessage.value = `Lokalni zalohu se nepodarilo vytvorit: ${error.message}`;
+    storageMessage.value = `Lokální zálohu se nepodařilo vytvořit: ${error.message}`;
   }
 }
 
 async function restoreSelectedLocalBackup(backup) {
-  if (!globalThis.confirm(`Obnovit lokalni zalohu z ${formatBackupTimestamp(backup.createdAt)}? Aktualni stav bude nejprve zazalohovan.`)) return;
+  if (!globalThis.confirm(`Obnovit lokální zálohu z ${formatBackupTimestamp(backup.createdAt)}? Aktuální stav bude nejprve zazálohován.`)) return;
   try {
     await createLocalBackup(state, { reason: "before-restore" });
     applyImportedState(await restoreLocalBackup(backup.id));
     await refreshLocalBackups();
-    storageMessage.value = "Lokalni zaloha byla obnovena.";
+    storageMessage.value = "Lokální záloha byla obnovena.";
   } catch (error) {
-    storageMessage.value = `Obnova zalohy selhala: ${error.message}`;
+    storageMessage.value = `Obnova zálohy selhala: ${error.message}`;
   }
 }
 
@@ -797,7 +797,7 @@ async function setMedicationRemindersEnabled(enabled) {
     }));
     webPushStatus.value = "local-only";
     webPushMessage.value = "";
-    storageMessage.value = "Pripomenuti leku byla vypnuta.";
+    storageMessage.value = "Připomenutí léků byla vypnuta.";
     return;
   }
 
@@ -810,7 +810,7 @@ async function setMedicationRemindersEnabled(enabled) {
     webPushEnabled: wasEnabled && webPushConfig.enabled,
   }));
   storageMessage.value = wasEnabled
-    ? "Pripomenuti leku jsou zapnuta."
+    ? "Připomenutí léků jsou zapnuta."
     : "Prohlizec nepovolil systemova upozorneni.";
   if (wasEnabled) {
     await checkDueMedicationReminders();
@@ -838,7 +838,7 @@ async function refreshWebPushRegistration() {
   }
   if (!hasSyncIdentity.value) {
     webPushStatus.value = "needs-auth";
-    webPushMessage.value = "Pro Web Push je potreba prihlaseni nebo API token.";
+    webPushMessage.value = "Pro Web Push je potřeba přihlášení nebo API token.";
     return;
   }
   try {
@@ -854,7 +854,7 @@ async function refreshWebPushRegistration() {
       startDateKey: getTodayKey(),
     });
     webPushStatus.value = "active";
-    webPushMessage.value = `Naplanovano ${result.scheduledCount} obecnych upozorneni na pristich 31 dni.`;
+    webPushMessage.value = `Naplánováno ${result.scheduledCount} obecných upozornění na příštích 31 dní.`;
   } catch (error) {
     console.error("Unable to register Web Push", error);
     webPushStatus.value = "error";
@@ -943,7 +943,7 @@ function handleAppInstalled() {
   deferredInstallPrompt.value = null;
   isInstalledApp.value = true;
   canInstallApp.value = false;
-  storageMessage.value = "Aplikace byla nainstalovana do zarizeni.";
+  storageMessage.value = "Aplikace byla nainstalována do zařízení.";
 }
 
 function handleConnectionChange() {
@@ -1070,7 +1070,7 @@ function markCloudAuthenticated(user = null) {
 
 function ensureSyncIdentity() {
   if (requiresSignedInUserForSync.value && !authSession.value?.user) {
-    storageMessage.value = "Pro cloud sync se nejprve prihlaste pres Google nebo Apple.";
+    storageMessage.value = "Pro cloudovou synchronizaci se nejprve přihlaste přes Google nebo Apple.";
     return false;
   }
 
@@ -1167,14 +1167,14 @@ function goToNextDate() {
 function addMedication(payload, dateKey = state.selectedDate) {
   const validation = validateMedicationInput(payload);
   if (!validation.isValid) {
-    storageMessage.value = Object.values(validation.errors)[0] ?? "Davku se nepodarilo zapsat.";
+    storageMessage.value = Object.values(validation.errors)[0] ?? "Dávku se nepodařilo zapsat.";
     return false;
   }
 
   const duplicateKey = buildMedicationDuplicateKey(validation.value);
   const targetEntry = ensureEntry(state, dateKey);
   if (targetEntry.medications.some((item) => buildMedicationDuplicateKey(item) === duplicateKey)) {
-    storageMessage.value = "Stejna davka je pro tento cas uz zapsana.";
+    storageMessage.value = "Stejná dávka je pro tento čas už zapsána.";
     return false;
   }
 
@@ -1228,13 +1228,13 @@ function recordMedicationFromPlan(planItem, takenAt = new Date(), source = "quic
   const activePlanItem = getTreatmentPlanForDate(state.treatmentPlan, dateKey)
     .find((item) => item.id === planItem?.id);
   if (!activePlanItem) {
-    storageMessage.value = "Planovana davka uz neni dostupna.";
+    storageMessage.value = "Plánovaná dávka už není dostupná.";
     return;
   }
   const scheduledAt = getPlannedDoseDate(dateKey, activePlanItem.time);
   const status = getMedicationWindowStatus(scheduledAt, quickCaptureNow.value);
   if (!status.isAvailable) {
-    storageMessage.value = "Davku lze zapsat nejdrive 10 minut pred planem a nejpozdeji hodinu po planu.";
+    storageMessage.value = "Dávku lze zapsat nejdříve 10 minut před plánem a nejpozději hodinu po plánu.";
     return;
   }
   const currentTime = getCurrentTimeLabel(takenAt);
@@ -1262,7 +1262,7 @@ function recordMedicationFromPlan(planItem, takenAt = new Date(), source = "quic
       },
     };
   }
-  storageMessage.value = `Davka ${activePlanItem.name} ${activePlanItem.dose} byla zapsana jako uzita v ${currentTime}.`;
+  storageMessage.value = `Dávka ${activePlanItem.name} ${activePlanItem.dose} byla zapsána jako užitá v ${currentTime}.`;
   if (lastCaptureUndo.value) {
     lastCaptureUndo.value.message = storageMessage.value;
   }
@@ -1283,7 +1283,7 @@ function updateHour({ label, stateKey }) {
 
   if (!stateKey) {
     clearHourStateRecords(selectedEntry.value, label);
-    storageMessage.value = `Zaznam pro hodinu ${label} byl vymazan.`;
+    storageMessage.value = `Záznam pro hodinu ${label} byl vymazán.`;
     return;
   }
 
@@ -2626,7 +2626,7 @@ function syncFloatingMenuHeight() {
                   </label>
                   <label>
                     <input v-model="reportOptions.dailyTrend" type="checkbox" />
-                    Tisknout Denni trend
+                    Tisknout Denní trend
                   </label>
                   <label>
                     <input v-model="reportOptions.wearingOff" type="checkbox" />
@@ -2639,7 +2639,7 @@ function syncFloatingMenuHeight() {
                   <fieldset class="contact-keyring">
                     <legend>Prijemce reportu</legend>
                     <label>
-                      <span>Ulozeny kontakt</span>
+                      <span>Uložený kontakt</span>
                       <select v-model="selectedContactId" @change="reportSharePassword = ''">
                         <option value="">Jednorazove zadani</option>
                         <option v-for="contact in contacts" :key="contact.id" :value="contact.id">
@@ -2650,11 +2650,11 @@ function syncFloatingMenuHeight() {
                   </fieldset>
                   <template v-if="!selectedContactId">
                     <label>
-                      <span>Jmeno jednorazoveho kontaktu</span>
+                      <span>Jméno jednorázového kontaktu</span>
                       <input v-model="doctorContact.name" type="text" maxlength="120" />
                     </label>
                     <label>
-                      <span>E-mail jednorazoveho kontaktu</span>
+                      <span>E-mail jednorázového kontaktu</span>
                       <input v-model="doctorContact.email" type="email" maxlength="254" />
                     </label>
                     <label>
@@ -2663,23 +2663,23 @@ function syncFloatingMenuHeight() {
                         type="checkbox"
                         @change="reportSharePassword = ''"
                       />
-                      Zasifrovat report heslem
+                      Zašifrovat report heslem
                     </label>
                     <p class="panel-tip">
-                      Jednorazove zadany kontakt se neuklada.
+                      Jednorázově zadaný kontakt se neukládá.
                       {{ encryptOneTimeReport
-                        ? "Report se odesle v sifrovanem ZIPu a heslo je nutne predat jinym kanalem."
-                        : "Report se odesle jako nesifrovane PDF." }}
+                        ? "Report se odešle v šifrovaném ZIPu a heslo je nutné předat jiným kanálem."
+                        : "Report se odešle jako nešifrované PDF." }}
                     </p>
                   </template>
                   <button class="primary-button" type="button" @click="printDoctorReport">
                     Otevrit tisk
                   </button>
                   <button class="ghost-button" type="button" @click="saveDoctorReportPdf">
-                    Ulozit PDF
+                    Uložit PDF
                   </button>
                   <button class="ghost-button" type="button" @click="shareDoctorReportSecurely">
-                    {{ selectedContactId || encryptOneTimeReport ? "Sdilet sifrovane" : "Sdilet PDF" }}
+                    {{ selectedContactId || encryptOneTimeReport ? "Sdílet šifrovaně" : "Sdílet PDF" }}
                   </button>
                   <button
                     v-if="authConfig.googleEnabled"
@@ -2687,7 +2687,7 @@ function syncFloatingMenuHeight() {
                     type="button"
                     @click="sendDoctorReportWithGmail"
                   >
-                    Odeslat pres Gmail
+                    Odeslat přes Gmail
                   </button>
                   <div v-if="reportSharePassword" class="report-share-password">
                     <strong>Heslo k zalozni ZIP priloze</strong>
@@ -2705,10 +2705,10 @@ function syncFloatingMenuHeight() {
                 @click="toggleUtilityMenu"
               >
                 <span class="utility-menu-trigger-icon" aria-hidden="true">☰</span>
-                <span>Vice</span>
+                <span>Více</span>
               </button>
 
-              <div v-if="isUtilityMenuOpen" class="utility-menu-panel" role="menu" aria-label="Dalsi sekce, export a zalohy">
+              <div v-if="isUtilityMenuOpen" class="utility-menu-panel" role="menu" aria-label="Další sekce, export a zálohy">
                 <button
                   class="utility-menu-item"
                   type="button"
@@ -2716,10 +2716,10 @@ function syncFloatingMenuHeight() {
                   :aria-current="activePanelId === 'sekce-matice' ? 'page' : undefined"
                   @click="handleUtilityAction(() => selectPanel('sekce-matice'))"
                 >
-                  Hodinova matice
+                  Hodinová matice
                 </button>
                 <button class="utility-menu-item" type="button" role="menuitem" @click="handleUtilityAction(() => selectPanel('sekce-udaje'))">
-                  Udaje
+                  Údaje
                 </button>
                 <button class="utility-menu-item" type="button" role="menuitem" @click="handleUtilityAction(() => selectPanel('sekce-trendy'))">
                   Trendy
@@ -2753,7 +2753,7 @@ function syncFloatingMenuHeight() {
           </div>
 
           <div v-if="showDateSwitcher" class="date-switcher">
-            <button class="ghost-button" type="button" @click="goToPreviousDate">Predchozi den</button>
+            <button class="ghost-button" type="button" @click="goToPreviousDate">Předchozí den</button>
             <label class="date-switcher-picker">
               <span>Datum</span>
               <input
@@ -2764,7 +2764,7 @@ function syncFloatingMenuHeight() {
               />
             </label>
             <button class="ghost-button" type="button" :disabled="!canGoToNextDate" @click="goToNextDate">
-              Dalsi den
+              Další den
             </button>
             <button class="ghost-button" type="button" :disabled="state.selectedDate === getTodayKey()" @click="updateSelectedDate(getTodayKey())">
               Dnes
@@ -2776,7 +2776,7 @@ function syncFloatingMenuHeight() {
         </div>
 
         <div v-if="!isOnline" class="status-banner status-banner-offline" role="status">
-          <p>Pracujete offline. Zaznamy se ukladaji lokalne a synchronni akce zavisle na siti nejsou potreba.</p>
+          <p>Pracujete offline. Záznamy se ukládají lokálně a synchronní akce závislé na síti nejsou potřeba.</p>
         </div>
 
         <div v-if="pwaOfflineReady" class="status-banner status-banner-ready" role="status">
@@ -2785,7 +2785,7 @@ function syncFloatingMenuHeight() {
         </div>
 
         <div v-if="pwaUpdateRegistration" class="status-banner status-banner-update" role="status">
-          <p>Je pripravena nova verze aplikace. Pro nacteni aktualizace staci obnovit aplikaci.</p>
+          <p>Je připravena nová verze aplikace. Pro načtení aktualizace stačí obnovit aplikaci.</p>
           <button class="primary-button" type="button" @click="applyAppUpdate">Aktualizovat ted</button>
         </div>
 
@@ -2811,7 +2811,7 @@ function syncFloatingMenuHeight() {
         <section v-if="activePanelId === 'sekce-udaje'" class="panel panel-wide layout-profile">
           <div class="panel-heading">
             <div>
-              <p class="section-kicker">Udaje</p>
+              <p class="section-kicker">Údaje</p>
               <h2>Denik a pacient</h2>
             </div>
           </div>
@@ -2859,14 +2859,14 @@ function syncFloatingMenuHeight() {
               </div>
               <button class="ghost-button" type="button" @click="createManualLocalBackup">Vytvorit ted</button>
             </div>
-            <p class="panel-tip">Jedna automaticka zaloha denne, uchovava se poslednich 7 verzi pouze v tomto zarizeni.</p>
+            <p class="panel-tip">Jedna automatická záloha denně, uchovává se posledních 7 verzí pouze v tomto zařízení.</p>
             <ul v-if="localBackupItems.length" class="backup-history-list">
               <li v-for="backup in localBackupItems" :key="backup.id">
-                <span>{{ formatBackupTimestamp(backup.createdAt) }} · {{ backup.reason === "automatic" ? "automaticka" : backup.reason === "before-restore" ? "pred obnovou" : "rucni" }}</span>
+                <span>{{ formatBackupTimestamp(backup.createdAt) }} · {{ backup.reason === "automatic" ? "automatická" : backup.reason === "before-restore" ? "před obnovou" : "ruční" }}</span>
                 <button class="ghost-button" type="button" @click="restoreSelectedLocalBackup(backup)">Obnovit</button>
               </li>
             </ul>
-            <p v-else class="panel-tip">Zatim neni ulozena zadna lokalni zaloha.</p>
+            <p v-else class="panel-tip">Zatím není uložena žádná lokální záloha.</p>
           </div>
 
           <div class="backup-settings-card">
@@ -2896,15 +2896,15 @@ function syncFloatingMenuHeight() {
                 />
               </label>
             </div>
-            <p class="panel-tip">Upozorneni se zobrazi jen tehdy, kdyz chybi ocekavane hodiny, kvalita spanku nebo hodnoceni dne. Lokalni rezim vyzaduje bezici aplikaci.</p>
+            <p class="panel-tip">Upozornění se zobrazí jen tehdy, když chybí očekávané hodiny, kvalita spánku nebo hodnocení dne. Lokální režim vyžaduje běžící aplikaci.</p>
           </div>
 
           <div class="sync-warning-card">
             <strong>Uplny reset lokalnich dat</strong>
-            <p>Smaze vsechny denni zaznamy, lecbu i udaje o pacientovi v tomto zarizeni. Prihlaseni a sync nastaveni zustanou zachovane.</p>
+            <p>Smaže všechny denní záznamy, léčbu i údaje o pacientovi v tomto zařízení. Přihlášení a nastavení synchronizace zůstanou zachována.</p>
             <div class="sync-actions">
               <button class="ghost-button utility-menu-item-danger" type="button" @click="resetAllData">
-                Smazat vsechna lokalni data
+                Smazat všechna lokální data
               </button>
             </div>
           </div>
@@ -2950,9 +2950,9 @@ function syncFloatingMenuHeight() {
 
               <div v-if="isFederatedAuthEnabled" class="auth-panel">
                 <div class="auth-panel-copy">
-                  <span>Prihlaseni</span>
+                  <span>Přihlášení</span>
                   <p class="panel-tip">
-                    {{ authSession?.user ? `Prihlaseno jako ${authSummary}.` : "Prihlaste se pres Google nebo Apple a bearer token uz nebude potreba." }}
+                    {{ authSession?.user ? `Přihlášeno jako ${authSummary}.` : "Přihlaste se přes Google nebo Apple a bearer token už nebude potřeba." }}
                   </p>
                 </div>
                 <div class="auth-panel-actions">
@@ -2964,7 +2964,7 @@ function syncFloatingMenuHeight() {
                     :disabled="isAuthBusy"
                     @click="signInWithApple"
                   >
-                    Prihlasit pres Apple
+                    Přihlásit přes Apple
                   </button>
                   <button
                     v-if="authSession?.user"
@@ -3031,7 +3031,7 @@ function syncFloatingMenuHeight() {
                 Přihlášení přes poskytovatele:
                 {{ authConfig.googleEnabled ? "Google " : "" }}{{ authConfig.appleEnabled ? "Apple" : "" }}
               </p>
-              <p class="panel-tip">Lokalni klic: {{ hasSyncMasterKeyStored ? "ulozen" : "chybi" }}</p>
+              <p class="panel-tip">Lokální klíč: {{ hasSyncMasterKeyStored ? "uložen" : "chybí" }}</p>
               <p class="panel-tip">Obnovovací kód: {{ hasRecoverySecretStored ? "uložen" : "chybí" }}</p>
               <p v-if="syncSettings.lastSyncMessage" class="panel-tip">{{ syncSettings.lastSyncMessage }}</p>
             </div>
@@ -3039,8 +3039,8 @@ function syncFloatingMenuHeight() {
             <section v-if="hasSyncIdentity" class="trusted-devices-card">
               <div class="conflict-audit-heading">
                 <div>
-                  <strong>Duveryhodna zarizeni</strong>
-                  <p class="panel-tip">Aktualni zarizeni {{ getCurrentDeviceId().slice(0, 8) }}.</p>
+                  <strong>Důvěryhodná zařízení</strong>
+                  <p class="panel-tip">Aktuální zařízení {{ getCurrentDeviceId().slice(0, 8) }}.</p>
                 </div>
                 <button class="ghost-button" type="button" :disabled="isSyncBusy" @click="refreshTrustedDevices">Obnovit</button>
               </div>
@@ -3049,7 +3049,7 @@ function syncFloatingMenuHeight() {
                   Znovu overit registraci
                 </button>
                 <button class="ghost-button" type="button" :disabled="isSyncBusy" @click="registerAsNewDevice">
-                  Registrovat jako nove zarizeni
+                  Registrovat jako nové zařízení
                 </button>
               </div>
               <div v-if="identityKeyMigration?.enabled" class="private-key-warning">
@@ -3060,7 +3060,7 @@ function syncFloatingMenuHeight() {
                 </button>
               </div>
               <div v-if="identityKeyError" class="private-key-warning">
-                <strong>Identitni klic zarizeni neni dostupny</strong>
+                <strong>Identitní klíč zařízení není dostupný</strong>
                 <span>{{ identityKeyError }}</span>
                 <span>Nouzova registrace je aktivni, ale rotace a predavani klicu tomuto zarizeni zatim nejsou bezpecne dostupne.</span>
               </div>
@@ -3083,9 +3083,9 @@ function syncFloatingMenuHeight() {
                 </li>
               </ul>
               <div v-if="pendingDeviceKeyRequests.length" class="private-key-warning">
-                <strong>Zadosti novych zarizeni o master key</strong>
+                <strong>Žádosti nových zařízení o hlavní klíč</strong>
                 <div v-for="request in pendingDeviceKeyRequests" :key="request.requestId" class="contact-actions">
-                  <span>Zarizeni {{ request.targetDeviceId.slice(0, 8) }}</span>
+                  <span>Zařízení {{ request.targetDeviceId.slice(0, 8) }}</span>
                   <button class="ghost-button" type="button" @click="approveDeviceKeyRequest(request)">Schvalit jednorazove predani</button>
                 </div>
                 <span>Predava se pouze master key zasifrovany verejnym klicem ciloveho zarizeni, nikoli recovery secret.</span>
@@ -3101,7 +3101,7 @@ function syncFloatingMenuHeight() {
                 <p class="panel-tip">Nevybrana zarizeni novy klic neobdrzi a po rotaci budou nabidnuta k odvolani.</p>
               </fieldset>
               <button class="ghost-button utility-menu-item-danger" type="button" :disabled="isSyncBusy" @click="rotateEncryptionKey">
-                Rotovat klic a predat ostatnim zarizenim
+                Rotovat klíč a předat ostatním zařízením
               </button>
             </section>
 
@@ -3130,7 +3130,7 @@ function syncFloatingMenuHeight() {
             <div v-if="generatedRecoverySecret" class="sync-warning-card">
               <strong>Ulozte si recovery secret</strong>
               <p>{{ generatedRecoverySecret }}</p>
-              <span>Bez tohoto tajemstvi nepujde na novem zarizeni data desifrovat.</span>
+              <span>Bez tohoto tajemství nepůjde na novém zařízení data dešifrovat.</span>
             </div>
           </div>
         </section>
@@ -3215,9 +3215,9 @@ function syncFloatingMenuHeight() {
               <p class="section-kicker">Kontakty</p>
               <h2>Prijemci reportu</h2>
             </div>
-            <button class="ghost-button" type="button" @click="editContact()">Novy kontakt</button>
+            <button class="ghost-button" type="button" @click="editContact()">Nový kontakt</button>
           </div>
-          <p class="panel-tip">Ulozene kontakty muzete pri sdileni reportu vybrat bez opakovaneho zadavani udaju.</p>
+          <p class="panel-tip">Uložené kontakty můžete při sdílení reportu vybrat bez opakovaného zadávání údajů.</p>
 
           <div v-if="contacts.length" class="backup-history-list contact-list">
             <button
@@ -3229,13 +3229,13 @@ function syncFloatingMenuHeight() {
               @click="editContact(contact)"
             >
               <strong>{{ contact.name }}</strong>
-              <span>{{ contact.email }} · {{ contact.keyFingerprint ? "verejny klic" : "heslove sifrovani" }}</span>
+              <span>{{ contact.email }} · {{ contact.keyFingerprint ? "veřejný klíč" : "heslové šifrování" }}</span>
             </button>
           </div>
-          <p v-else class="panel-tip">Zatim nemate ulozeny zadny kontakt.</p>
+          <p v-else class="panel-tip">Zatím nemáte uložený žádný kontakt.</p>
 
           <fieldset class="contact-keyring contact-editor">
-            <legend>{{ contactEditor.id ? "Upravit kontakt" : "Novy kontakt" }}</legend>
+            <legend>{{ contactEditor.id ? "Upravit kontakt" : "Nový kontakt" }}</legend>
             <label>
               <span>Jmeno</span>
               <input v-model="contactEditor.name" type="text" maxlength="120" placeholder="MUDr. Novak" />
@@ -3249,13 +3249,13 @@ function syncFloatingMenuHeight() {
               <textarea v-model="contactEditor.publicKeyPem" rows="6" placeholder="-----BEGIN PUBLIC KEY-----"></textarea>
             </label>
             <div class="contact-actions">
-              <button class="primary-button" type="button" @click="storeContact">Ulozit kontakt</button>
+              <button class="primary-button" type="button" @click="storeContact">Uložit kontakt</button>
               <button class="ghost-button" type="button" @click="createKeysForContact">Vygenerovat klice</button>
               <button v-if="contactEditor.id" class="ghost-button utility-menu-item-danger" type="button" @click="removeContact">Smazat</button>
             </div>
             <div v-if="generatedContactPrivateKey" class="private-key-warning">
               <strong>Soukromy klic se neuklada.</strong>
-              <span>Stahnete jej nyni a predejte prijemci bezpecnym kanalem. Po opusteni editoru jej aplikace neobnovi.</span>
+              <span>Stáhněte jej nyní a předejte příjemci bezpečným kanálem. Po opuštění editoru jej aplikace neobnoví.</span>
               <button class="ghost-button" type="button" @click="downloadGeneratedPrivateKey">Stahnout soukromy klic</button>
             </div>
           </fieldset>
@@ -3327,17 +3327,17 @@ function syncFloatingMenuHeight() {
         <section v-else class="panel panel-wide home-panel">
           <div class="panel-heading">
             <div>
-              <p class="section-kicker">Rychly zapis</p>
+              <p class="section-kicker">Rychlý zápis</p>
               <h2>Zapsat aktualni stav</h2>
             </div>
           </div>
           <div class="floating-quick-capture quick-capture-panel">
             <div class="floating-quick-capture-copy">
               <p class="panel-tip">
-                Rychly zapis vzdy zaznamena aktualni okamzik.
+                Rychlý zápis vždy zaznamená aktuální okamžik.
               </p>
               <p v-if="currentHourRecordCount > 1" class="panel-tip">
-                Pro tuto hodinu uz existuje {{ currentHourRecordCount }} zaznamu. Zobrazuje se posledni.
+                Pro tuto hodinu už existuje {{ currentHourRecordCount }} záznamů. Zobrazuje se poslední.
               </p>
             </div>
             <div class="floating-quick-capture-form">
@@ -3371,7 +3371,7 @@ function syncFloatingMenuHeight() {
 
               <div v-for="dose in availablePlannedDoses" :key="dose.item.id" class="quick-capture-row">
                 <p class="quick-dose-copy">
-                  <span>Davka z planu</span>
+                  <span>Dávka z plánu</span>
                   <strong>{{ dose.item.time }} · {{ dose.item.name }} · {{ dose.item.dose }}</strong>
                   <small>{{ dose.status.label }}</small>
                 </p>
@@ -3384,7 +3384,7 @@ function syncFloatingMenuHeight() {
                 </button>
               </div>
               <p v-if="availablePlannedDoses.length === 0" class="panel-tip">
-                Nyni neni k zapisu zadna planovana davka.
+                Nyní není k zápisu žádná plánovaná dávka.
               </p>
             </div>
           </div>
@@ -3413,7 +3413,7 @@ function syncFloatingMenuHeight() {
               </div>
               <div v-for="dose in timelineMedicationDoses" :key="`timeline-${dose.item.id}`" class="quick-capture-row">
                 <p class="quick-dose-copy">
-                  <span>Chybejici davka z planu</span>
+                  <span>Chybějící dávka z plánu</span>
                   <strong>{{ dose.item.time }} · {{ dose.item.name }} · {{ dose.item.dose }}</strong>
                 </p>
                 <button

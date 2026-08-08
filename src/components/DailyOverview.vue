@@ -21,45 +21,45 @@ function patchEntry(field, value) {
   <section class="panel panel-wide">
     <div class="panel-heading">
       <div>
-        <p class="section-kicker">Denni zaznam</p>
-        <h2>Prehled dne</h2>
+        <p class="section-kicker">Denní záznam</p>
+        <h2>Přehled dne</h2>
       </div>
     </div>
 
     <form class="day-form">
       <label>
-        <span>Kvalita spanku</span>
+        <span>Kvalita spánku</span>
         <select
           :value="props.modelValue.sleepQuality"
           @input="patchEntry('sleepQuality', $event.target.value)"
         >
-          <option :value="UNDEFINED_ENTRY_VALUE">Nedefinovano</option>
-          <option value="poor">Spatna</option>
-          <option value="mixed">Promenliva</option>
-          <option value="good">Dobra</option>
+          <option :value="UNDEFINED_ENTRY_VALUE">Nedefinováno</option>
+          <option value="poor">Špatná</option>
+          <option value="mixed">Proměnlivá</option>
+          <option value="good">Dobrá</option>
         </select>
       </label>
 
       <label>
-        <span>Celkovy den</span>
+        <span>Celkový den</span>
         <select
           :value="props.modelValue.overallStatus"
           @input="patchEntry('overallStatus', $event.target.value)"
         >
-          <option :value="UNDEFINED_ENTRY_VALUE">Nedefinovano</option>
-          <option value="hard">Narocny den</option>
-          <option value="stable">Stabilni den</option>
-          <option value="good">Dobry den</option>
+          <option :value="UNDEFINED_ENTRY_VALUE">Nedefinováno</option>
+          <option value="hard">Náročný den</option>
+          <option value="stable">Stabilní den</option>
+          <option value="good">Dobrý den</option>
         </select>
       </label>
 
       <label class="notes-field">
-        <span>Poznamky</span>
+        <span>Poznámky</span>
         <textarea
           :value="props.modelValue.notes"
           rows="4"
           maxlength="5000"
-          placeholder="Napriklad: ztuhlost po obede, tres lepsi po prochazce..."
+          placeholder="Například: ztuhlost po obědě, třes lepší po procházce…"
           @input="patchEntry('notes', $event.target.value)"
         />
       </label>

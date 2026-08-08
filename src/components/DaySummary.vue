@@ -53,14 +53,14 @@ const distributionPanels = computed(() => [
   },
   {
     key: "week",
-    title: "7 dni",
-    meta: `${weeklyAnalysis.value.reliableDays}/${weeklyAnalysis.value.trackedDays} spolehlivych dni`,
+    title: "7 dní",
+    meta: `${weeklyAnalysis.value.reliableDays}/${weeklyAnalysis.value.trackedDays} spolehlivých dní`,
     items: buildStateDistribution(weeklyAnalysis.value.totals),
   },
   {
     key: "month",
-    title: "30 dni",
-    meta: `${monthlyAnalysis.value.reliableDays}/${monthlyAnalysis.value.trackedDays} spolehlivych dni`,
+    title: "30 dní",
+    meta: `${monthlyAnalysis.value.reliableDays}/${monthlyAnalysis.value.trackedDays} spolehlivých dní`,
     items: buildStateDistribution(monthlyAnalysis.value.totals),
   },
 ]);
@@ -70,26 +70,26 @@ const cards = computed(() => {
 
   return [
     {
-      title: "Hodinovy rozklad",
+      title: "Hodinový rozklad",
       value: stateBreakdown.value,
     },
     {
-      title: "Leky",
-      value: `${entryAnalysis.value.medicationCount} davek dnes · ${weeklyAnalysis.value.averageMedicationCount.toFixed(1)} za den / 7 dni`,
+      title: "Léky",
+      value: `${entryAnalysis.value.medicationCount} dávek dnes · ${weeklyAnalysis.value.averageMedicationCount.toFixed(1)} za den / 7 dní`,
     },
     {
-      title: "Prevladajici stav",
+      title: "Převládající stav",
       value: entryAnalysis.value.dominantStateLabel,
     },
     {
-      title: "Poslednich 7 dni",
+      title: "Posledních 7 dní",
       value:
         weeklyAnalysis.value.recordedDays > 0
-          ? `${weeklyAnalysis.value.recordedDays}/${weeklyAnalysis.value.trackedDays} dni · ${weeklyStateBreakdown.value} · nejcasteji ${dominantState ? getStateDefinition(dominantState).label : "Bez dat"}`
-          : "Zatim bez zaznamenaneho tydne",
+          ? `${weeklyAnalysis.value.recordedDays}/${weeklyAnalysis.value.trackedDays} dní · ${weeklyStateBreakdown.value} · nejčastěji ${dominantState ? getStateDefinition(dominantState).label : "Bez dat"}`
+          : "Zatím bez zaznamenaného týdne",
     },
     {
-      title: "Spanek a poznamky",
+      title: "Spánek a poznámky",
       value: `${formatSleepQuality(props.entry.sleepQuality)}, ${formatOverallStatus(props.entry.overallStatus)}, ${
         entryAnalysis.value.noteStatus
       }`,
@@ -143,7 +143,7 @@ const histogramRows = computed(() => [
   },
   {
     key: "sleep",
-    label: "Spanek",
+    label: "Spánek",
     today: `${entryAnalysis.value.hourCounts.sleep ?? 0} h`,
     weekly: `${weeklyAnalysis.value.totals.sleep} h`,
     monthly: `${monthlyAnalysis.value.totals.sleep} h`,
@@ -152,7 +152,7 @@ const histogramRows = computed(() => [
   },
   {
     key: "medications",
-    label: "Davky leku",
+    label: "Dávky léků",
     today: `${entryAnalysis.value.medicationCount}`,
     weekly: `${weeklyAnalysis.value.medicationTotal} celkem · ${formatAverage(weeklyAnalysis.value.averageMedicationCount)} / den`,
     monthly: `${monthlyAnalysis.value.medicationTotal} celkem · ${formatAverage(monthlyAnalysis.value.averageMedicationCount)} / den`,
@@ -167,7 +167,7 @@ const histogramRows = computed(() => [
     <div class="panel-heading">
       <div>
         <p class="section-kicker">Souhrn</p>
-        <h2>Rychly prehled</h2>
+        <h2>Rychlý přehled</h2>
       </div>
     </div>
 
@@ -177,7 +177,7 @@ const histogramRows = computed(() => [
         <h3>{{ dayQuality.label }}</h3>
         <p>{{ dayQuality.description }}</p>
         <strong>
-          {{ dayQuality.recordedHourCount }}/{{ dayQuality.expectedHourCount }} ocekavanych hodin
+          {{ dayQuality.recordedHourCount }}/{{ dayQuality.expectedHourCount }} očekávaných hodin
           · {{ dayQuality.hourCoveragePercent }} %
         </strong>
       </div>
@@ -208,8 +208,8 @@ const histogramRows = computed(() => [
 
     <div class="distribution-panel">
       <div class="histogram-header">
-        <strong>Rozlozeni stavu</strong>
-        <span>Orientacni procentualni podil zaznamenanych hodin</span>
+        <strong>Rozložení stavů</strong>
+        <span>Orientační procentuální podíl zaznamenaných hodin</span>
       </div>
 
       <div class="distribution-grid">
@@ -241,16 +241,16 @@ const histogramRows = computed(() => [
     <div class="histogram-panel">
       <div class="histogram-header">
         <strong>Histogramy trendu</strong>
-        <span>Posledni tyden i posledni mesic po jednotlivych dnech</span>
+        <span>Poslední týden i poslední měsíc po jednotlivých dnech</span>
       </div>
 
       <div class="histogram-table">
-        <div class="histogram-table-head">Polozka</div>
+        <div class="histogram-table-head">Položka</div>
         <div class="histogram-table-head">Dnes</div>
-        <div class="histogram-table-head">7 dni</div>
-        <div class="histogram-table-head">Histogram 7 dni</div>
-        <div class="histogram-table-head">30 dni</div>
-        <div class="histogram-table-head">Histogram 30 dni</div>
+        <div class="histogram-table-head">7 dní</div>
+        <div class="histogram-table-head">Histogram 7 dní</div>
+        <div class="histogram-table-head">30 dní</div>
+        <div class="histogram-table-head">Histogram 30 dní</div>
 
         <template v-for="row in histogramRows" :key="row.key">
           <div class="histogram-cell histogram-label">{{ row.label }}</div>

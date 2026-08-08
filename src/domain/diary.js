@@ -1,9 +1,9 @@
 export const HOUR_STATES = [
-  { key: "dyskinesia", label: "Mimovolni pohyby", shortLabel: "D", description: "mimovolni pohyby" },
-  { key: "on", label: 'Dobra hybnost ("ON")', shortLabel: "ON", description: "dobra hybnost" },
-  { key: "partial", label: "Ne zcela dobra hybnost", shortLabel: "MID", description: "ne zcela dobra hybnost" },
-  { key: "off", label: 'Tres, ztuhlost, zpomalenost ("OFF")', shortLabel: "OFF", description: "tres, ztuhlost, zpomalenost" },
-  { key: "sleep", label: "Spanek", shortLabel: "S", description: "spanek" },
+  { key: "dyskinesia", label: "Mimovolní pohyby", shortLabel: "D", description: "mimovolní pohyby" },
+  { key: "on", label: 'Dobrá hybnost ("ON")', shortLabel: "ON", description: "dobrá hybnost" },
+  { key: "partial", label: "Ne zcela dobrá hybnost", shortLabel: "MID", description: "ne zcela dobrá hybnost" },
+  { key: "off", label: 'Třes, ztuhlost, zpomalenost ("OFF")', shortLabel: "OFF", description: "třes, ztuhlost, zpomalenost" },
+  { key: "sleep", label: "Spánek", shortLabel: "S", description: "spánek" },
 ];
 
 export const TRACKING_HOURS = Array.from({ length: 19 }, (_, index) => {
@@ -44,7 +44,7 @@ export function shiftDateKey(dateKey, deltaDays) {
 
 export function formatLongDate(dateKey) {
   const date = new Date(`${dateKey}T12:00:00`);
-  return new Intl.DateTimeFormat("en", {
+  return new Intl.DateTimeFormat("cs-CZ", {
     weekday: "long",
     day: "numeric",
     month: "long",
@@ -690,10 +690,10 @@ function mergeHourRecordsAppendOnly(baseHourRecords = {}, incomingHourRecords = 
 
 export function formatSleepQuality(value) {
   const mapping = {
-    poor: "Spatna",
-    mixed: "Promenliva",
-    good: "Dobra",
-    [UNDEFINED_ENTRY_VALUE]: "Nedefinovano",
+    poor: "Špatná",
+    mixed: "Proměnlivá",
+    good: "Dobrá",
+    [UNDEFINED_ENTRY_VALUE]: "Nedefinováno",
   };
 
   return mapping[value] ?? value;
@@ -701,10 +701,10 @@ export function formatSleepQuality(value) {
 
 export function formatOverallStatus(value) {
   const mapping = {
-    hard: "Narocny den",
-    stable: "Stabilni den",
-    good: "Dobry den",
-    [UNDEFINED_ENTRY_VALUE]: "Nedefinovano",
+    hard: "Náročný den",
+    stable: "Stabilní den",
+    good: "Dobrý den",
+    [UNDEFINED_ENTRY_VALUE]: "Nedefinováno",
   };
 
   return mapping[value] ?? value;

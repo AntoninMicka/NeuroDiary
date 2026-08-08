@@ -18,12 +18,12 @@ function medicationIdentity(item) {
 
 function getTimingStatus(differenceMinutes) {
   if (differenceMinutes < -ADHERENCE_TOLERANCE_MINUTES) {
-    return { key: "early", label: `Uzita o ${Math.abs(differenceMinutes)} min drive` };
+    return { key: "early", label: `Užita o ${Math.abs(differenceMinutes)} min dříve` };
   }
   if (differenceMinutes > ADHERENCE_TOLERANCE_MINUTES) {
-    return { key: "late", label: `Uzita o ${differenceMinutes} min pozdeji` };
+    return { key: "late", label: `Užita o ${differenceMinutes} min později` };
   }
-  return { key: "on-time", label: "Uzita vcas" };
+  return { key: "on-time", label: "Užita včas" };
 }
 
 export function analyzeMedicationAdherence({
@@ -79,7 +79,7 @@ export function analyzeMedicationAdherence({
         recordedMedication: null,
         differenceMinutes: null,
         statusKey: isMissed ? "missed" : "upcoming",
-        statusLabel: isMissed ? "Vynechana" : "Ceka na uziti",
+        statusLabel: isMissed ? "Vynechána" : "Čeká na užití",
       };
     });
 

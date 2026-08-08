@@ -4,22 +4,22 @@ const QUALITY_DEFINITIONS = {
   none: {
     key: "none",
     label: "Bez dat",
-    description: "Pro tento den nejsou zaznamenane zadne udaje.",
+    description: "Pro tento den nejsou zaznamenány žádné údaje.",
   },
   incomplete: {
     key: "incomplete",
-    label: "Neuplny den",
+    label: "Neúplný den",
     description: "Data existuji, ale pro spolehlivou interpretaci jich je malo.",
   },
   sufficient: {
     key: "sufficient",
-    label: "Dostatecna data",
+    label: "Dostatečná data",
     description: "Den ma dostatecne pokryti pro orientacni vyhodnoceni.",
   },
   complete: {
     key: "complete",
-    label: "Kompletni den",
-    description: "Den ma souvisle hodinove pokryti a vyplneny denni souhrn.",
+    label: "Kompletní den",
+    description: "Den má souvislé hodinové pokrytí a vyplněný denní souhrn.",
   },
 };
 
@@ -108,7 +108,7 @@ export function evaluateDayQuality(
     missingItems.push(`Doplnit hodiny: ${buildMissingRanges(missingHourLabels).join(", ")}.`);
   }
   if (!hasSleepQuality) {
-    missingItems.push("Doplnit kvalitu spanku.");
+    missingItems.push("Doplnit kvalitu spánku.");
   }
   if (!hasOverallStatus) {
     missingItems.push("Doplnit celkove hodnoceni dne.");

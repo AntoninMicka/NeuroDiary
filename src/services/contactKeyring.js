@@ -117,7 +117,7 @@ export async function generateContactKeyPair() {
 }
 
 export async function encryptBlobForContact(blob, contact, filename = "neurodiary-report.pdf") {
-  if (!contact?.publicKeyPem) throw new Error("Kontakt nema ulozeny verejny klic.");
+  if (!contact?.publicKeyPem) throw new Error("Kontakt nemá uložený veřejný klíč.");
   const api = cryptoApi();
   const publicKey = await importContactPublicKey(contact.publicKeyPem);
   const contentKey = await api.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt"]);
@@ -141,7 +141,7 @@ export async function encryptBlobForContact(blob, contact, filename = "neurodiar
 
 export async function decryptContactEnvelope(blob, privateKeyPem) {
   const envelope = JSON.parse(await blob.text());
-  if (envelope.format !== "neurodiary-encrypted-report" || envelope.version !== 1) throw new Error("Neznamy format sifrovaneho reportu.");
+  if (envelope.format !== "neurodiary-encrypted-report" || envelope.version !== 1) throw new Error("Neznámý formát šifrovaného reportu.");
   const api = cryptoApi();
   const privateKey = await api.subtle.importKey("pkcs8", pemToBytes(privateKeyPem, "PRIVATE KEY"), { name: "RSA-OAEP", hash: "SHA-256" }, false, ["decrypt"]);
   const rawKey = await api.subtle.decrypt({ name: "RSA-OAEP" }, privateKey, base64ToBytes(envelope.encryptedKey));
