@@ -17,8 +17,8 @@ function shouldSkipSqlite() {
     return {
       skip: true,
       reason: isLocalhost
-        ? "Firefox local mode detected. sql.js WebAssembly initialization is skipped here for reliability."
-        : "Hosted Firefox mode detected. sql.js WebAssembly initialization is skipped here for reliability.",
+        ? "Byl zjištěn místní režim Firefoxu. Inicializace sql.js WebAssembly byla kvůli spolehlivosti přeskočena."
+        : "Byl zjištěn hostovaný režim Firefoxu. Inicializace sql.js WebAssembly byla kvůli spolehlivosti přeskočena.",
     };
   }
 
@@ -52,7 +52,7 @@ export async function createDiaryRepository(options = {}) {
 
   if (sqliteDecision.skip) {
     onProgress?.(sqliteDecision.reason);
-    onProgress?.("Switching directly to localStorage fallback.");
+    onProgress?.("Přepínám přímo na záložní úložiště localStorage.");
     const repository = await LocalStorageDiaryRepository.create(onProgress);
     repository.bootstrapWarning =
       "SQLite/WASM byl v hostovanem Firefoxu preskocen kvuli spolehlivosti. Aplikace bezi v localStorage rezimu.";
@@ -60,17 +60,17 @@ export async function createDiaryRepository(options = {}) {
   }
 
   try {
-    onProgress?.("Trying SQLite repository first.");
+    onProgress?.("Nejprve zkouším úložiště SQLite.");
     return await withTimeout(
       SqliteDiaryRepository.create(onProgress),
       SQLITE_INIT_TIMEOUT_MS,
-      `SQLite repository initialization timed out after ${SQLITE_INIT_TIMEOUT_MS} ms.`,
+      `Inicializace úložiště SQLite překročila limit ${SQLITE_INIT_TIMEOUT_MS} ms.`,
     );
   } catch (error) {
     console.warn("SQLite repository initialization failed, falling back to localStorage", error);
     const reason = error instanceof Error ? error.message : String(error);
-    onProgress?.(`SQLite repository failed: ${reason}`);
-    onProgress?.("Switching to localStorage fallback.");
+    onProgress?.(`Úložiště SQLite selhalo: ${reason}`);
+    onProgress?.("Přepínám na záložní úložiště localStorage.");
     const repository = await LocalStorageDiaryRepository.create(onProgress);
     repository.bootstrapWarning =
       `SQLite uloziste se nepodarilo spustit: ${reason}. Aplikace proto bezí v nouzovem localStorage rezimu.`;

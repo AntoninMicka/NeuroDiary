@@ -656,7 +656,7 @@ export function buildDoctorReportHtml({
 }) {
   const entry = entries[selectedDate];
   if (!entry) {
-    throw new Error(`No diary entry found for ${selectedDate}`);
+    throw new Error(`Pro datum ${selectedDate} nebyl nalezen záznam deníku.`);
   }
 
   const reportEndDate = !includeToday && selectedDate === todayDate
@@ -1317,7 +1317,7 @@ export function openDoctorReportPrint({
 }) {
   const reportWindow = window.open("", "_blank");
   if (!reportWindow) {
-    throw new Error("Unable to open report window");
+    throw new Error("Okno reportu se nepodařilo otevřít.");
   }
 
   const html = buildDoctorReportHtml({

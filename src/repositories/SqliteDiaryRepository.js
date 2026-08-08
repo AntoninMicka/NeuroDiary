@@ -144,21 +144,21 @@ export class SqliteDiaryRepository extends DiaryRepository {
     this.onProgress = onProgress;
     this.SQL = SQL;
     this.db = db;
-    this.reportProgress("SQLite engine ready. Enabling foreign keys.");
+    this.reportProgress("SQLite je připravené. Zapínám kontrolu cizích klíčů.");
     this.enableForeignKeys();
-    this.reportProgress("Running SQLite schema migrations.");
+    this.reportProgress("Spouštím migrace schématu SQLite.");
     this.runMigrations();
   }
 
   static async create(onProgress = null) {
-    onProgress?.("Loading sql.js WebAssembly runtime.");
+    onProgress?.("Načítám běhové prostředí sql.js WebAssembly.");
     const SQL = await initSqlJs({
       locateFile: () => wasmUrl,
     });
 
-    onProgress?.("Checking existing local SQLite database.");
+    onProgress?.("Kontroluji existující místní databázi SQLite.");
     const raw = localStorage.getItem(STORAGE_KEY);
-    onProgress?.(raw ? "Opening persisted SQLite database." : "Creating a new SQLite database.");
+    onProgress?.(raw ? "Otevírám uloženou databázi SQLite." : "Vytvářím novou databázi SQLite.");
     const db = raw ? new SQL.Database(base64ToBytes(raw)) : new SQL.Database();
     return new SqliteDiaryRepository(SQL, db, onProgress);
   }
@@ -181,7 +181,7 @@ export class SqliteDiaryRepository extends DiaryRepository {
 
   runMigrations() {
     const currentVersion = this.readUserVersion();
-    this.reportProgress(`Current SQLite schema version is ${currentVersion}.`);
+    this.reportProgress(`Aktuální verze schématu SQLite je ${currentVersion}.`);
     if (currentVersion > SCHEMA_VERSION) {
       throw new Error(
         `Database schema version ${currentVersion} is newer than supported version ${SCHEMA_VERSION}.`,
@@ -192,14 +192,14 @@ export class SqliteDiaryRepository extends DiaryRepository {
     try {
       for (const migration of MIGRATIONS) {
         if (migration.version > currentVersion) {
-          this.reportProgress(`Applying SQLite migration v${migration.version}.`);
+          this.reportProgress(`Aplikuji migraci SQLite v${migration.version}.`);
           migration.run(this.db);
           this.db.run(`PRAGMA user_version = ${migration.version}`);
         }
       }
       this.db.run("COMMIT");
       this.enableForeignKeys();
-      this.reportProgress("Persisting migrated SQLite database.");
+      this.reportProgress("Ukládám migrovanou databázi SQLite.");
       this.persistDatabase();
     } catch (error) {
       this.db.run("ROLLBACK");
@@ -208,7 +208,7 @@ export class SqliteDiaryRepository extends DiaryRepository {
   }
 
   loadState() {
-    this.reportProgress("Loading application state from SQLite.");
+    this.reportProgress("Načítám stav aplikace z SQLite.");
     const state = createInitialState();
     const selectedDate = this.selectSetting("selected_date");
     const patientName = this.selectSetting("patient_name");
@@ -255,7 +255,7 @@ export class SqliteDiaryRepository extends DiaryRepository {
     `);
 
     if (entries[0]) {
-      this.reportProgress(`Found ${entries[0].values.length} SQLite diary entries.`);
+      this.reportProgress(`Nalezeno ${entries[0].values.length} záznamů deníku v SQLite.`);
       for (const [entryDate, sleepQuality, overallStatus, notes, updatedAt] of entries[0].values) {
         state.entries[entryDate] = {
           sleepQuality: sleepQuality || UNDEFINED_ENTRY_VALUE,
@@ -268,13 +268,13 @@ export class SqliteDiaryRepository extends DiaryRepository {
         };
       }
     } else {
-      this.reportProgress("SQLite database is empty. Creating an empty diary.");
+      this.reportProgress("Databáze SQLite je prázdná. Vytvářím prázdný deník.");
       const initialState = normalizeState(createInitialState());
       this.saveState(initialState);
       return initialState;
     }
 
-    this.reportProgress("SQLite state loaded successfully.");
+    this.reportProgress("Stav z SQLite byl úspěšně načten.");
     ensureEntry(state, state.selectedDate);
     return normalizeState(state);
   }

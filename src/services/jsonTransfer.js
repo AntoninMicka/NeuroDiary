@@ -44,7 +44,7 @@ export function parseJsonBackup(raw) {
   const integrityReport = auditDiaryState(normalizedState);
 
   if (integrityReport.summary.issueCount > 0) {
-    throw new Error("JSON backup failed integrity validation.");
+    throw new Error("JSON záloha neprošla kontrolou integrity.");
   }
 
   return normalizedState;

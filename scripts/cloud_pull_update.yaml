@@ -36,13 +36,41 @@ steps:
       - -euc
       - |
         SOURCE_SHA="$$(cat /workspace/source-sha)"
-        CURRENT_SHA="$$(gcloud run services describe "${_CLOUD_RUN_SERVICE}" --region="${_GCP_REGION}" --format='value(metadata.labels.neurodiary-source-sha)' 2>/dev/null || true)"
+        PREVIOUS_REVISION="$$(gcloud run services describe "${_CLOUD_RUN_SERVICE}" \
+          --region="${_GCP_REGION}" \
+          --format='value(status.traffic.filter(percent=100).revisionName)' | head -n 1)"
+        CURRENT_SHA="$$(gcloud run revisions describe "$${PREVIOUS_REVISION}" \
+          --region="${_GCP_REGION}" \
+          --format='value(spec.containers[0].env.filter(name=NEURODIARY_VERSION).value)' 2>/dev/null || true)"
         if [[ "$${SOURCE_SHA}" == "$${CURRENT_SHA}" ]]; then
           touch /workspace/skip-deploy
           echo "NeuroDiary is already at commit $${SOURCE_SHA}."
         else
           echo "Updating NeuroDiary from $${CURRENT_SHA:-unknown} to $${SOURCE_SHA}."
+          printf '%s' "$${PREVIOUS_REVISION}" > /workspace/previous-revision
         fi
+
+  - id: test-frontend
+    name: node:22-slim
+    entrypoint: bash
+    args:
+      - -euc
+      - |
+        [[ -f /workspace/skip-deploy ]] && exit 0
+        cd /workspace/neurodiary
+        npm ci
+        npm test
+
+  - id: test-backend
+    name: python:3.13-slim
+    entrypoint: bash
+    args:
+      - -euc
+      - |
+        [[ -f /workspace/skip-deploy ]] && exit 0
+        cd /workspace/neurodiary
+        pip install --no-cache-dir -r backend/requirements.txt -r backend/requirements-dev.txt
+        python -m pytest
 
   - id: build-image
     name: gcr.io/cloud-builders/docker
@@ -81,8 +109,66 @@ steps:
           --image="${_IMAGE_URI}:cloud-pull" \
           --region="${_GCP_REGION}" \
           --platform=managed \
+          --no-traffic \
+          --tag=overeni \
           --update-env-vars="NEURODIARY_VERSION=$${SOURCE_SHA}" \
-          --update-labels="neurodiary-installation=true,neurodiary-source-sha=$${SOURCE_SHA}"
+          --update-labels="neurodiary-installation=true"
+
+  - id: verify-candidate
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    args:
+      - -euc
+      - |
+        [[ -f /workspace/skip-deploy ]] && exit 0
+        CANDIDATE_URL="$$(gcloud run services describe "${_CLOUD_RUN_SERVICE}" \
+          --region="${_GCP_REGION}" \
+          --format='value(status.traffic.filter(tag=overeni).url)')"
+        [[ -n "$${CANDIDATE_URL}" ]] || { echo "Candidate URL was not created."; exit 1; }
+        for endpoint in readyz healthz; do
+          verified=false
+          for attempt in $$(seq 1 20); do
+            if curl --fail --silent --show-error "$${CANDIDATE_URL}/$${endpoint}" >/dev/null; then
+              verified=true
+              break
+            fi
+            echo "Waiting for candidate /$${endpoint} ($${attempt}/20)."
+            sleep 3
+          done
+          [[ "$${verified}" == "true" ]] || { echo "Candidate /$${endpoint} failed."; exit 1; }
+        done
+
+  - id: promote-candidate
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    args:
+      - -euc
+      - |
+        [[ -f /workspace/skip-deploy ]] && exit 0
+        gcloud run services update-traffic "${_CLOUD_RUN_SERVICE}" \
+          --region="${_GCP_REGION}" \
+          --to-latest
+        SERVICE_URL="$$(gcloud run services describe "${_CLOUD_RUN_SERVICE}" \
+          --region="${_GCP_REGION}" \
+          --format='value(status.url)')"
+        if ! curl --fail --silent --show-error "$${SERVICE_URL}/readyz" >/dev/null \
+          || ! curl --fail --silent --show-error "$${SERVICE_URL}/healthz" >/dev/null; then
+          PREVIOUS_REVISION="$$(cat /workspace/previous-revision)"
+          if [[ -n "$${PREVIOUS_REVISION}" ]]; then
+            echo "Production healthcheck failed; returning traffic to $${PREVIOUS_REVISION}."
+            gcloud run services update-traffic "${_CLOUD_RUN_SERVICE}" \
+              --region="${_GCP_REGION}" \
+              --to-revisions="$${PREVIOUS_REVISION}=100"
+          fi
+          exit 1
+        fi
+        SOURCE_SHA="$$(cat /workspace/source-sha)"
+        gcloud run services update "${_CLOUD_RUN_SERVICE}" \
+          --region="${_GCP_REGION}" \
+          --update-labels="neurodiary-source-sha=$${SOURCE_SHA}"
+        gcloud run services update-traffic "${_CLOUD_RUN_SERVICE}" \
+          --region="${_GCP_REGION}" \
+          --remove-tags=overeni
 
 options:
   logging: CLOUD_LOGGING_ONLY

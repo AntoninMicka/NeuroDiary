@@ -50,7 +50,7 @@ async function fetchJson(url, options = {}) {
   const payload = await response.json().catch(() => null);
 
   if (!response.ok) {
-    throw new Error(payload?.detail ?? `Request failed with HTTP ${response.status}.`);
+    throw new Error(payload?.detail ?? `Požadavek selhal s HTTP stavem ${response.status}.`);
   }
 
   return payload;

@@ -192,11 +192,11 @@ const googleSignInTarget = ref(null);
 const recoveryQrCanvas = ref(null);
 const recoveryQrVideo = ref(null);
 const isReady = ref(false);
-const repositoryMode = ref("loading");
+const repositoryMode = ref("načítání");
 const storageMessage = ref("");
 const lastCaptureUndo = ref(null);
 const birthYearValidationMessage = ref("");
-const bootstrapStatus = ref("Starting application bootstrap.");
+const bootstrapStatus = ref("Spouštím inicializaci aplikace.");
 const quickCaptureNow = ref(new Date());
 const timelineSelectedTime = ref(roundDownToTimelineStep(new Date()));
 const selectedStateKey = ref("on");
@@ -333,18 +333,18 @@ const DATE_NAV_PANEL_IDS = new Set([
 ]);
 const installHelpText = computed(() => {
   if (isInstalledApp.value) {
-    return "App is installed and ready for offline use from your device.";
+    return "Aplikace je nainstalovaná a připravená k použití offline.";
   }
 
   if (platformInstallMode.value === "ios-share-sheet") {
-    return "Na iPhonu nebo iPadu otevřete menu Sdilet a zvolte Pridat na plochu, tim aplikaci nainstalujete.";
+    return "Na iPhonu nebo iPadu otevřete nabídku Sdílet a zvolte Přidat na plochu.";
   }
 
   if (platformInstallMode.value === "install-prompt") {
-    return "Browser uz umi aplikaci nainstalovat. Pouzijte tlacitko Install app.";
+    return "Prohlížeč umožňuje aplikaci nainstalovat. Použijte tlačítko Nainstalovat aplikaci.";
   }
 
-  return "PWA support is enabled. Once the browser allows installation, the install action will appear here.";
+  return "Podpora instalace je zapnutá. Jakmile ji prohlížeč umožní, zobrazí se zde instalační tlačítko.";
 });
 const showIosInstallGuide = computed(
   () => !isInstalledApp.value && platformInstallMode.value === "ios-share-sheet",
@@ -533,7 +533,7 @@ onMounted(async () => {
   globalThis.addEventListener("focus", refreshQuickCaptureClock);
   globalThis.document?.addEventListener("visibilitychange", refreshQuickCaptureClock);
   globalThis.addEventListener(BOOTSTRAP_LOG_EVENT, syncBootstrapLogEntries);
-  setBootstrapStatus("Initializing install and connectivity state.");
+  setBootstrapStatus("Zjišťuji stav instalace a připojení.");
   try {
     Object.assign(authConfig, await fetchAuthConfig());
   } catch (error) {
@@ -557,15 +557,15 @@ onMounted(async () => {
     navigator.serviceWorker.addEventListener("message", handleServiceWorkerMessage);
   }
 
-  setBootstrapStatus("Starting local repository initialization.");
+  setBootstrapStatus("Inicializuji místní úložiště.");
   const repository = await createDiaryRepository({
     onProgress(message) {
       setBootstrapStatus(message);
     },
   });
-  setBootstrapStatus("Repository ready. Loading saved diary state.");
+  setBootstrapStatus("Úložiště je připravené. Načítám uložený deník.");
   const initialState = repository.loadState();
-  setBootstrapStatus("Applying loaded state to the application.");
+  setBootstrapStatus("Přenáším načtená data do aplikace.");
   Object.assign(state, initialState);
   selectedTreatmentPlanId.value = activeTodayTreatmentPlan.value[0]?.id ?? "";
   diaryRepository.value = repository;
@@ -577,7 +577,7 @@ onMounted(async () => {
     storageMessage.value = repository.bootstrapWarning;
     appendBootstrapLog(repository.bootstrapWarning, "warning");
   }
-  setBootstrapStatus("Initialization completed.");
+  setBootstrapStatus("Inicializace byla dokončena.");
   isReady.value = true;
   await refreshLocalBackups();
   await createAutomaticLocalBackupIfDue();
@@ -591,7 +591,7 @@ onMounted(async () => {
   }
 
   await nextTick();
-  setBootstrapStatus("Synchronizing floating menu layout.");
+  setBootstrapStatus("Dokončuji rozvržení ovládacích prvků.");
   syncFloatingMenuHeight();
 
   if (globalThis.ResizeObserver && floatingMenu.value) {
@@ -1062,7 +1062,7 @@ function ensureSyncIdentity() {
   }
 
   if (!requiresSignedInUserForSync.value && !syncSettings.apiToken?.trim()) {
-    storageMessage.value = "Cloud sync neni overen. Prihlaste se nebo zapnete legacy API token.";
+    storageMessage.value = "Cloudová synchronizace není ověřena. Přihlaste se nebo zapněte starší přístup přes API token.";
     return false;
   }
 
@@ -1425,7 +1425,7 @@ async function resetCloudData() {
 
 function exportDatabase() {
   if (!diaryRepository.value?.supportsBinaryImportExport()) {
-    storageMessage.value = "SQLite export is not available in local fallback mode.";
+    storageMessage.value = "Export SQLite není v záložním režimu místního úložiště dostupný.";
     return;
   }
 
@@ -1437,12 +1437,12 @@ function exportDatabase() {
   link.download = `neurodiary-${state.selectedDate || "backup"}.sqlite`;
   link.click();
   URL.revokeObjectURL(url);
-  storageMessage.value = "SQLite backup exported.";
+  storageMessage.value = "Záloha SQLite byla exportována.";
 }
 
 function exportJson() {
   downloadJsonBackup();
-  storageMessage.value = "JSON backup exported.";
+  storageMessage.value = "Záloha JSON byla exportována.";
 }
 
 function downloadJsonBackup(filenamePrefix = "neurodiary", filenameSuffix = state.selectedDate || "backup") {
@@ -1458,7 +1458,7 @@ function downloadJsonBackup(filenamePrefix = "neurodiary", filenameSuffix = stat
 
 function openImportPicker() {
   if (!diaryRepository.value?.supportsBinaryImportExport()) {
-    storageMessage.value = "SQLite import is not available in local fallback mode.";
+    storageMessage.value = "Import SQLite není v záložním režimu místního úložiště dostupný.";
     return;
   }
 
@@ -1482,10 +1482,10 @@ function printDoctorReport() {
       includeWearingOff: reportOptions.wearingOff,
       includeWeeklyCharts: reportOptions.weeklyCharts,
     });
-    storageMessage.value = "Doctor report opened for print.";
+    storageMessage.value = "Report pro lékaře byl otevřen k tisku.";
   } catch (error) {
     console.error("Doctor report print failed", error);
-    storageMessage.value = "Unable to open the printable doctor report.";
+    storageMessage.value = "Tiskový report pro lékaře se nepodařilo otevřít.";
   }
 }
 
@@ -2106,7 +2106,7 @@ async function initializeSync() {
       revision: result.revision,
       lastSyncAt: result.updatedAt,
       lastSyncStatus: "ok",
-      lastSyncMessage: "Cloud sync initialized.",
+      lastSyncMessage: "Cloudová synchronizace byla inicializována.",
     }));
     generatedRecoverySecret.value = result.generatedRecoverySecret;
     if (result.generatedRecoverySecret) {
@@ -2115,8 +2115,8 @@ async function initializeSync() {
     refreshSyncKeyMaterialStatus();
     markCloudAuthenticated(authSession.value?.user ?? null);
     storageMessage.value = result.generatedRecoverySecret
-      ? "Cloud sync inicializovan. Ulozte si recovery secret."
-      : "Cloud sync inicializovan.";
+      ? "Cloudová synchronizace byla inicializována. Uložte si obnovovací kód."
+      : "Cloudová synchronizace byla inicializována.";
   } catch (error) {
     console.error("Sync initialization failed", error);
     Object.assign(syncSettings, saveSyncSettings({
@@ -2156,7 +2156,7 @@ async function pullSync() {
       revision: result.revision,
       lastSyncAt: result.updatedAt,
       lastSyncStatus: "ok",
-      lastSyncMessage: "Cloud pull completed.",
+      lastSyncMessage: "Stažení dat z cloudu bylo dokončeno.",
     }));
     markCloudAuthenticated(authSession.value?.user ?? null);
     storageMessage.value = "Data byla doplnena ze serveru bez mazani lokalnich zaznamu.";
@@ -2222,7 +2222,7 @@ async function pushSync(force = false) {
         revision: retryResult.revision,
         lastSyncAt: retryResult.updatedAt,
         lastSyncStatus: "ok",
-        lastSyncMessage: "Conflict merged and pushed.",
+        lastSyncMessage: "Konflikt byl sloučen a odeslán.",
       }));
       markCloudAuthenticated(authSession.value?.user ?? null);
       refreshSyncKeyMaterialStatus();
@@ -2242,7 +2242,7 @@ async function pushSync(force = false) {
       revision: result.revision,
       lastSyncAt: result.updatedAt,
       lastSyncStatus: "ok",
-      lastSyncMessage: "Cloud push completed.",
+      lastSyncMessage: "Odeslání dat do cloudu bylo dokončeno.",
     }));
     markCloudAuthenticated(authSession.value?.user ?? null);
     refreshSyncKeyMaterialStatus();
@@ -2335,7 +2335,7 @@ function persistRecoverySecret() {
   recoverySecretInput.value = secret;
   saveRecoverySecret(secret);
   refreshSyncKeyMaterialStatus();
-  storageMessage.value = "Recovery secret byl ulozen lokalne do tohoto zarizeni.";
+    storageMessage.value = "Obnovovací kód byl uložen místně do tohoto zařízení.";
 }
 
 async function importDatabase(event) {
@@ -2349,7 +2349,7 @@ async function importDatabase(event) {
   );
   if (!confirmed) {
     event.target.value = "";
-    storageMessage.value = "SQLite import cancelled.";
+    storageMessage.value = "Import SQLite byl zrušen.";
     return;
   }
 
@@ -2358,10 +2358,10 @@ async function importDatabase(event) {
     const buffer = await file.arrayBuffer();
     const importedState = diaryRepository.value.importDatabase(buffer);
     applyImportedState(importedState);
-    storageMessage.value = `Imported ${file.name}.`;
+    storageMessage.value = `Soubor ${file.name} byl importován.`;
   } catch (error) {
     console.error("SQLite import failed", error);
-    storageMessage.value = "Import failed. Please choose a valid NeuroDiary SQLite file.";
+    storageMessage.value = "Import se nezdařil. Vyberte platný soubor SQLite aplikace NeuroDiary.";
   } finally {
     event.target.value = "";
   }
@@ -2378,7 +2378,7 @@ async function importJson(event) {
   );
   if (!confirmed) {
     event.target.value = "";
-    storageMessage.value = "JSON import cancelled.";
+    storageMessage.value = "Import JSON byl zrušen.";
     return;
   }
 
@@ -2387,10 +2387,10 @@ async function importJson(event) {
     const raw = await file.text();
     const importedState = parseJsonBackup(raw);
     applyImportedState(importedState);
-    storageMessage.value = `Imported ${file.name}.`;
+    storageMessage.value = `Soubor ${file.name} byl importován.`;
   } catch (error) {
     console.error("JSON import failed", error);
-    storageMessage.value = "Import failed. Please choose a valid NeuroDiary JSON backup.";
+    storageMessage.value = "Import se nezdařil. Vyberte platnou JSON zálohu aplikace NeuroDiary.";
   } finally {
     event.target.value = "";
   }
@@ -2459,9 +2459,9 @@ function syncFloatingMenuHeight() {
 <template>
   <div class="shell">
     <div v-if="!isReady" class="boot-card">
-      <p class="section-kicker">Bootstrapping</p>
-      <h2>Preparing local diary storage</h2>
-      <p class="panel-tip">Initializing the offline repository and loading your local data.</p>
+      <p class="section-kicker">Spouštění aplikace</p>
+      <h2>Připravuji místní úložiště deníku</h2>
+      <p class="panel-tip">Inicializuji offline úložiště a načítám místní data.</p>
       <p class="boot-detail">{{ bootstrapStatus }}</p>
       <div v-if="bootstrapLogEntries.length" class="bootstrap-history bootstrap-history-inline">
         <p class="boot-history-title">Prubeh inicializace</p>
@@ -2483,11 +2483,11 @@ function syncFloatingMenuHeight() {
     <template v-else>
       <header class="hero">
         <div class="hero-copy">
-          <p class="eyebrow">Vue prototype</p>
+          <p class="eyebrow">Zdravotní deník</p>
           <h1>NeuroDiary</h1>
           <p class="lede">
-            A structured offline diary for daily symptom tracking, medication timing, and rapid
-            trend review.
+            Přehledný offline deník pro každodenní sledování příznaků, užívání léků a rychlé
+            vyhodnocení vývoje.
           </p>
           <div class="hero-actions">
             <button
@@ -2496,15 +2496,15 @@ function syncFloatingMenuHeight() {
               type="button"
               @click="promptInstall"
             >
-              Install app
+              Nainstalovat aplikaci
             </button>
             <p class="hero-install-note">{{ installHelpText }}</p>
           </div>
-          <div v-if="showIosInstallGuide" class="ios-install-card" aria-label="iOS install guide">
-            <p class="ios-install-title">Install on iPhone or iPad</p>
+          <div v-if="showIosInstallGuide" class="ios-install-card" aria-label="Návod k instalaci v iOS">
+            <p class="ios-install-title">Instalace na iPhone nebo iPad</p>
             <ol class="ios-install-steps">
-              <li>Open the browser share menu.</li>
-              <li>Select <strong>Add to Home Screen</strong>.</li>
+              <li>Otevřete v prohlížeči nabídku Sdílet.</li>
+              <li>Zvolte <strong>Přidat na plochu</strong>.</li>
             </ol>
           </div>
         </div>
@@ -2513,16 +2513,16 @@ function syncFloatingMenuHeight() {
       <section ref="floatingMenu" class="floating-menu" aria-label="Rychla navigace a akce">
         <div class="floating-menu-top">
           <div class="floating-menu-status">
-            <p class="hero-label">Selected day · {{ repositoryMode }}</p>
+            <p class="hero-label">Vybraný den · {{ repositoryMode }}</p>
             <p class="hero-date">{{ selectedDateLabel }}</p>
             <p class="panel-tip">Sestaveni {{ buildTimestampLabel }} · {{ buildVersionLabel }} · {{ environmentLabel }}</p>
-            <div class="status-chips" aria-label="Application status">
+            <div class="status-chips" aria-label="Stav aplikace">
               <span :class="['status-chip', isOnline ? 'status-chip-online' : 'status-chip-offline']">
-                {{ isOnline ? "Online" : "Offline" }}
+                {{ isOnline ? "Připojeno" : "Offline" }}
               </span>
-              <span v-if="pwaOfflineReady" class="status-chip status-chip-ready">Offline cache ready</span>
-              <span v-if="pwaUpdateRegistration" class="status-chip status-chip-update">Update ready</span>
-              <span v-if="hasPendingSyncChanges" class="status-chip status-chip-update">Zmeny cekaji na sync</span>
+              <span v-if="pwaOfflineReady" class="status-chip status-chip-ready">Offline data připravena</span>
+              <span v-if="pwaUpdateRegistration" class="status-chip status-chip-update">Aktualizace připravena</span>
+              <span v-if="hasPendingSyncChanges" class="status-chip status-chip-update">Změny čekají na synchronizaci</span>
             </div>
           </div>
 
@@ -2554,7 +2554,7 @@ function syncFloatingMenuHeight() {
 
             <div class="utility-menu">
               <details class="report-menu">
-                <summary class="ghost-button">Print report</summary>
+                <summary class="ghost-button">Report pro lékaře</summary>
                 <div class="report-menu-panel">
                   <label>
                     <input v-model="reportOptions.includeToday" type="checkbox" />
@@ -2856,14 +2856,14 @@ function syncFloatingMenuHeight() {
             <div class="panel-heading sync-settings-heading">
               <div>
                 <p class="section-kicker">Synchronizace</p>
-                <h2>Cloud sync</h2>
+                <h2>Cloudová synchronizace</h2>
               </div>
               <p class="panel-tip">{{ syncStatusSummary }}</p>
             </div>
 
             <form class="stack-form">
               <label>
-                <span>Sync endpoint</span>
+                <span>Adresa synchronizační služby</span>
                 <input
                   :value="effectiveSyncEndpoint"
                   type="url"
@@ -2876,7 +2876,7 @@ function syncFloatingMenuHeight() {
                 <input
                   :value="syncSettings.apiToken"
                   type="password"
-                  placeholder="Bearer token pro prvni backend"
+                  placeholder="Přístupový token pro synchronizační službu"
                   @input="updateSyncSetting('apiToken', $event.target.value)"
                 />
               </label>
@@ -2912,30 +2912,30 @@ function syncFloatingMenuHeight() {
               </div>
 
               <label>
-                <span>Recovery secret</span>
+                <span>Obnovovací kód</span>
                 <input
                   v-model="recoverySecretInput"
                   type="text"
-                  placeholder="vlozte existujici recovery secret nebo nechte vygenerovat"
+                  placeholder="Vložte existující obnovovací kód nebo vytvořte nový"
                 />
               </label>
             </form>
 
             <div class="sync-actions">
               <button class="primary-button" type="button" :disabled="isSyncBusy" @click="initializeSync">
-                Inicializovat cloud sync
+                Inicializovat cloudovou synchronizaci
               </button>
               <button class="ghost-button" type="button" :disabled="isSyncBusy" @click="pullSync">
-                Pull ze serveru
+                Stáhnout ze serveru
               </button>
               <button class="ghost-button" type="button" :disabled="isSyncBusy" @click="pushSync">
-                Push na server
+                Odeslat na server
               </button>
               <button class="ghost-button" type="button" :disabled="isSyncBusy" @click="persistRecoverySecret">
-                Ulozit recovery secret
+                Uložit obnovovací kód
               </button>
               <button class="ghost-button" type="button" :disabled="isSyncBusy" @click="generateNewRecoverySecret">
-                Vygenerovat secret
+                Vytvořit obnovovací kód
               </button>
               <button class="ghost-button" type="button" :disabled="!canDisplayRecoveryQr" @click="openRecoveryTransfer">
                 Zobrazit QR
@@ -2961,11 +2961,11 @@ function syncFloatingMenuHeight() {
             <div class="sync-meta">
               <p class="panel-tip">Odvozeno z URL aplikace: {{ effectiveSyncEndpoint }}</p>
               <p v-if="isFederatedAuthEnabled" class="panel-tip">
-                Federated auth:
+                Přihlášení přes poskytovatele:
                 {{ authConfig.googleEnabled ? "Google " : "" }}{{ authConfig.appleEnabled ? "Apple" : "" }}
               </p>
               <p class="panel-tip">Lokalni klic: {{ hasSyncMasterKeyStored ? "ulozen" : "chybi" }}</p>
-              <p class="panel-tip">Recovery secret: {{ hasRecoverySecretStored ? "ulozen" : "chybi" }}</p>
+              <p class="panel-tip">Obnovovací kód: {{ hasRecoverySecretStored ? "uložen" : "chybí" }}</p>
               <p v-if="syncSettings.lastSyncMessage" class="panel-tip">{{ syncSettings.lastSyncMessage }}</p>
             </div>
 

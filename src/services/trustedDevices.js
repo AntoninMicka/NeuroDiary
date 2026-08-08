@@ -44,7 +44,7 @@ function headers(settings) {
 async function request(settings, path, options = {}) {
   const response = await fetch(endpoint(settings, path), { ...options, headers: headers(settings) });
   const payload = await response.json().catch(() => null);
-  if (!response.ok) throw new Error(payload?.detail || `Device request failed (${response.status}).`);
+  if (!response.ok) throw new Error(payload?.detail || `Požadavek zařízení selhal (${response.status}).`);
   return payload;
 }
 

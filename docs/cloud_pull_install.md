@@ -8,12 +8,19 @@ zdroj kodu pro cteni.
 
 1. Cloud Scheduler podle cron rozvrhu spusti manualni Cloud Build trigger.
 2. Build provede anonymni, castecny `git clone` pouze z nakonfigurovane HTTPS adresy a vetve.
-3. Commit porovna s labelem aktualni Cloud Run sluzby.
+3. Commit porovna s verzi aktivni Cloud Run revize.
 4. Pokud se commit nezmenil, build skonci bez sestaveni a nasazeni.
-5. Pri zmene sestavi image, ulozi ji do Artifact Registry a aktualizuje existujici Cloud Run sluzbu.
+5. Pri zmene spusti frontendove i backendove testy a teprve potom sestavi image.
+6. Novou Cloud Run revizi nasadi s nulovym produkcnim provozem a docasnym tagem `overeni`.
+7. Pres samostatnou URL overi endpointy `/readyz` a `/healthz`.
+8. Provoz prevede na novou revizi az po uspechu; pri selhani produkcni kontroly vrati 100 % provozu
+   predchozi revizi.
 
 Aktualizace zachovava runtime konfiguraci existujici Cloud Run sluzby, vcetne environment variables,
 Cloud SQL napojeni a runtime service accountu.
+
+Neuspesne testy, build nebo kontrola kandidata nemeni aktivni produkcni revizi. Kandidat zustava bez
+provozu pro diagnostiku a nasledujici planovana kontrola muze stejny commit zkusit znovu.
 
 Git checkout pouziva `--depth=1`, `--single-branch`, `--no-tags` a `--filter=blob:none`. Obsahuje tedy
 HEAD zvolene vetve a nanejvys tri samostatne dotazene release tagy serazene podle verze nazvu. Release

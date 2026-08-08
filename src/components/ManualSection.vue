@@ -89,7 +89,7 @@
         <div class="manual-block">
           <h4>8. Tisk reportu</h4>
           <p>
-            Tlacitkem <strong>Print report</strong> otevrite tiskovy report pro lekare. Report lze take
+            Tlačítkem <strong>Report pro lékaře</strong> otevřete tiskový report. Report lze také
             ulozit jako PDF nebo predat e-mailove aplikaci v AES-256 sifrovanem ZIP. Heslo k priloze
             vzdy predejte jinym kanalem. Pred sdilenim zkontrolujte udaje pacienta a cilovy e-mail.
           </p>
@@ -132,9 +132,9 @@
         </div>
 
         <div class="manual-block">
-          <h4>4. Cloud sync a recovery</h4>
+          <h4>4. Cloudová synchronizace a obnova</h4>
           <p>
-            Sync snapshot je pred odeslanim sifrovan na zarizeni. Recovery secret uchovavejte mimo
+            Synchronizační kopie je před odesláním šifrována v zařízení. Obnovovací kód uchovávejte mimo
             aplikaci; pro druhe zarizeni lze pouzit QR prenos. Pri zmene cloudoveho uctu se lokalni
             sync klic odpoji a musi se znovu obnovit. Rotace klice odpoji ostatni zarizeni a vytvori
             novy recovery secret, ktery je nutne znovu bezpečne ulozit.
