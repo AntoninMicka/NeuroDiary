@@ -330,10 +330,11 @@ const PANEL_ITEMS = [
   { id: "sekce-leky", label: "Léčba" },
   { id: "sekce-souhrn", label: "Souhrn" },
   { id: "sekce-manualy", label: "Manuály" },
+  { id: "sekce-report", label: "Report pro lékaře" },
   { id: "sekce-kontakty", label: "Kontakty" },
   { id: "sekce-admin", label: "Administrace" },
 ];
-const PRIMARY_PANEL_ITEMS = PANEL_ITEMS.filter((item) => !["sekce-matice", "sekce-kontakty", "sekce-admin"].includes(item.id));
+const PRIMARY_PANEL_ITEMS = PANEL_ITEMS.filter((item) => !["sekce-matice", "sekce-report", "sekce-kontakty", "sekce-admin"].includes(item.id));
 const DATE_NAV_PANEL_IDS = new Set([
   "sekce-udaje",
   "sekce-matice",
@@ -2617,85 +2618,14 @@ function syncFloatingMenuHeight() {
             </div>
 
             <div class="utility-menu">
-              <details class="report-menu">
-                <summary class="ghost-button">Report pro lékaře</summary>
-                <div class="report-menu-panel">
-                  <label>
-                    <input v-model="reportOptions.includeToday" type="checkbox" />
-                    Zahrnout dnesni den
-                  </label>
-                  <label>
-                    <input v-model="reportOptions.dailyTrend" type="checkbox" />
-                    Tisknout Denní trend
-                  </label>
-                  <label>
-                    <input v-model="reportOptions.wearingOff" type="checkbox" />
-                    Tisknout orientacni wearing-off pozorovani
-                  </label>
-                  <label>
-                    <input v-model="reportOptions.weeklyCharts" type="checkbox" />
-                    Tisknout tydenni grafy
-                  </label>
-                  <fieldset class="contact-keyring">
-                    <legend>Prijemce reportu</legend>
-                    <label>
-                      <span>Uložený kontakt</span>
-                      <select v-model="selectedContactId" @change="reportSharePassword = ''">
-                        <option value="">Jednorazove zadani</option>
-                        <option v-for="contact in contacts" :key="contact.id" :value="contact.id">
-                          {{ contact.name }} · {{ contact.keyFingerprint ? "verejny klic" : "heslo" }}
-                        </option>
-                      </select>
-                    </label>
-                  </fieldset>
-                  <template v-if="!selectedContactId">
-                    <label>
-                      <span>Jméno jednorázového kontaktu</span>
-                      <input v-model="doctorContact.name" type="text" maxlength="120" />
-                    </label>
-                    <label>
-                      <span>E-mail jednorázového kontaktu</span>
-                      <input v-model="doctorContact.email" type="email" maxlength="254" />
-                    </label>
-                    <label>
-                      <input
-                        v-model="encryptOneTimeReport"
-                        type="checkbox"
-                        @change="reportSharePassword = ''"
-                      />
-                      Zašifrovat report heslem
-                    </label>
-                    <p class="panel-tip">
-                      Jednorázově zadaný kontakt se neukládá.
-                      {{ encryptOneTimeReport
-                        ? "Report se odešle v šifrovaném ZIPu a heslo je nutné předat jiným kanálem."
-                        : "Report se odešle jako nešifrované PDF." }}
-                    </p>
-                  </template>
-                  <button class="primary-button" type="button" @click="printDoctorReport">
-                    Otevrit tisk
-                  </button>
-                  <button class="ghost-button" type="button" @click="saveDoctorReportPdf">
-                    Uložit PDF
-                  </button>
-                  <button class="ghost-button" type="button" @click="shareDoctorReportSecurely">
-                    {{ selectedContactId || encryptOneTimeReport ? "Sdílet šifrovaně" : "Sdílet PDF" }}
-                  </button>
-                  <button
-                    v-if="authConfig.googleEnabled"
-                    class="ghost-button"
-                    type="button"
-                    @click="sendDoctorReportWithGmail"
-                  >
-                    Odeslat přes Gmail
-                  </button>
-                  <div v-if="reportSharePassword" class="report-share-password">
-                    <strong>Heslo k zalozni ZIP priloze</strong>
-                    <code>{{ reportSharePassword }}</code>
-                    <span>Predejte jinym kanalem, nikdy ve stejnem e-mailu.</span>
-                  </div>
-                </div>
-              </details>
+              <button
+                class="ghost-button"
+                :class="{ 'panel-pill-active': activePanelId === 'sekce-report' }"
+                type="button"
+                @click="selectPanel('sekce-report')"
+              >
+                Report pro lékaře
+              </button>
 
               <button
                 class="ghost-button utility-menu-trigger"
@@ -2808,7 +2738,68 @@ function syncFloatingMenuHeight() {
         @touchstart.passive="handlePanelTouchStart"
         @touchend.passive="handlePanelTouchEnd"
       >
-        <section v-if="activePanelId === 'sekce-udaje'" class="panel panel-wide layout-profile">
+        <section v-if="activePanelId === 'sekce-report'" class="panel panel-wide layout-report">
+          <div class="panel-heading">
+            <div>
+              <p class="section-kicker">Report</p>
+              <h2>Report pro lékaře</h2>
+            </div>
+          </div>
+
+          <div class="report-frame-grid">
+            <fieldset class="contact-keyring">
+              <legend>Obsah reportu</legend>
+              <label><input v-model="reportOptions.includeToday" type="checkbox" /> Zahrnout dnešní den</label>
+              <label><input v-model="reportOptions.dailyTrend" type="checkbox" /> Tisknout denní trend</label>
+              <label><input v-model="reportOptions.wearingOff" type="checkbox" /> Tisknout orientační wearing-off pozorování</label>
+              <label><input v-model="reportOptions.weeklyCharts" type="checkbox" /> Tisknout týdenní grafy</label>
+            </fieldset>
+
+            <fieldset class="contact-keyring">
+              <legend>Příjemce reportu</legend>
+              <label>
+                <span>Uložený kontakt</span>
+                <select v-model="selectedContactId" @change="reportSharePassword = ''">
+                  <option value="">Jednorázové zadání</option>
+                  <option v-for="contact in contacts" :key="contact.id" :value="contact.id">
+                    {{ contact.name }} · {{ contact.keyFingerprint ? "veřejný klíč" : "heslo" }}
+                  </option>
+                </select>
+              </label>
+              <template v-if="!selectedContactId">
+                <label><span>Jméno jednorázového kontaktu</span><input v-model="doctorContact.name" type="text" maxlength="120" /></label>
+                <label><span>E-mail jednorázového kontaktu</span><input v-model="doctorContact.email" type="email" maxlength="254" /></label>
+                <label class="report-checkbox">
+                  <input v-model="encryptOneTimeReport" type="checkbox" @change="reportSharePassword = ''" />
+                  Zašifrovat report heslem
+                </label>
+                <p class="panel-tip">
+                  Jednorázově zadaný kontakt se neukládá.
+                  {{ encryptOneTimeReport
+                    ? "Report se odešle v šifrovaném ZIPu a heslo je nutné předat jiným kanálem."
+                    : "Report se odešle jako nešifrované PDF." }}
+                </p>
+              </template>
+            </fieldset>
+          </div>
+
+          <div class="report-actions">
+            <button class="primary-button" type="button" @click="printDoctorReport">Otevřít tisk</button>
+            <button class="ghost-button" type="button" @click="saveDoctorReportPdf">Uložit PDF</button>
+            <button class="ghost-button" type="button" @click="shareDoctorReportSecurely">
+              {{ selectedContactId || encryptOneTimeReport ? "Sdílet šifrovaně" : "Sdílet PDF" }}
+            </button>
+            <button v-if="authConfig.googleEnabled" class="ghost-button" type="button" @click="sendDoctorReportWithGmail">Odeslat přes Gmail</button>
+          </div>
+
+          <div v-if="reportSharePassword" class="report-share-password">
+            <strong>Heslo k záložní ZIP příloze</strong>
+            <code>{{ reportSharePassword }}</code>
+            <span>Předejte jiným kanálem, nikdy ve stejném e-mailu.</span>
+          </div>
+        </section>
+
+        <section v-else-if="activePanelId === 'sekce-udaje'" class="panel panel-wide layout-profile">
           <div class="panel-heading">
             <div>
               <p class="section-kicker">Údaje</p>
