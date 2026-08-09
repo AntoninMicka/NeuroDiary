@@ -238,6 +238,7 @@ const sharedDiaryViews = ref([]);
 const selectedSharedGrantId = ref("");
 const selectedSharedSection = ref("timeline");
 const selectedSharedDate = ref(getTodayKey());
+const sharedRecordsSearch = ref("");
 const isSharingBusy = ref(false);
 const sharingMessage = ref("");
 const adminStatus = ref(null);
@@ -306,6 +307,16 @@ const selectedSharedView = computed(() =>
   sharedDiaryViews.value.find((item) => item.grantId === selectedSharedGrantId.value) ?? sharedDiaryViews.value[0] ?? null,
 );
 const selectedSharedEntry = computed(() => selectedSharedView.value?.state?.entries?.[selectedSharedDate.value] ?? null);
+const filteredSharedDiaryViews = computed(() => {
+  const query = sharedRecordsSearch.value.trim().toLocaleLowerCase("cs");
+  if (!query) return sharedDiaryViews.value;
+  return sharedDiaryViews.value.filter((view) => [
+    view.state?.patientName,
+    view.state?.birthYear,
+    view.ownerName,
+    view.ownerEmail,
+  ].some((value) => String(value ?? "").toLocaleLowerCase("cs").includes(query)));
+});
 const pendingShareInvitationCount = computed(() =>
   diaryShares.incomingInvitations.filter((item) => item.status === "pending").length,
 );
@@ -3101,13 +3112,19 @@ function syncFloatingMenuHeight() {
               <p class="section-kicker">Sdílená kartotéka</p>
               <h2>Deníky sdílené se mnou</h2>
             </div>
-            <button class="ghost-button" type="button" :disabled="isSharingBusy" @click="refreshDiaryShares(true)">Obnovit kartotéku</button>
+            <div class="shared-records-toolbar">
+              <label class="shared-records-search">
+                <span>Vyhledat v kartotéce</span>
+                <input v-model="sharedRecordsSearch" type="search" placeholder="Jméno, e-mail nebo rok narození" />
+              </label>
+              <button class="ghost-button" type="button" :disabled="isSharingBusy" @click="refreshDiaryShares(true)">Obnovit kartotéku</button>
+            </div>
           </div>
 
           <div v-if="sharedDiaryViews.length" class="shared-records-layout">
             <aside class="shared-records-index" aria-label="Sdílení uživatelé">
               <button
-                v-for="view in sharedDiaryViews"
+                v-for="view in filteredSharedDiaryViews"
                 :key="view.grantId"
                 class="shared-record-person"
                 :class="{ 'shared-record-person-active': view.grantId === selectedSharedView?.grantId }"
@@ -3118,6 +3135,7 @@ function syncFloatingMenuHeight() {
                 <span>{{ view.ownerEmail }}</span>
                 <small>{{ Object.keys(view.state?.entries || {}).length }} dnů · revize {{ view.revision }}</small>
               </button>
+              <p v-if="!filteredSharedDiaryViews.length" class="panel-tip">Vyhledávání neodpovídá žádnému uživateli.</p>
             </aside>
 
             <div v-if="selectedSharedView" class="shared-record-content">
