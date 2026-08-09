@@ -12,7 +12,7 @@ test("family and doctor without patient use the caregiver UI", () => {
   assert.equal(isCaregiverOnlyRoleSet(["doctor", "admin"]), true);
   assert.equal(getDefaultPanelForRoles(["doctor"]), "sekce-kartoteka");
   assert.deepEqual(CAREGIVER_PANEL_ITEMS.map((item) => item.id), [
-    "sekce-kartoteka", "sekce-kontakty", "sekce-sdileni", "sekce-manualy",
+    "sekce-kartoteka", "sekce-kontakty", "sekce-sdileni", "sekce-manualy", "sekce-udaje",
   ]);
 });
 
