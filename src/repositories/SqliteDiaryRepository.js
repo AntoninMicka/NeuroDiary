@@ -139,28 +139,46 @@ function cloneSerializable(value) {
 }
 
 export class SqliteDiaryRepository extends DiaryRepository {
-  constructor(SQL, db, onProgress = null) {
+  constructor(SQL, db, onProgress = null, storageKey = STORAGE_KEY) {
     super();
     this.onProgress = onProgress;
     this.SQL = SQL;
     this.db = db;
+    this.storageKey = storageKey;
     this.reportProgress("SQLite je připravené. Zapínám kontrolu cizích klíčů.");
     this.enableForeignKeys();
     this.reportProgress("Spouštím migrace schématu SQLite.");
     this.runMigrations();
   }
 
-  static async create(onProgress = null) {
+  static async create(onProgress = null, namespace = "guest") {
     onProgress?.("Načítám běhové prostředí sql.js WebAssembly.");
     const SQL = await initSqlJs({
       locateFile: () => wasmUrl,
     });
 
     onProgress?.("Kontroluji existující místní databázi SQLite.");
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const storageKey = `${STORAGE_KEY}:${encodeURIComponent(namespace)}`;
+    let raw = localStorage.getItem(storageKey);
+    if (!raw) {
+      const legacyRaw = localStorage.getItem(STORAGE_KEY);
+      if (legacyRaw) {
+        try {
+          const legacyRepository = new SqliteDiaryRepository(SQL, new SQL.Database(base64ToBytes(legacyRaw)), onProgress, storageKey);
+          const legacyState = legacyRepository.loadState();
+          const legacyOwner = legacyState?.account?.userId || "guest";
+          if (legacyOwner === namespace) {
+            legacyRepository.saveState(legacyState);
+            return legacyRepository;
+          }
+        } catch {
+          // Invalid or foreign legacy data must not cross the account boundary.
+        }
+      }
+    }
     onProgress?.(raw ? "Otevírám uloženou databázi SQLite." : "Vytvářím novou databázi SQLite.");
     const db = raw ? new SQL.Database(base64ToBytes(raw)) : new SQL.Database();
-    return new SqliteDiaryRepository(SQL, db, onProgress);
+    return new SqliteDiaryRepository(SQL, db, onProgress, storageKey);
   }
 
   getMode() {
@@ -433,7 +451,7 @@ export class SqliteDiaryRepository extends DiaryRepository {
 
   persistDatabase() {
     const exported = this.db.export();
-    localStorage.setItem(STORAGE_KEY, bytesToBase64(exported));
+    localStorage.setItem(this.storageKey, bytesToBase64(exported));
   }
 
   readUserVersion() {

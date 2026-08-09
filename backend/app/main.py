@@ -53,12 +53,14 @@ from .models import (
     SecurityAuditListResponseModel,
     SyncRotationRequestModel,
     IdentityKeyMigrationModel,
+    ShareGrantRequestModel,
 )
 from .device_store import create_device_store
 from .key_exchange_store import create_key_exchange_store
 from .push_service import PushService, WebPushException
 from .push_store import create_push_store
 from .store import RevisionConflictError, create_sync_store
+from .share_store import ShareStore
 
 
 APP_NAME = "NeuroDiary Sync API"
@@ -91,6 +93,7 @@ push_store = create_push_store(database_url=DATABASE_URL or None, database_path=
 push_service = PushService()
 auth_manager = AuthManager()
 cloud_admin_service = CloudAdminService()
+share_store = ShareStore(DATABASE_PATH, DATABASE_URL or None)
 logger = logging.getLogger("neurodiary")
 if not logger.handlers:
     handler = logging.StreamHandler()
@@ -158,6 +161,7 @@ def on_startup() -> None:
     device_store.initialize()
     key_exchange_store.initialize()
     push_store.initialize()
+    share_store.initialize()
     log_event(
         "INFO",
         "application_started",
@@ -197,6 +201,16 @@ def verify_registered_device(
     if not x_device_id or not device_store.is_registered(user_id, x_device_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Device is not registered for this account.")
     return user_id
+
+
+def verify_sharing_user(
+    authorization: Annotated[str | None, Header()] = None,
+) -> AuthenticatedUser:
+    user = auth_manager.resolve_authenticated_user(authorization)
+    if not user.email:
+        raise HTTPException(status_code=403, detail="Sdílení vyžaduje účet s ověřeným e-mailem.")
+    share_store.register_identity(user.user_id, user.email, user.name)
+    return user
 
 
 @app.get("/healthz")
@@ -843,6 +857,85 @@ def rotate_state_key(
 def reset_state(user_id: Annotated[str, Depends(verify_trusted_device)]) -> SyncResetResponseModel:
     deleted_at = store.delete_state(user_id)
     return SyncResetResponseModel(status="ok", deleted=True, updatedAt=deleted_at)
+
+
+@app.get("/api/v1/shares")
+def list_shares(
+    user: Annotated[AuthenticatedUser, Depends(verify_sharing_user)],
+    x_device_id: Annotated[str | None, Header(alias="X-Device-ID")] = None,
+) -> dict[str, object]:
+    if not x_device_id or not device_store.is_active(user.user_id, x_device_id):
+        raise HTTPException(status_code=403, detail="Sdílení je dostupné jen z důvěryhodného zařízení.")
+    outgoing = [
+        {
+            "grantId": row["grant_id"], "recipientEmail": row["email"],
+            "recipientName": row["display_name"], "recipientDeviceId": row["recipient_device_id"],
+            "createdAt": row["created_at"], "revokedAt": row["revoked_at"],
+        }
+        for row in share_store.get_outgoing(user.user_id)
+    ]
+    incoming = []
+    for row in share_store.get_incoming(user.user_id, x_device_id):
+        snapshot = store.load_latest(row["owner_user_id"])
+        if snapshot is None:
+            continue
+        incoming.append({
+            "grantId": row["grant_id"], "ownerEmail": row["email"], "ownerName": row["display_name"],
+            "createdAt": row["created_at"], "revision": snapshot.revision, "updatedAt": snapshot.updatedAt,
+            "payload": snapshot.payload.model_dump(mode="json"), "keyVersion": row["key_version"],
+            "keyEnvelope": json.loads(row["key_envelope_json"]),
+        })
+    return {"currentUser": {"email": user.email, "name": user.name}, "outgoing": outgoing, "incoming": incoming}
+
+
+@app.get("/api/v1/shares/recipient-key")
+def get_share_recipient_key(
+    email: str,
+    user: Annotated[AuthenticatedUser, Depends(verify_sharing_user)],
+) -> dict[str, object]:
+    identity = share_store.find_identity(email)
+    if not identity or identity["user_id"] == user.user_id:
+        raise HTTPException(status_code=404, detail="Příjemce se sdílením nebyl nalezen.")
+    keys = [key for key in key_exchange_store.list_keys(identity["user_id"]) if device_store.is_active(identity["user_id"], key.device_id)]
+    if not keys:
+        raise HTTPException(status_code=409, detail="Příjemce zatím nemá důvěryhodné zařízení s ověřeným klíčem.")
+    key = max(keys, key=lambda item: item.verified_at)
+    return {"deviceId": key.device_id, "publicKeyJwk": json.loads(key.public_key_jwk), "fingerprint": key.fingerprint}
+
+
+@app.post("/api/v1/shares")
+def create_share(
+    payload: ShareGrantRequestModel,
+    user: Annotated[AuthenticatedUser, Depends(verify_sharing_user)],
+    x_device_id: Annotated[str | None, Header(alias="X-Device-ID")] = None,
+) -> dict[str, str]:
+    if not x_device_id or not device_store.is_active(user.user_id, x_device_id):
+        raise HTTPException(status_code=403, detail="Sdílení je dostupné jen z důvěryhodného zařízení.")
+    recipient = share_store.find_identity(payload.recipientEmail)
+    if not recipient or recipient["user_id"] == user.user_id:
+        raise HTTPException(status_code=404, detail="Příjemce se sdílením nebyl nalezen.")
+    target_key = key_exchange_store.get_key(recipient["user_id"], payload.recipientDeviceId)
+    if not target_key or not device_store.is_active(recipient["user_id"], payload.recipientDeviceId):
+        raise HTTPException(status_code=409, detail="Zařízení příjemce už není důvěryhodné.")
+    if payload.keyEnvelope.targetFingerprint != target_key.fingerprint:
+        raise HTTPException(status_code=400, detail="Obálka klíče nepatří zařízení příjemce.")
+    share_store.save_grant(user.user_id, recipient["user_id"], payload.recipientDeviceId, payload.keyVersion, payload.keyEnvelope.model_dump())
+    audit_security(user.user_id, x_device_id, "diary_share_created", recipientUserId=recipient["user_id"], recipientDeviceId=payload.recipientDeviceId)
+    return {"status": "ok"}
+
+
+@app.delete("/api/v1/shares/{grant_id}")
+def revoke_share(
+    grant_id: str,
+    user: Annotated[AuthenticatedUser, Depends(verify_sharing_user)],
+    x_device_id: Annotated[str | None, Header(alias="X-Device-ID")] = None,
+) -> dict[str, str]:
+    if not x_device_id or not device_store.is_active(user.user_id, x_device_id):
+        raise HTTPException(status_code=403, detail="Sdílení je dostupné jen z důvěryhodného zařízení.")
+    if not share_store.revoke(user.user_id, grant_id):
+        raise HTTPException(status_code=404, detail="Aktivní sdílení nebylo nalezeno.")
+    audit_security(user.user_id, x_device_id, "diary_share_revoked", grantId=grant_id)
+    return {"status": "ok"}
 
 
 @app.get("/", include_in_schema=False)

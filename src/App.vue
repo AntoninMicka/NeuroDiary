@@ -96,6 +96,7 @@ import {
   sharePlainReport,
 } from "./services/secureReportShare.js";
 import { sendGmailMessage } from "./services/gmailService.js";
+import { createDiaryShare, decryptSharedDiary, fetchDiaryShares, revokeDiaryShare } from "./services/diarySharing.js";
 import { createCloudBackup, deleteCloudBackup, fetchAdminStatus } from "./services/adminService.js";
 import { generateRecoverySecret } from "./services/e2eCrypto.js";
 import {
@@ -222,6 +223,11 @@ const contactEditor = reactive({ id: "", name: "", email: "", publicKeyPem: "" }
 const generatedContactPrivateKey = ref("");
 const reportSharePassword = ref("");
 const encryptOneTimeReport = ref(false);
+const shareRecipientEmail = ref("");
+const diaryShares = reactive({ outgoing: [], incoming: [] });
+const sharedDiaryViews = ref([]);
+const isSharingBusy = ref(false);
+const sharingMessage = ref("");
 const adminStatus = ref(null);
 const adminError = ref("");
 const isAdminBusy = ref(false);
@@ -331,10 +337,11 @@ const PANEL_ITEMS = [
   { id: "sekce-souhrn", label: "Souhrn" },
   { id: "sekce-manualy", label: "Manuály" },
   { id: "sekce-report", label: "Report pro lékaře" },
+  { id: "sekce-sdileni", label: "Sdílení dat" },
   { id: "sekce-kontakty", label: "Kontakty" },
   { id: "sekce-admin", label: "Administrace" },
 ];
-const PRIMARY_PANEL_ITEMS = PANEL_ITEMS.filter((item) => !["sekce-matice", "sekce-report", "sekce-kontakty", "sekce-admin"].includes(item.id));
+const PRIMARY_PANEL_ITEMS = PANEL_ITEMS.filter((item) => !["sekce-matice", "sekce-report", "sekce-sdileni", "sekce-kontakty", "sekce-admin"].includes(item.id));
 const DATE_NAV_PANEL_IDS = new Set([
   "sekce-udaje",
   "sekce-matice",
@@ -572,6 +579,7 @@ onMounted(async () => {
 
   setBootstrapStatus("Inicializuji místní úložiště.");
   const repository = await createDiaryRepository({
+    namespace: authSession.value?.user?.userId || "guest",
     onProgress(message) {
       setBootstrapStatus(message);
     },
@@ -1086,9 +1094,64 @@ function ensureSyncIdentity() {
 function selectPanel(panelId) {
   activePanelId.value = panelId;
   closeUtilityMenu();
+  if (panelId === "sekce-sdileni") void refreshDiaryShares();
   void nextTick(() => {
     syncFloatingMenuHeight();
   });
+}
+
+async function refreshDiaryShares() {
+  if (!authSession.value?.user || !hasSyncIdentity.value) return;
+  isSharingBusy.value = true;
+  sharingMessage.value = "";
+  try {
+    const result = await fetchDiaryShares(syncSettings);
+    diaryShares.outgoing = result.outgoing ?? [];
+    diaryShares.incoming = result.incoming ?? [];
+    const views = [];
+    for (const grant of diaryShares.incoming) {
+      try {
+        views.push({ ...grant, state: await decryptSharedDiary(grant), error: "" });
+      } catch (error) {
+        views.push({ ...grant, state: null, error: error.message });
+      }
+    }
+    sharedDiaryViews.value = views;
+  } catch (error) {
+    sharingMessage.value = error.message;
+  } finally {
+    isSharingBusy.value = false;
+  }
+}
+
+async function addDiaryShare() {
+  if (!shareRecipientEmail.value.trim()) return;
+  isSharingBusy.value = true;
+  sharingMessage.value = "";
+  try {
+    await createDiaryShare(syncSettings, shareRecipientEmail.value);
+    shareRecipientEmail.value = "";
+    sharingMessage.value = "Přístup ke čtení byl udělen.";
+    await refreshDiaryShares();
+  } catch (error) {
+    sharingMessage.value = error.message;
+  } finally {
+    isSharingBusy.value = false;
+  }
+}
+
+async function removeDiaryShare(grantId) {
+  isSharingBusy.value = true;
+  sharingMessage.value = "";
+  try {
+    await revokeDiaryShare(syncSettings, grantId);
+    sharingMessage.value = "Sdílení bylo odvoláno.";
+    await refreshDiaryShares();
+  } catch (error) {
+    sharingMessage.value = error.message;
+  } finally {
+    isSharingBusy.value = false;
+  }
 }
 
 function selectAdjacentPanel(direction) {
@@ -2501,7 +2564,7 @@ watch(
     if (nextUserId) {
       void refreshWebPushRegistration();
     }
-    if (!previousUserId || !nextUserId || previousUserId === nextUserId) {
+    if (previousUserId === nextUserId) {
       return;
     }
 
@@ -2510,8 +2573,9 @@ watch(
     refreshSyncKeyMaterialStatus();
     recoverySecretInput.value = "";
     generatedRecoverySecret.value = "";
-    storageMessage.value =
-      "Byl zvolen jiny cloud ucet. Lokalni data zustala zachovana, ale sync tohoto zarizeni byl odpojen. Nejprve provedte Pull nebo znovu inicializujte sync pro novy ucet.";
+    // Each account has its own local database namespace. Reloading closes the
+    // previous repository before the new account can read or mutate any state.
+    globalThis.location?.reload?.();
   },
 );
 
@@ -2657,6 +2721,9 @@ function syncFloatingMenuHeight() {
                 <button class="utility-menu-item" type="button" role="menuitem" @click="handleUtilityAction(() => selectPanel('sekce-kontakty'))">
                   Kontakty
                 </button>
+                <button class="utility-menu-item" type="button" role="menuitem" @click="handleUtilityAction(() => selectPanel('sekce-sdileni'))">
+                  Sdílení dat
+                </button>
                 <button v-if="adminStatus" class="utility-menu-item" type="button" role="menuitem" @click="handleUtilityAction(() => selectPanel('sekce-admin'))">
                   Administrace cloudu
                 </button>
@@ -2797,6 +2864,73 @@ function syncFloatingMenuHeight() {
             <code>{{ reportSharePassword }}</code>
             <span>Předejte jiným kanálem, nikdy ve stejném e-mailu.</span>
           </div>
+        </section>
+
+        <section v-else-if="activePanelId === 'sekce-sdileni'" class="panel panel-wide layout-profile">
+          <div class="panel-heading">
+            <div>
+              <p class="section-kicker">Sdílení dat</p>
+              <h2>Přístup k deníkům</h2>
+            </div>
+            <button class="ghost-button" type="button" :disabled="isSharingBusy" @click="refreshDiaryShares">
+              {{ isSharingBusy ? "Načítám…" : "Obnovit" }}
+            </button>
+          </div>
+
+          <div v-if="!authSession?.user" class="sync-warning-card">
+            <strong>Je nutné přihlášení</strong>
+            <p>Sdílení je vázané na ověřené účty a není dostupné v anonymním ani legacy-token režimu.</p>
+          </div>
+          <template v-else>
+            <section class="sync-settings-card">
+              <h3>Sdílet můj deník</h3>
+              <p class="panel-tip">Příjemce získá pouze čtení. Musí se už alespoň jednou přihlásit, otevřít tuto sekci a mít důvěryhodné zařízení.</p>
+              <form class="share-form" @submit.prevent="addDiaryShare">
+                <label>
+                  <span>E-mail příjemce</span>
+                  <input v-model="shareRecipientEmail" type="email" maxlength="254" required placeholder="uzivatel@example.cz" />
+                </label>
+                <button class="primary-button" type="submit" :disabled="isSharingBusy">Udělit přístup ke čtení</button>
+              </form>
+              <div v-if="diaryShares.outgoing.length" class="backup-history-list">
+                <div v-for="grant in diaryShares.outgoing" :key="grant.grantId" class="shared-access-row">
+                  <span><strong>{{ grant.recipientName || grant.recipientEmail }}</strong> · {{ grant.recipientEmail }}</span>
+                  <span v-if="grant.revokedAt" class="status-chip status-chip-offline">Odvoláno</span>
+                  <button v-else class="ghost-button utility-menu-item-danger" type="button" :disabled="isSharingBusy" @click="removeDiaryShare(grant.grantId)">Odvolat</button>
+                </div>
+              </div>
+              <p v-else class="panel-tip">Váš deník nyní s nikým nesdílíte.</p>
+            </section>
+
+            <section class="sync-settings-card">
+              <h3>Deníky sdílené se mnou</h3>
+              <div v-if="sharedDiaryViews.length" class="shared-diary-list">
+                <article v-for="view in sharedDiaryViews" :key="view.grantId" class="shared-diary-card">
+                  <div class="panel-heading">
+                    <div>
+                      <strong>{{ view.ownerName || view.ownerEmail }}</strong>
+                      <p class="panel-tip">{{ view.ownerEmail }} · revize {{ view.revision }}</p>
+                    </div>
+                  </div>
+                  <p v-if="view.error" class="form-error">Data se nepodařilo dešifrovat: {{ view.error }}</p>
+                  <template v-else-if="view.state">
+                    <p><strong>{{ view.state.patientName || "Pacient bez uvedeného jména" }}</strong><span v-if="view.state.birthYear"> · rok narození {{ view.state.birthYear }}</span></p>
+                    <p class="panel-tip">Počet dnů se záznamem: {{ Object.keys(view.state.entries || {}).length }}</p>
+                    <details class="shared-diary-details">
+                      <summary>Zobrazit denní záznamy</summary>
+                      <div v-for="(entry, date) in view.state.entries" :key="date" class="shared-day-row">
+                        <strong>{{ date }}</strong>
+                        <span>Stav: {{ entry.overallStatus || "neuveden" }} · spánek: {{ entry.sleepQuality || "neuveden" }}</span>
+                        <span v-if="entry.notes">{{ entry.notes }}</span>
+                      </div>
+                    </details>
+                  </template>
+                </article>
+              </div>
+              <p v-else class="panel-tip">Nikdo s vámi zatím deník nesdílí na tomto zařízení.</p>
+            </section>
+          </template>
+          <p v-if="sharingMessage" class="storage-message">{{ sharingMessage }}</p>
         </section>
 
         <section v-else-if="activePanelId === 'sekce-udaje'" class="panel panel-wide layout-profile">

@@ -87,6 +87,13 @@ class SyncResetResponseModel(BaseModel):
     updatedAt: datetime
 
 
+class ShareGrantRequestModel(BaseModel):
+    recipientEmail: str = Field(min_length=3, max_length=254)
+    recipientDeviceId: str = Field(pattern=r"^[A-Za-z0-9_-]{16,128}$")
+    keyVersion: int = Field(ge=1)
+    keyEnvelope: "DeviceKeyTransferEnvelopeModel"
+
+
 class DeviceRegistrationRequestModel(BaseModel):
     deviceId: str = Field(pattern=r"^[A-Za-z0-9_-]{16,128}$")
     name: str = Field(min_length=1, max_length=80)

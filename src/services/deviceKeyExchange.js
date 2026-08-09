@@ -209,3 +209,11 @@ export async function consumeDeviceKeyTransfer(settings) {
   });
   return { exportedMasterKey: DECODER.decode(clear), keyVersion: transfer.keyVersion, sourceDeviceId: transfer.sourceDeviceId };
 }
+
+export async function decryptMasterKeyEnvelope(envelope) {
+  const pair = await loadOrCreatePair();
+  const clear = await cryptoApi().subtle.decrypt(
+    { name: "RSA-OAEP" }, pair.privateKey, base64ToBytes(envelope.cipherText),
+  );
+  return DECODER.decode(clear);
+}

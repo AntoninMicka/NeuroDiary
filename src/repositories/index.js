@@ -47,13 +47,13 @@ function withTimeout(promise, timeoutMs, message) {
 }
 
 export async function createDiaryRepository(options = {}) {
-  const { onProgress } = options;
+  const { onProgress, namespace = "guest" } = options;
   const sqliteDecision = shouldSkipSqlite();
 
   if (sqliteDecision.skip) {
     onProgress?.(sqliteDecision.reason);
     onProgress?.("Přepínám přímo na záložní úložiště localStorage.");
-    const repository = await LocalStorageDiaryRepository.create(onProgress);
+    const repository = await LocalStorageDiaryRepository.create(onProgress, namespace);
     repository.bootstrapWarning =
       "SQLite/WASM byl v hostovanem Firefoxu preskocen kvuli spolehlivosti. Aplikace bezi v localStorage rezimu.";
     return repository;
@@ -62,7 +62,7 @@ export async function createDiaryRepository(options = {}) {
   try {
     onProgress?.("Nejprve zkouším úložiště SQLite.");
     return await withTimeout(
-      SqliteDiaryRepository.create(onProgress),
+      SqliteDiaryRepository.create(onProgress, namespace),
       SQLITE_INIT_TIMEOUT_MS,
       `Inicializace úložiště SQLite překročila limit ${SQLITE_INIT_TIMEOUT_MS} ms.`,
     );
@@ -71,7 +71,7 @@ export async function createDiaryRepository(options = {}) {
     const reason = error instanceof Error ? error.message : String(error);
     onProgress?.(`Úložiště SQLite selhalo: ${reason}`);
     onProgress?.("Přepínám na záložní úložiště localStorage.");
-    const repository = await LocalStorageDiaryRepository.create(onProgress);
+    const repository = await LocalStorageDiaryRepository.create(onProgress, namespace);
     repository.bootstrapWarning =
       `SQLite uloziste se nepodarilo spustit: ${reason}. Aplikace proto bezí v nouzovem localStorage rezimu.`;
     return repository;
