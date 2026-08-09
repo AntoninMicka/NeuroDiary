@@ -90,3 +90,20 @@ def test_account_roles_and_device_active_roles_are_separate(tmp_path):
     store.register_identity("multi-role", "roles@example.test", "Role User")
     assert store.get_roles("multi-role") == ["doctor"]
     assert store.get_active_roles("multi-role", "device-2") == ["doctor"]
+
+
+def test_treatment_proposal_is_scoped_to_active_grant_and_decided_by_owner(tmp_path):
+    store = ShareStore(str(tmp_path / "shares.db"))
+    store.initialize()
+    store.register_identity("patient", "patient@example.test", "Patient")
+    store.register_identity("doctor", "doctor@example.test", "Doctor")
+    store.save_grant("patient", "doctor", "doctor-device-01", 1, {"cipherText": "key"})
+    grant_id = store.get_outgoing("patient")[0]["grant_id"]
+
+    proposal_id = store.create_treatment_proposal(grant_id, "doctor", 7, {"cipherText": "opaque"})
+    assert proposal_id
+    assert store.create_treatment_proposal(grant_id, "other", 7, {"cipherText": "opaque"}) is None
+    assert store.list_treatment_proposals("patient")[0]["status"] == "pending"
+    assert store.decide_treatment_proposal(proposal_id, "doctor", "approved") is False
+    assert store.decide_treatment_proposal(proposal_id, "patient", "approved") is True
+    assert store.list_treatment_proposals("doctor")[0]["status"] == "approved"

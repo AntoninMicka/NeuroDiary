@@ -60,6 +60,8 @@ from .models import (
     ShareInvitationRequestModel,
     ShareInvitationResponseModel,
     ShareInvitationActivationModel,
+    TreatmentProposalCreateModel,
+    TreatmentProposalDecisionModel,
 )
 from .device_store import create_device_store
 from .key_exchange_store import create_key_exchange_store
@@ -1165,6 +1167,53 @@ def revoke_share(
     share_store.mark_grant_revoked(user.user_id, grant_id)
     audit_security(user.user_id, x_device_id, "diary_share_revoked", grantId=grant_id)
     return {"status": "ok"}
+
+
+@app.post("/api/v1/treatment-proposals")
+def create_treatment_proposal(
+    payload: TreatmentProposalCreateModel,
+    user: Annotated[AuthenticatedUser, Depends(verify_sharing_user)],
+    x_device_id: Annotated[str | None, Header(alias="X-Device-ID")] = None,
+) -> dict[str, str]:
+    if not x_device_id or not device_store.is_active(user.user_id, x_device_id):
+        raise HTTPException(status_code=403, detail="Návrh lze odeslat jen z důvěryhodného zařízení.")
+    if "doctor" not in share_store.get_active_roles(user.user_id, x_device_id):
+        raise HTTPException(status_code=403, detail="Změnu léčby může navrhnout pouze lékař.")
+    proposal_id = share_store.create_treatment_proposal(
+        payload.grantId, user.user_id, payload.baseRevision, payload.payload.model_dump(),
+    )
+    if not proposal_id:
+        raise HTTPException(status_code=404, detail="Aktivní sdílení nebylo nalezeno.")
+    audit_security(user.user_id, x_device_id, "treatment_proposal_created", proposalId=proposal_id, grantId=payload.grantId)
+    return {"status": "pending", "proposalId": proposal_id}
+
+
+@app.get("/api/v1/treatment-proposals")
+def list_treatment_proposals(
+    user: Annotated[AuthenticatedUser, Depends(verify_sharing_user)],
+    x_device_id: Annotated[str | None, Header(alias="X-Device-ID")] = None,
+) -> dict[str, object]:
+    if not x_device_id or not device_store.is_active(user.user_id, x_device_id):
+        raise HTTPException(status_code=403, detail="Návrhy jsou dostupné jen z důvěryhodného zařízení.")
+    return {"proposals": [dict(row) | {"payload": json.loads(row["payload_json"])} for row in share_store.list_treatment_proposals(user.user_id)]}
+
+
+@app.post("/api/v1/treatment-proposals/{proposal_id}/decision")
+def decide_treatment_proposal(
+    proposal_id: str,
+    payload: TreatmentProposalDecisionModel,
+    user: Annotated[AuthenticatedUser, Depends(verify_sharing_user)],
+    x_device_id: Annotated[str | None, Header(alias="X-Device-ID")] = None,
+) -> dict[str, str]:
+    if not x_device_id or not device_store.is_active(user.user_id, x_device_id):
+        raise HTTPException(status_code=403, detail="Návrh lze schválit jen z důvěryhodného zařízení.")
+    if "patient" not in share_store.get_active_roles(user.user_id, x_device_id):
+        raise HTTPException(status_code=403, detail="Návrh může schválit pouze pacient.")
+    status = "approved" if payload.approve else "declined"
+    if not share_store.decide_treatment_proposal(proposal_id, user.user_id, status):
+        raise HTTPException(status_code=404, detail="Čekající návrh nebyl nalezen.")
+    audit_security(user.user_id, x_device_id, f"treatment_proposal_{status}", proposalId=proposal_id)
+    return {"status": status}
 
 
 @app.get("/", include_in_schema=False)

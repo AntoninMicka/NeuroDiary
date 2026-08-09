@@ -116,6 +116,16 @@ class ShareInvitationActivationModel(BaseModel):
     keyEnvelope: "DeviceKeyTransferEnvelopeModel"
 
 
+class TreatmentProposalCreateModel(BaseModel):
+    grantId: str = Field(min_length=1, max_length=128)
+    baseRevision: int = Field(ge=0)
+    payload: EncryptedPayloadModel
+
+
+class TreatmentProposalDecisionModel(BaseModel):
+    approve: bool
+
+
 class DeviceRegistrationRequestModel(BaseModel):
     deviceId: str = Field(pattern=r"^[A-Za-z0-9_-]{16,128}$")
     name: str = Field(min_length=1, max_length=80)

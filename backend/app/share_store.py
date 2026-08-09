@@ -73,6 +73,14 @@ class ShareStore:
                   PRIMARY KEY (user_id, device_id, role)
                 )
             """)
+            connection.execute(f"""
+                CREATE TABLE IF NOT EXISTS treatment_plan_proposals (
+                  proposal_id {identity_id}, grant_id TEXT NOT NULL, owner_user_id TEXT NOT NULL,
+                  proposer_user_id TEXT NOT NULL, base_revision INTEGER NOT NULL,
+                  payload_json TEXT NOT NULL, status TEXT NOT NULL,
+                  created_at {timestamp} NOT NULL, decided_at {timestamp}
+                )
+            """)
             connection.execute("""
                 INSERT INTO account_roles (user_id, role)
                 SELECT identities.user_id, 'patient' FROM share_identities identities
@@ -361,5 +369,47 @@ class ShareStore:
                 f"UPDATE diary_share_grants SET revoked_at = {p} WHERE grant_id = {p} AND owner_user_id = {p} AND revoked_at IS NULL",
                 (now if self.postgres else now.isoformat(), grant_id, owner_id),
             )
+            connection.commit()
+            return cursor.rowcount == 1
+
+    def create_treatment_proposal(self, grant_id: str, proposer_id: str, base_revision: int, payload: dict):
+        p = "%s" if self.postgres else "?"
+        now = datetime.now(UTC)
+        value = now if self.postgres else now.isoformat()
+        proposal_id = str(uuid.uuid4())
+        with self.connect() as connection:
+            grant = connection.execute(f"""
+                SELECT owner_user_id FROM diary_share_grants
+                WHERE grant_id = {p} AND recipient_user_id = {p} AND revoked_at IS NULL
+            """, (grant_id, proposer_id)).fetchone()
+            if not grant:
+                return None
+            connection.execute(f"""
+                INSERT INTO treatment_plan_proposals
+                  (proposal_id, grant_id, owner_user_id, proposer_user_id, base_revision, payload_json, status, created_at, decided_at)
+                VALUES ({p}, {p}, {p}, {p}, {p}, {p}, 'pending', {p}, NULL)
+            """, (proposal_id, grant_id, grant["owner_user_id"], proposer_id, base_revision, json.dumps(payload), value))
+            connection.commit()
+        return proposal_id
+
+    def list_treatment_proposals(self, user_id: str):
+        p = "%s" if self.postgres else "?"
+        with self.connect() as connection:
+            return connection.execute(f"""
+                SELECT proposal_id AS "proposalId", grant_id AS "grantId", owner_user_id AS "ownerUserId",
+                       proposer_user_id AS "proposerUserId", base_revision AS "baseRevision",
+                       payload_json, status, created_at AS "createdAt", decided_at AS "decidedAt"
+                FROM treatment_plan_proposals WHERE owner_user_id = {p} OR proposer_user_id = {p}
+                ORDER BY created_at DESC
+            """, (user_id, user_id)).fetchall()
+
+    def decide_treatment_proposal(self, proposal_id: str, owner_id: str, status: str) -> bool:
+        p = "%s" if self.postgres else "?"
+        now = datetime.now(UTC)
+        with self.connect() as connection:
+            cursor = connection.execute(f"""
+                UPDATE treatment_plan_proposals SET status = {p}, decided_at = {p}
+                WHERE proposal_id = {p} AND owner_user_id = {p} AND status = 'pending'
+            """, (status, now if self.postgres else now.isoformat(), proposal_id, owner_id))
             connection.commit()
             return cursor.rowcount == 1

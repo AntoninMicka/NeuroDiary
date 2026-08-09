@@ -1,4 +1,4 @@
-import { decryptDiaryState, importAccountMasterKey } from "./e2eCrypto.js";
+import { decryptDiaryState, encryptDiaryState, importAccountMasterKey } from "./e2eCrypto.js";
 import { decryptMasterKeyEnvelope, encryptMasterKeyForDevice } from "./deviceKeyExchange.js";
 import { getAuthorizationHeaderValue } from "./authService.js";
 import { getCurrentDeviceId } from "./trustedDevices.js";
@@ -60,4 +60,29 @@ export async function decryptSharedDiary(grant) {
   const exportedKey = await decryptMasterKeyEnvelope(grant.keyEnvelope);
   const masterKey = await importAccountMasterKey(exportedKey);
   return decryptDiaryState(grant.payload, masterKey);
+}
+
+export async function createTreatmentProposal(settings, grant, treatmentPlan) {
+  const exportedKey = await decryptMasterKeyEnvelope(grant.keyEnvelope);
+  const masterKey = await importAccountMasterKey(exportedKey);
+  const payload = await encryptDiaryState({ treatmentPlan }, masterKey, grant.keyVersion);
+  return request(settings, "/api/v1/treatment-proposals", {
+    method: "POST", body: JSON.stringify({ grantId: grant.grantId, baseRevision: grant.revision, payload }),
+  });
+}
+
+export function fetchTreatmentProposals(settings) {
+  return request(settings, "/api/v1/treatment-proposals");
+}
+
+export async function decryptTreatmentProposal(proposal) {
+  const material = loadSyncKeyMaterial();
+  if (!material.exportedMasterKey) throw new Error("Na tomto zařízení chybí hlavní šifrovací klíč.");
+  return decryptDiaryState(proposal.payload, await importAccountMasterKey(material.exportedMasterKey));
+}
+
+export function decideTreatmentProposal(settings, proposalId, approve) {
+  return request(settings, `/api/v1/treatment-proposals/${encodeURIComponent(proposalId)}/decision`, {
+    method: "POST", body: JSON.stringify({ approve }),
+  });
 }
