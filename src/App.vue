@@ -108,6 +108,7 @@ import {
 } from "./services/diarySharing.js";
 import { createCloudBackup, deleteCloudBackup, fetchAdminStatus, fetchAdminUsers, updateAdminUserRoles } from "./services/adminService.js";
 import { fetchCurrentRoles, updateCurrentDeviceRoles, updateSelfAssignableRoles } from "./services/roleService.js";
+import { CAREGIVER_PANEL_ITEMS, isCaregiverOnlyRoleSet } from "./services/roleUi.js";
 import { generateRecoverySecret } from "./services/e2eCrypto.js";
 import {
   deleteContact,
@@ -252,6 +253,7 @@ const adminError = ref("");
 const isAdminBusy = ref(false);
 const accountRoles = reactive({ assignedRoles: [], activeRoles: [], definitions: {} });
 const selfAssignableRoleDraft = ref(["patient"]);
+const currentDeviceRoleDraft = ref([]);
 const trustedDevices = ref([]);
 const pendingDeviceKeyRequests = ref([]);
 const rotationTargetDeviceIds = ref([]);
@@ -393,7 +395,10 @@ const PANEL_ITEMS = [
   { id: "sekce-kontakty", label: "Kontakty" },
   { id: "sekce-admin", label: "Administrace" },
 ];
-const PRIMARY_PANEL_ITEMS = PANEL_ITEMS.filter((item) => !["sekce-matice", "sekce-report", "sekce-sdileni", "sekce-kartoteka", "sekce-kontakty", "sekce-admin"].includes(item.id));
+const PATIENT_PRIMARY_PANEL_ITEMS = PANEL_ITEMS.filter((item) => !["sekce-matice", "sekce-report", "sekce-sdileni", "sekce-kartoteka", "sekce-kontakty", "sekce-admin"].includes(item.id));
+const isCaregiverOnlyMode = computed(() => isCaregiverOnlyRoleSet(accountRoles.activeRoles));
+const primaryPanelItems = computed(() => isCaregiverOnlyMode.value ? CAREGIVER_PANEL_ITEMS : PATIENT_PRIMARY_PANEL_ITEMS);
+const visiblePanelItems = computed(() => isCaregiverOnlyMode.value ? CAREGIVER_PANEL_ITEMS : PANEL_ITEMS);
 const DATE_NAV_PANEL_IDS = new Set([
   "sekce-udaje",
   "sekce-matice",
@@ -531,7 +536,6 @@ let panelSwipePointerType = "";
 
 let menuResizeObserver = null;
 let mediaQueryList = null;
-let sharedRecordsMediaQuery = null;
 let quickCaptureClockIntervalId = 0;
 let localBackupTimeoutId = 0;
 let localChangeVersion = 0;
@@ -585,6 +589,11 @@ watch(
   },
   { deep: true },
 );
+
+watch(isCaregiverOnlyMode, (caregiverOnly) => {
+  if (!caregiverOnly || visiblePanelItems.value.some((item) => item.id === activePanelId.value)) return;
+  selectPanel("sekce-kartoteka");
+});
 
 watch(
   state,
@@ -713,7 +722,6 @@ onUnmounted(() => {
   globalThis.navigator?.serviceWorker?.removeEventListener("message", handleServiceWorkerMessage);
   menuResizeObserver?.disconnect();
   mediaQueryList?.removeEventListener?.("change", syncInstallState);
-  sharedRecordsMediaQuery?.removeEventListener?.("change", handleSharedRecordsViewportChange);
   globalThis.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
   globalThis.removeEventListener("appinstalled", handleAppInstalled);
   globalThis.removeEventListener("online", handleConnectionChange);
@@ -972,8 +980,6 @@ function initializeInstallState() {
   if (globalThis.matchMedia) {
     mediaQueryList = globalThis.matchMedia("(display-mode: standalone)");
     mediaQueryList.addEventListener?.("change", syncInstallState);
-    sharedRecordsMediaQuery = globalThis.matchMedia("(min-width: 861px)");
-    sharedRecordsMediaQuery.addEventListener?.("change", handleSharedRecordsViewportChange);
   }
 }
 
@@ -1150,9 +1156,7 @@ function ensureSyncIdentity() {
 }
 
 function selectPanel(panelId) {
-  if (panelId === "sekce-kartoteka" && !globalThis.matchMedia?.("(min-width: 861px)").matches) {
-    activePanelId.value = "sekce-sdileni";
-    sharedDiaryViews.value = [];
+  if (!visiblePanelItems.value.some((item) => item.id === panelId)) {
     return;
   }
   activePanelId.value = panelId;
@@ -1164,20 +1168,9 @@ function selectPanel(panelId) {
   });
 }
 
-function handleSharedRecordsViewportChange(event) {
-  if (event.matches) return;
-  sharedDiaryViews.value = [];
-  selectedSharedGrantId.value = "";
-  if (activePanelId.value === "sekce-kartoteka") activePanelId.value = "sekce-sdileni";
-}
-
 async function refreshDiaryShares(includeIncoming = activePanelId.value === "sekce-kartoteka") {
   includeIncoming = includeIncoming === true;
   if (!authSession.value?.user || !hasSyncIdentity.value) return;
-  if (includeIncoming && !globalThis.matchMedia?.("(min-width: 861px)").matches) {
-    sharedDiaryViews.value = [];
-    return;
-  }
   isSharingBusy.value = true;
   sharingMessage.value = "";
   try {
@@ -1316,17 +1309,18 @@ async function removeDiaryShare(grantId) {
 }
 
 function selectAdjacentPanel(direction) {
-  const activePanelIndex = PANEL_ITEMS.findIndex((item) => item.id === activePanelId.value);
+  const panels = visiblePanelItems.value;
+  const activePanelIndex = panels.findIndex((item) => item.id === activePanelId.value);
   if (activePanelIndex < 0) {
     return;
   }
 
   const nextIndex = activePanelIndex + direction;
-  if (nextIndex < 0 || nextIndex >= PANEL_ITEMS.length) {
+  if (nextIndex < 0 || nextIndex >= panels.length) {
     return;
   }
 
-  selectPanel(PANEL_ITEMS[nextIndex].id);
+  selectPanel(panels[nextIndex].id);
 }
 
 function isInteractiveSwipeTarget(target) {
@@ -2131,6 +2125,9 @@ async function signOut() {
   authSession.value = null;
   adminStatus.value = null;
   adminError.value = "";
+  Object.assign(accountRoles, { assignedRoles: [], activeRoles: [], definitions: {} });
+  selfAssignableRoleDraft.value = ["patient"];
+  currentDeviceRoleDraft.value = [];
   if (activePanelId.value === "sekce-admin") activePanelId.value = "sekce-home";
   webPushStatus.value = "needs-auth";
   applyAuthenticatedAccount(null);
@@ -2186,6 +2183,7 @@ async function refreshAccountRoles() {
   if (!authSession.value?.user || !hasSyncIdentity.value) return;
   try {
     Object.assign(accountRoles, await fetchCurrentRoles());
+    currentDeviceRoleDraft.value = [...accountRoles.activeRoles];
     selfAssignableRoleDraft.value = accountRoles.assignedRoles.filter(
       (role) => accountRoles.definitions?.[role]?.selfAssignable,
     );
@@ -2198,6 +2196,7 @@ async function saveSelfAssignableRoles() {
   if (!selfAssignableRoleDraft.value.length) return;
   try {
     Object.assign(accountRoles, await updateSelfAssignableRoles(selfAssignableRoleDraft.value));
+    currentDeviceRoleDraft.value = [...accountRoles.activeRoles];
     selfAssignableRoleDraft.value = accountRoles.assignedRoles.filter(
       (role) => accountRoles.definitions?.[role]?.selfAssignable,
     );
@@ -2208,9 +2207,10 @@ async function saveSelfAssignableRoles() {
 }
 
 async function saveCurrentDeviceRoles() {
-  if (!accountRoles.activeRoles.length) return;
+  if (!currentDeviceRoleDraft.value.length) return;
   try {
-    Object.assign(accountRoles, await updateCurrentDeviceRoles(accountRoles.activeRoles));
+    Object.assign(accountRoles, await updateCurrentDeviceRoles(currentDeviceRoleDraft.value));
+    currentDeviceRoleDraft.value = [...accountRoles.activeRoles];
     storageMessage.value = "Aktivní role tohoto zařízení byly uloženy.";
   } catch (error) {
     storageMessage.value = error.message;
@@ -2904,7 +2904,7 @@ function syncFloatingMenuHeight() {
           <div class="panel-switcher-toolbar">
             <div class="panel-switcher-pills" aria-label="Vyber panelu">
               <button
-                v-for="item in PRIMARY_PANEL_ITEMS"
+                v-for="item in primaryPanelItems"
                 :key="item.id"
                 class="panel-pill"
                 :class="{ 'panel-pill-active': item.id === activePanelId }"
@@ -2915,7 +2915,7 @@ function syncFloatingMenuHeight() {
               </button>
             </div>
 
-            <div class="utility-menu">
+            <div v-if="!isCaregiverOnlyMode" class="utility-menu">
               <button
                 class="ghost-button"
                 :class="{ 'panel-pill-active': activePanelId === 'sekce-report' }"
@@ -2958,7 +2958,7 @@ function syncFloatingMenuHeight() {
                 <button class="utility-menu-item" type="button" role="menuitem" @click="handleUtilityAction(() => selectPanel('sekce-sdileni'))">
                   Sdílení dat{{ pendingShareInvitationCount ? ` (${pendingShareInvitationCount})` : "" }}
                 </button>
-                <button class="utility-menu-item desktop-only" type="button" role="menuitem" @click="handleUtilityAction(() => selectPanel('sekce-kartoteka'))">
+                <button class="utility-menu-item" type="button" role="menuitem" @click="handleUtilityAction(() => selectPanel('sekce-kartoteka'))">
                   Sdílená kartotéka
                 </button>
                 <button v-if="adminStatus" class="utility-menu-item" type="button" role="menuitem" @click="handleUtilityAction(() => selectPanel('sekce-admin'))">
@@ -3119,6 +3119,27 @@ function syncFloatingMenuHeight() {
             <p>Sdílení je vázané na ověřené účty a není dostupné v anonymním ani legacy-token režimu.</p>
           </div>
           <template v-else>
+            <section v-if="isCaregiverOnlyMode && hasSyncIdentity" class="sync-settings-card caregiver-role-settings">
+              <h3>Role tohoto zařízení</h3>
+              <p class="panel-tip">Zde můžete režim zařízení změnit i tehdy, když pacientské nastavení není v nabídce.</p>
+              <fieldset v-if="Object.keys(accountRoles.definitions).length" class="contact-keyring device-role-settings">
+                <legend>Moje role</legend>
+                <label v-for="(definition, role) in accountRoles.definitions" v-show="definition.selfAssignable" :key="`caregiver-self-role-${role}`">
+                  <input v-model="selfAssignableRoleDraft" type="checkbox" :value="role" />
+                  {{ definition.label }}
+                </label>
+                <button class="ghost-button" type="button" :disabled="!selfAssignableRoleDraft.length" @click="saveSelfAssignableRoles">Uložit moje role</button>
+              </fieldset>
+              <fieldset v-if="accountRoles.assignedRoles.length" class="contact-keyring device-role-settings">
+                <legend>Aktivní role na tomto zařízení</legend>
+                <label v-for="role in accountRoles.assignedRoles" :key="`caregiver-active-role-${role}`">
+                  <input v-model="currentDeviceRoleDraft" type="checkbox" :value="role" />
+                  {{ accountRoles.definitions?.[role]?.label || role }}
+                </label>
+                <button class="ghost-button" type="button" :disabled="!currentDeviceRoleDraft.length" @click="saveCurrentDeviceRoles">Uložit aktivní role</button>
+              </fieldset>
+            </section>
+
             <section class="sync-settings-card">
               <h3>Sdílet můj deník</h3>
               <p class="panel-tip">Příjemce získá pouze čtení až po výslovném přijetí pozvánky. Pokud už účet má, pozvánka se mu zobrazí přímo zde.</p>
@@ -3180,12 +3201,12 @@ function syncFloatingMenuHeight() {
               <p v-else class="panel-tip">Nemáte žádné čekající pozvánky.</p>
             </section>
 
-            <p class="panel-tip desktop-only">Cizí deníky jsou dostupné pouze na desktopu v samostatné Sdílené kartotéce.</p>
+            <p class="panel-tip">Přijaté deníky najdete v samostatné Kartotéce.</p>
           </template>
           <p v-if="sharingMessage" class="storage-message">{{ sharingMessage }}</p>
         </section>
 
-        <section v-else-if="activePanelId === 'sekce-kartoteka'" class="panel panel-wide shared-records-panel desktop-only">
+        <section v-else-if="activePanelId === 'sekce-kartoteka'" class="panel panel-wide shared-records-panel">
           <div class="panel-heading">
             <div>
               <p class="section-kicker">Sdílená kartotéka</p>
@@ -3529,11 +3550,11 @@ function syncFloatingMenuHeight() {
               <fieldset v-if="accountRoles.assignedRoles.length" class="contact-keyring device-role-settings">
                 <legend>Aktivní role na tomto zařízení</legend>
                 <label v-for="role in accountRoles.assignedRoles" :key="`active-role-${role}`">
-                  <input v-model="accountRoles.activeRoles" type="checkbox" :value="role" />
+                  <input v-model="currentDeviceRoleDraft" type="checkbox" :value="role" />
                   {{ accountRoles.definitions?.[role]?.label || role }}
                 </label>
                 <p class="panel-tip">Volba ovlivňuje režim UI pouze tohoto zařízení. Nemůže přidat roli, kterou účet nemá.</p>
-                <button class="ghost-button" type="button" :disabled="!accountRoles.activeRoles.length" @click="saveCurrentDeviceRoles">Uložit aktivní role</button>
+                <button class="ghost-button" type="button" :disabled="!currentDeviceRoleDraft.length" @click="saveCurrentDeviceRoles">Uložit aktivní role</button>
               </fieldset>
               <div v-if="identityKeyMigration?.enabled" class="private-key-warning">
                 <strong>Docasna migrace identitnich klicu je aktivni</strong>

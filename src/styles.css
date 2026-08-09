@@ -2437,6 +2437,24 @@ textarea {
     grid-template-columns: 1fr;
   }
 
+  .shared-records-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .shared-records-index {
+    position: static;
+  }
+
+  .shared-records-toolbar,
+  .shared-record-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .shared-records-search {
+    min-width: 0;
+  }
+
   .admin-user-search {
     min-width: 0;
   }
