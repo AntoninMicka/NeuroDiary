@@ -94,6 +94,74 @@
             vzdy predejte jinym kanalem. Pred sdilenim zkontrolujte udaje pacienta a cilovy e-mail.
           </p>
         </div>
+
+        <div class="manual-block">
+          <h4>9. Role a režim zařízení</h4>
+          <p>
+            Účet může mít více rolí, ale jejich aktivní kombinace se nastavuje samostatně pro každé
+            důvěryhodné zařízení v sekci <strong>Údaje</strong>. Je-li aktivní role pacienta,
+            aplikace zachová běžné pacientské rozhraní. Samotná role rodiny nebo lékaře přepne
+            aplikaci do pečovatelského režimu s nabídkou Kartotéka, Kontakty, Sdílení dat, Manuály
+            a Údaje. Nabídka <strong>Více</strong> obsahuje společné nástroje. Role sama nikdy
+            nezpřístupní cizí zdravotní data; vždy je nutné platné sdílení od konkrétního pacienta.
+          </p>
+        </div>
+      </article>
+
+      <article class="manual-card">
+        <div class="manual-card-head">
+          <p class="manual-badge">Rodina a lékař</p>
+          <h3>Práce se sdílenou kartotékou</h3>
+        </div>
+
+        <div class="manual-block">
+          <h4>1. Otevření sdíleného deníku</h4>
+          <p>
+            V <strong>Kartotéce</strong> vyberte pacienta v levém seznamu. Přístup je dostupný až
+            po přijetí a aktivaci pozvánky a pouze na důvěryhodném zařízení, pro které byl předán
+            šifrovací klíč. Kartotéku lze prohledávat podle jména, e-mailu nebo roku narození.
+          </p>
+        </div>
+
+        <div class="manual-block">
+          <h4>2. Naplánovaná léčba pro rodinu</h4>
+          <p>
+            V detailu pacienta otevřete záložku <strong>Naplánovaná léčba</strong>. Rodinný
+            příslušník vidí název, dávku, čas a období platnosti položek, ale nemůže plán měnit.
+            Zobrazení slouží pouze jako informace podle dat zadaných pacientem a nenahrazuje pokyn
+            lékaře ani kontrolu aktuálního předpisu.
+          </p>
+        </div>
+
+        <div class="manual-block">
+          <h4>3. Dávkový návrh lékaře</h4>
+          <p>
+            Lékař může ve stejné záložce upravit kopii současného léčebného plánu: změnit více
+            položek, přidat nové nebo nepotřebné odebrat. Tlačítko
+            <strong>Odeslat celý návrh pacientovi</strong> odešle všechny změny jako jeden celek.
+            Odesláním se pacientův plán ještě nezmění.
+          </p>
+        </div>
+
+        <div class="manual-block">
+          <h4>4. Schválení pacientem</h4>
+          <p>
+            Pacient najde čekající návrh v sekci <strong>Sdílení dat</strong>. Může jej schválit
+            a použít, nebo zamítnout. Při schválení aplikace nahradí léčebný plán navrženou verzí a
+            změnu následně synchronizuje. Pokud návrh vychází ze starší revize deníku, aplikace jej
+            nepoužije; pacient musí nejprve synchronizovat data a lékař vytvořit aktuální návrh.
+          </p>
+        </div>
+
+        <div class="manual-block">
+          <h4>5. Soukromí a odpovědnost</h4>
+          <p>
+            Návrh léčby je end-to-end šifrovaný stejně jako deník. Server ukládá pouze šifrovaný
+            obsah, stav žádosti a technická metadata. Odeslání vyžaduje aktivní roli lékaře;
+            rozhodnutí vyžaduje aktivní roli pacienta. Vytvoření i rozhodnutí se zapisují do
+            bezpečnostního auditu. Před schválením má pacient vždy ověřit změny se svým lékařem.
+          </p>
+        </div>
       </article>
 
       <article class="manual-card">
@@ -159,7 +227,18 @@
         </div>
 
         <div class="manual-block">
-          <h4>7. Omezení prototypu</h4>
+          <h4>7. Správa rolí a návrhů léčby</h4>
+          <p>
+            Role lékaře a administrátora přiděluje pouze správce. Server při vytvoření návrhu
+            léčby ověřuje aktivní lékařskou roli, důvěryhodné zařízení a platný grant ke konkrétnímu
+            pacientovi. Rozhodnout smí pouze vlastník deníku s aktivní rolí pacienta. Při řešení
+            incidentu používejte auditní události vytvoření, schválení nebo zamítnutí návrhu;
+            šifrovaný zdravotní obsah se do provozních logů nezapisuje.
+          </p>
+        </div>
+
+        <div class="manual-block">
+          <h4>8. Omezení prototypu</h4>
           <p>
             Soucasna verze je prototyp. Klinicka interpretace statistik, dlouhodobych trendu a
             reportovych metrik musi byt overena se specializovanym lekarem.
