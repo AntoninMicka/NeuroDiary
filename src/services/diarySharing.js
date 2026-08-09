@@ -21,8 +21,8 @@ async function request(settings, path, options = {}) {
   return payload;
 }
 
-export function fetchDiaryShares(settings) {
-  return request(settings, "/api/v1/shares");
+export function fetchDiaryShares(settings, includeIncoming = false) {
+  return request(settings, `/api/v1/shares?includeIncoming=${includeIncoming ? "true" : "false"}`);
 }
 
 export async function createDiaryShare(settings, recipientEmail) {

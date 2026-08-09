@@ -226,6 +226,9 @@ const encryptOneTimeReport = ref(false);
 const shareRecipientEmail = ref("");
 const diaryShares = reactive({ outgoing: [], incoming: [] });
 const sharedDiaryViews = ref([]);
+const selectedSharedGrantId = ref("");
+const selectedSharedSection = ref("timeline");
+const selectedSharedDate = ref(getTodayKey());
 const isSharingBusy = ref(false);
 const sharingMessage = ref("");
 const adminStatus = ref(null);
@@ -290,6 +293,10 @@ const state = reactive({
 });
 
 const selectedEntry = computed(() => state.entries[state.selectedDate] ?? null);
+const selectedSharedView = computed(() =>
+  sharedDiaryViews.value.find((item) => item.grantId === selectedSharedGrantId.value) ?? sharedDiaryViews.value[0] ?? null,
+);
+const selectedSharedEntry = computed(() => selectedSharedView.value?.state?.entries?.[selectedSharedDate.value] ?? null);
 const selectedDateLabel = computed(() => formatLongDate(state.selectedDate));
 const sortedMedications = computed(() =>
   [...(selectedEntry.value?.medications ?? [])].sort((left, right) => left.time.localeCompare(right.time)),
@@ -338,10 +345,11 @@ const PANEL_ITEMS = [
   { id: "sekce-manualy", label: "Manuály" },
   { id: "sekce-report", label: "Report pro lékaře" },
   { id: "sekce-sdileni", label: "Sdílení dat" },
+  { id: "sekce-kartoteka", label: "Sdílená kartotéka" },
   { id: "sekce-kontakty", label: "Kontakty" },
   { id: "sekce-admin", label: "Administrace" },
 ];
-const PRIMARY_PANEL_ITEMS = PANEL_ITEMS.filter((item) => !["sekce-matice", "sekce-report", "sekce-sdileni", "sekce-kontakty", "sekce-admin"].includes(item.id));
+const PRIMARY_PANEL_ITEMS = PANEL_ITEMS.filter((item) => !["sekce-matice", "sekce-report", "sekce-sdileni", "sekce-kartoteka", "sekce-kontakty", "sekce-admin"].includes(item.id));
 const DATE_NAV_PANEL_IDS = new Set([
   "sekce-udaje",
   "sekce-matice",
@@ -479,6 +487,7 @@ let panelSwipePointerType = "";
 
 let menuResizeObserver = null;
 let mediaQueryList = null;
+let sharedRecordsMediaQuery = null;
 let quickCaptureClockIntervalId = 0;
 let localBackupTimeoutId = 0;
 let localChangeVersion = 0;
@@ -658,6 +667,7 @@ onUnmounted(() => {
   globalThis.navigator?.serviceWorker?.removeEventListener("message", handleServiceWorkerMessage);
   menuResizeObserver?.disconnect();
   mediaQueryList?.removeEventListener?.("change", syncInstallState);
+  sharedRecordsMediaQuery?.removeEventListener?.("change", handleSharedRecordsViewportChange);
   globalThis.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
   globalThis.removeEventListener("appinstalled", handleAppInstalled);
   globalThis.removeEventListener("online", handleConnectionChange);
@@ -916,6 +926,8 @@ function initializeInstallState() {
   if (globalThis.matchMedia) {
     mediaQueryList = globalThis.matchMedia("(display-mode: standalone)");
     mediaQueryList.addEventListener?.("change", syncInstallState);
+    sharedRecordsMediaQuery = globalThis.matchMedia("(min-width: 861px)");
+    sharedRecordsMediaQuery.addEventListener?.("change", handleSharedRecordsViewportChange);
   }
 }
 
@@ -1092,23 +1104,41 @@ function ensureSyncIdentity() {
 }
 
 function selectPanel(panelId) {
+  if (panelId === "sekce-kartoteka" && !globalThis.matchMedia?.("(min-width: 861px)").matches) {
+    activePanelId.value = "sekce-sdileni";
+    sharedDiaryViews.value = [];
+    return;
+  }
   activePanelId.value = panelId;
   closeUtilityMenu();
-  if (panelId === "sekce-sdileni") void refreshDiaryShares();
+  if (panelId === "sekce-sdileni") void refreshDiaryShares(false);
+  if (panelId === "sekce-kartoteka") void refreshDiaryShares(true);
   void nextTick(() => {
     syncFloatingMenuHeight();
   });
 }
 
-async function refreshDiaryShares() {
+function handleSharedRecordsViewportChange(event) {
+  if (event.matches) return;
+  sharedDiaryViews.value = [];
+  selectedSharedGrantId.value = "";
+  if (activePanelId.value === "sekce-kartoteka") activePanelId.value = "sekce-sdileni";
+}
+
+async function refreshDiaryShares(includeIncoming = activePanelId.value === "sekce-kartoteka") {
+  includeIncoming = includeIncoming === true;
   if (!authSession.value?.user || !hasSyncIdentity.value) return;
+  if (includeIncoming && !globalThis.matchMedia?.("(min-width: 861px)").matches) {
+    sharedDiaryViews.value = [];
+    return;
+  }
   isSharingBusy.value = true;
   sharingMessage.value = "";
   try {
-    const result = await fetchDiaryShares(syncSettings);
+    const result = await fetchDiaryShares(syncSettings, includeIncoming);
     diaryShares.outgoing = result.outgoing ?? [];
     diaryShares.incoming = result.incoming ?? [];
-    const views = [];
+    const views = includeIncoming ? [] : sharedDiaryViews.value;
     for (const grant of diaryShares.incoming) {
       try {
         views.push({ ...grant, state: await decryptSharedDiary(grant), error: "" });
@@ -1117,10 +1147,41 @@ async function refreshDiaryShares() {
       }
     }
     sharedDiaryViews.value = views;
+    if (!views.some((item) => item.grantId === selectedSharedGrantId.value)) {
+      selectSharedDiary(views[0] ?? null);
+    }
   } catch (error) {
     sharingMessage.value = error.message;
   } finally {
     isSharingBusy.value = false;
+  }
+}
+
+function selectSharedDiary(view) {
+  selectedSharedGrantId.value = view?.grantId ?? "";
+  const dates = Object.keys(view?.state?.entries ?? {}).sort();
+  selectedSharedDate.value = dates.at(-1) ?? getTodayKey();
+  selectedSharedSection.value = "timeline";
+}
+
+function printSharedDiaryReport() {
+  const view = selectedSharedView.value;
+  if (!view?.state) return;
+  try {
+    openDoctorReportPrint({
+      entries: view.state.entries ?? {},
+      treatmentPlan: view.state.treatmentPlan ?? [],
+      selectedDate: selectedSharedDate.value,
+      patientName: view.state.patientName ?? "",
+      birthYear: view.state.birthYear ?? "",
+      includeToday: true,
+      includeDailyTrend: true,
+      includeWearingOff: true,
+      includeWeeklyCharts: true,
+    });
+    sharingMessage.value = "Sdílený report byl otevřen k tisku.";
+  } catch (error) {
+    sharingMessage.value = `Report se nepodařilo otevřít: ${error.message}`;
   }
 }
 
@@ -2724,6 +2785,9 @@ function syncFloatingMenuHeight() {
                 <button class="utility-menu-item" type="button" role="menuitem" @click="handleUtilityAction(() => selectPanel('sekce-sdileni'))">
                   Sdílení dat
                 </button>
+                <button class="utility-menu-item desktop-only" type="button" role="menuitem" @click="handleUtilityAction(() => selectPanel('sekce-kartoteka'))">
+                  Sdílená kartotéka
+                </button>
                 <button v-if="adminStatus" class="utility-menu-item" type="button" role="menuitem" @click="handleUtilityAction(() => selectPanel('sekce-admin'))">
                   Administrace cloudu
                 </button>
@@ -2872,7 +2936,7 @@ function syncFloatingMenuHeight() {
               <p class="section-kicker">Sdílení dat</p>
               <h2>Přístup k deníkům</h2>
             </div>
-            <button class="ghost-button" type="button" :disabled="isSharingBusy" @click="refreshDiaryShares">
+            <button class="ghost-button" type="button" :disabled="isSharingBusy" @click="refreshDiaryShares(false)">
               {{ isSharingBusy ? "Načítám…" : "Obnovit" }}
             </button>
           </div>
@@ -2902,34 +2966,82 @@ function syncFloatingMenuHeight() {
               <p v-else class="panel-tip">Váš deník nyní s nikým nesdílíte.</p>
             </section>
 
-            <section class="sync-settings-card">
-              <h3>Deníky sdílené se mnou</h3>
-              <div v-if="sharedDiaryViews.length" class="shared-diary-list">
-                <article v-for="view in sharedDiaryViews" :key="view.grantId" class="shared-diary-card">
-                  <div class="panel-heading">
-                    <div>
-                      <strong>{{ view.ownerName || view.ownerEmail }}</strong>
-                      <p class="panel-tip">{{ view.ownerEmail }} · revize {{ view.revision }}</p>
-                    </div>
-                  </div>
-                  <p v-if="view.error" class="form-error">Data se nepodařilo dešifrovat: {{ view.error }}</p>
-                  <template v-else-if="view.state">
-                    <p><strong>{{ view.state.patientName || "Pacient bez uvedeného jména" }}</strong><span v-if="view.state.birthYear"> · rok narození {{ view.state.birthYear }}</span></p>
-                    <p class="panel-tip">Počet dnů se záznamem: {{ Object.keys(view.state.entries || {}).length }}</p>
-                    <details class="shared-diary-details">
-                      <summary>Zobrazit denní záznamy</summary>
-                      <div v-for="(entry, date) in view.state.entries" :key="date" class="shared-day-row">
-                        <strong>{{ date }}</strong>
-                        <span>Stav: {{ entry.overallStatus || "neuveden" }} · spánek: {{ entry.sleepQuality || "neuveden" }}</span>
-                        <span v-if="entry.notes">{{ entry.notes }}</span>
-                      </div>
-                    </details>
-                  </template>
-                </article>
-              </div>
-              <p v-else class="panel-tip">Nikdo s vámi zatím deník nesdílí na tomto zařízení.</p>
-            </section>
+            <p class="panel-tip desktop-only">Cizí deníky jsou dostupné pouze na desktopu v samostatné Sdílené kartotéce.</p>
           </template>
+          <p v-if="sharingMessage" class="storage-message">{{ sharingMessage }}</p>
+        </section>
+
+        <section v-else-if="activePanelId === 'sekce-kartoteka'" class="panel panel-wide shared-records-panel desktop-only">
+          <div class="panel-heading">
+            <div>
+              <p class="section-kicker">Sdílená kartotéka</p>
+              <h2>Deníky sdílené se mnou</h2>
+            </div>
+            <button class="ghost-button" type="button" :disabled="isSharingBusy" @click="refreshDiaryShares(true)">Obnovit kartotéku</button>
+          </div>
+
+          <div v-if="sharedDiaryViews.length" class="shared-records-layout">
+            <aside class="shared-records-index" aria-label="Sdílení uživatelé">
+              <button
+                v-for="view in sharedDiaryViews"
+                :key="view.grantId"
+                class="shared-record-person"
+                :class="{ 'shared-record-person-active': view.grantId === selectedSharedView?.grantId }"
+                type="button"
+                @click="selectSharedDiary(view)"
+              >
+                <strong>{{ view.state?.patientName || view.ownerName || "Uživatel" }}</strong>
+                <span>{{ view.ownerEmail }}</span>
+                <small>{{ Object.keys(view.state?.entries || {}).length }} dnů · revize {{ view.revision }}</small>
+              </button>
+            </aside>
+
+            <div v-if="selectedSharedView" class="shared-record-content">
+              <div class="shared-record-header">
+                <div>
+                  <h3>{{ selectedSharedView.state?.patientName || selectedSharedView.ownerName || "Uživatel" }}</h3>
+                  <p class="panel-tip">{{ selectedSharedView.ownerEmail }}<span v-if="selectedSharedView.state?.birthYear"> · rok narození {{ selectedSharedView.state.birthYear }}</span></p>
+                </div>
+                <label class="shared-record-date">
+                  <span>Datum</span>
+                  <input v-model="selectedSharedDate" type="date" :max="getTodayKey()" />
+                </label>
+              </div>
+
+              <nav class="shared-record-tabs" aria-label="Funkce sdíleného deníku">
+                <button type="button" :class="{ active: selectedSharedSection === 'timeline' }" @click="selectedSharedSection = 'timeline'">Časová osa</button>
+                <button type="button" :class="{ active: selectedSharedSection === 'summary' }" @click="selectedSharedSection = 'summary'">Souhrn</button>
+                <button type="button" :class="{ active: selectedSharedSection === 'report' }" @click="selectedSharedSection = 'report'">Report pro tisk</button>
+              </nav>
+
+              <p v-if="selectedSharedView.error" class="form-error">Data se nepodařilo dešifrovat: {{ selectedSharedView.error }}</p>
+              <DailyTimeline
+                v-else-if="selectedSharedSection === 'timeline'"
+                :entries="selectedSharedView.state.entries"
+                :selected-date="selectedSharedDate"
+                :treatment-plan="selectedSharedView.state.treatmentPlan || []"
+                @select-date="selectedSharedDate = $event"
+              />
+              <DaySummary
+                v-else-if="selectedSharedSection === 'summary' && selectedSharedEntry"
+                :entry="selectedSharedEntry"
+                :entries="selectedSharedView.state.entries"
+                :selected-date="selectedSharedDate"
+              />
+              <p v-else-if="selectedSharedSection === 'summary'" class="panel-tip">Pro vybraný den není dostupný záznam.</p>
+              <section v-else class="shared-report-panel">
+                <div>
+                  <h3>Report pro lékaře</h3>
+                  <p class="panel-tip">Report vznikne pouze z dat, která s vámi tento uživatel sdílí, a otevře se v systémovém dialogu tisku.</p>
+                </div>
+                <button class="primary-button" type="button" @click="printSharedDiaryReport">Vytvořit report pro tisk</button>
+              </section>
+            </div>
+          </div>
+          <div v-else class="sync-warning-card">
+            <strong>Kartotéka je prázdná</strong>
+            <p>Žádný uživatel s vámi na tomto zařízení zatím nesdílí svůj deník.</p>
+          </div>
           <p v-if="sharingMessage" class="storage-message">{{ sharingMessage }}</p>
         </section>
 

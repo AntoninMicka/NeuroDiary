@@ -387,6 +387,95 @@ textarea {
   align-items: center;
 }
 
+.shared-records-panel,
+.shared-record-content {
+  display: grid;
+  gap: 1rem;
+}
+
+.shared-records-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.shared-records-index {
+  display: grid;
+  gap: 0.55rem;
+  position: sticky;
+  top: calc(var(--sticky-offset) + var(--floating-menu-height) + 1rem);
+}
+
+.shared-record-person {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.85rem;
+  border: 1px solid rgba(31, 41, 51, 0.1);
+  border-radius: 16px;
+  background: var(--surface-strong);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.shared-record-person span,
+.shared-record-person small {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.shared-record-person-active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(31, 122, 140, 0.12);
+}
+
+.shared-record-header,
+.shared-record-tabs,
+.shared-report-panel {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.shared-record-header h3,
+.shared-report-panel h3 {
+  margin: 0;
+}
+
+.shared-record-date {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.shared-record-tabs {
+  justify-content: flex-start;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid rgba(31, 41, 51, 0.1);
+}
+
+.shared-record-tabs button {
+  padding: 0.65rem 0.85rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.shared-record-tabs button.active {
+  background: var(--accent);
+  color: white;
+}
+
+.shared-report-panel {
+  align-items: flex-start;
+  padding: 1rem;
+  border-radius: 18px;
+  background: rgba(31, 122, 140, 0.06);
+}
+
 .shared-diary-list,
 .shared-diary-card,
 .shared-diary-details,
@@ -2204,6 +2293,9 @@ textarea {
 }
 
 @media (max-width: 860px) {
+  .desktop-only {
+    display: none !important;
+  }
   .hero,
   .panel-heading,
   .floating-menu-top {

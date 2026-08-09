@@ -863,6 +863,7 @@ def reset_state(user_id: Annotated[str, Depends(verify_trusted_device)]) -> Sync
 def list_shares(
     user: Annotated[AuthenticatedUser, Depends(verify_sharing_user)],
     x_device_id: Annotated[str | None, Header(alias="X-Device-ID")] = None,
+    includeIncoming: bool = False,
 ) -> dict[str, object]:
     if not x_device_id or not device_store.is_active(user.user_id, x_device_id):
         raise HTTPException(status_code=403, detail="Sdílení je dostupné jen z důvěryhodného zařízení.")
@@ -875,7 +876,7 @@ def list_shares(
         for row in share_store.get_outgoing(user.user_id)
     ]
     incoming = []
-    for row in share_store.get_incoming(user.user_id, x_device_id):
+    for row in share_store.get_incoming(user.user_id, x_device_id) if includeIncoming else []:
         snapshot = store.load_latest(row["owner_user_id"])
         if snapshot is None:
             continue
