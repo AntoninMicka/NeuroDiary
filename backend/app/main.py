@@ -38,6 +38,7 @@ from .models import (
     DeviceRegistrationRequestModel,
     TrustedDeviceListResponseModel,
     TrustedDeviceModel,
+    DeviceAliasRequestModel,
     DeviceKeyChallengeRequestModel,
     DeviceKeyChallengeResponseModel,
     DeviceKeyPublishRequestModel,
@@ -733,6 +734,26 @@ def list_trusted_devices(
         )
         for item in device_store.list(user_id)
     ])
+
+
+@app.patch("/api/v1/devices/{device_id}", response_model=TrustedDeviceModel)
+def rename_trusted_device(
+    device_id: str,
+    payload: DeviceAliasRequestModel,
+    user_id: Annotated[str, Depends(verify_bearer_token)],
+    x_device_id: Annotated[str | None, Header(alias="X-Device-ID")] = None,
+) -> TrustedDeviceModel:
+    if not x_device_id or not device_store.is_active(user_id, x_device_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Current device is not trusted.")
+    record = device_store.rename(user_id, device_id, payload.name)
+    if not record:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Aktivní zařízení nebylo nalezeno.")
+    audit_security(user_id, x_device_id, "device_alias_changed", targetDeviceId=device_id)
+    return TrustedDeviceModel(
+        deviceId=record.device_id, name=record.name, createdAt=record.created_at,
+        lastSeenAt=record.last_seen_at, revokedAt=record.revoked_at,
+        current=record.device_id == x_device_id, trustStatus=record.trust_status,
+    )
 
 
 @app.delete("/api/v1/devices/{device_id}", response_model=DeviceActionResponseModel)

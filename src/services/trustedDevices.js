@@ -63,6 +63,13 @@ export function revokeTrustedDevice(settings, deviceId) {
   return request(settings, `/api/v1/devices/${encodeURIComponent(deviceId)}`, { method: "DELETE" });
 }
 
+export function renameTrustedDevice(settings, deviceId, name) {
+  return request(settings, `/api/v1/devices/${encodeURIComponent(deviceId)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ name: name.trim() }),
+  });
+}
+
 export function revokeOtherTrustedDevices(settings) {
   return request(settings, "/api/v1/devices/revoke-others", { method: "POST" });
 }

@@ -106,6 +106,15 @@ class SqliteDeviceStore:
             )
             connection.commit()
 
+    def rename(self, user_id: str, device_id: str, name: str) -> DeviceRecord | None:
+        with self._connect() as connection:
+            cursor = connection.execute(
+                "UPDATE trusted_devices SET name = ? WHERE user_id = ? AND device_id = ? AND revoked_at IS NULL",
+                (name, user_id, device_id),
+            )
+            connection.commit()
+        return self.get(user_id, device_id) if cursor.rowcount == 1 else None
+
     def revoke_others(self, user_id: str, current_device_id: str) -> int:
         with self._connect() as connection:
             cursor = connection.execute(
@@ -197,6 +206,14 @@ class PostgresDeviceStore:
     def revoke(self, user_id: str, device_id: str) -> None:
         with self._connect() as connection:
             connection.execute("UPDATE trusted_devices SET revoked_at = %s WHERE user_id = %s AND device_id = %s", (datetime.now(UTC), user_id, device_id))
+
+    def rename(self, user_id: str, device_id: str, name: str) -> DeviceRecord | None:
+        with self._connect() as connection:
+            cursor = connection.execute(
+                "UPDATE trusted_devices SET name = %s WHERE user_id = %s AND device_id = %s AND revoked_at IS NULL",
+                (name, user_id, device_id),
+            )
+        return self.get(user_id, device_id) if cursor.rowcount == 1 else None
 
     def revoke_others(self, user_id: str, current_device_id: str) -> int:
         with self._connect() as connection:

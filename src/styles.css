@@ -502,10 +502,22 @@ textarea {
 }
 
 .shared-report-panel {
+  display: grid;
   align-items: flex-start;
   padding: 1rem;
   border-radius: 18px;
   background: rgba(31, 122, 140, 0.06);
+}
+
+.shared-report-options {
+  width: 100%;
+  margin: 0;
+}
+
+.shared-report-options label {
+  display: flex;
+  gap: 0.55rem;
+  align-items: flex-start;
 }
 
 .shared-diary-list,

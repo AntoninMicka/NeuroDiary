@@ -86,6 +86,7 @@ import {
   getCurrentDeviceId,
   regenerateCurrentDeviceId,
   registerCurrentDevice,
+  renameTrustedDevice,
   revokeTrustedDevice,
 } from "./services/trustedDevices.js";
 import {
@@ -1192,10 +1193,10 @@ function printSharedDiaryReport() {
       selectedDate: selectedSharedDate.value,
       patientName: view.state.patientName ?? "",
       birthYear: view.state.birthYear ?? "",
-      includeToday: true,
-      includeDailyTrend: true,
-      includeWearingOff: true,
-      includeWeeklyCharts: true,
+      includeToday: reportOptions.includeToday,
+      includeDailyTrend: reportOptions.dailyTrend,
+      includeWearingOff: reportOptions.wearingOff,
+      includeWeeklyCharts: reportOptions.weeklyCharts,
     });
     sharingMessage.value = "Sdílený report byl otevřen k tisku.";
   } catch (error) {
@@ -1996,6 +1997,18 @@ async function removeTrustedDevice(device) {
     storageMessage.value = "Zarizeni bylo odvolano.";
   } catch (error) {
     storageMessage.value = `Zarizeni se nepodarilo odvolat: ${error.message}`;
+  }
+}
+
+async function editTrustedDeviceAlias(device) {
+  const alias = globalThis.prompt("Alias zařízení", device.name);
+  if (alias === null || !alias.trim() || alias.trim() === device.name) return;
+  try {
+    await renameTrustedDevice(syncSettings, device.deviceId, alias);
+    await refreshTrustedDevices();
+    storageMessage.value = "Alias zařízení byl uložen.";
+  } catch (error) {
+    storageMessage.value = `Alias zařízení se nepodařilo uložit: ${error.message}`;
   }
 }
 
@@ -3145,6 +3158,13 @@ function syncFloatingMenuHeight() {
                   <h3>Report pro lékaře</h3>
                   <p class="panel-tip">Report vznikne pouze z dat, která s vámi tento uživatel sdílí, a otevře se v systémovém dialogu tisku.</p>
                 </div>
+                <fieldset class="contact-keyring shared-report-options">
+                  <legend>Obsah reportu</legend>
+                  <label><input v-model="reportOptions.includeToday" type="checkbox" /> Zahrnout dnešní den</label>
+                  <label><input v-model="reportOptions.dailyTrend" type="checkbox" /> Tisknout denní trend</label>
+                  <label><input v-model="reportOptions.wearingOff" type="checkbox" /> Tisknout orientační wearing-off pozorování</label>
+                  <label><input v-model="reportOptions.weeklyCharts" type="checkbox" /> Tisknout týdenní grafy</label>
+                </fieldset>
                 <button class="primary-button" type="button" @click="printSharedDiaryReport">Vytvořit report pro tisk</button>
               </section>
             </div>
@@ -3422,6 +3442,7 @@ function syncFloatingMenuHeight() {
                     · {{ device.current ? "toto zarizeni" : device.trustStatus === "pending" ? "ceka na schvaleni" : device.revokedAt ? "odvolano" : "aktivni" }}
                     · {{ device.hasVerifiedKey ? "klic overen" : "bez klice" }}
                   </span>
+                  <button class="ghost-button" type="button" @click="editTrustedDeviceAlias(device)">Přejmenovat</button>
                   <button
                     v-if="!device.current && !device.revokedAt"
                     class="ghost-button utility-menu-item-danger"

@@ -522,9 +522,13 @@ Aktualni stav:
 
 ### [pending] 6.9 Více profilů a role pečující osoby
 
-* pacient
-* rodinný příslušník / pečující
+* role `pacient`: primárně vedení vlastního deníku
+* role `rodina`: primárně kartotéka sdílejících pacientů, maximálně 5 kontaktů
+* role `doktor`: primárně kartotéka, bez omezení počtu pacientů
+* role `admin`: provozní a bezpečnostní správa aplikace
 * oddělení dat a oprávnění mezi profily
+* role nesmí samy udělit přístup ke zdravotním datům; rozhodující zůstává konkrétní přijatý a aktivní grant
+* připravit odlišnou výchozí navigaci: pacient do deníku, rodina a doktor do kartotéky
 
 ### [pending] 6.10 Sdílení s lékařem
 
