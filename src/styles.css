@@ -437,6 +437,41 @@ textarea {
   min-width: min(320px, 36vw);
 }
 
+.admin-user-search {
+  display: grid;
+  gap: 0.35rem;
+  min-width: min(300px, 34vw);
+}
+
+.admin-role-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+  margin-top: 1rem;
+}
+
+.admin-user-index,
+.admin-role-editor {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.admin-role-editor {
+  padding: 1rem;
+  border: 1px solid rgba(31, 41, 51, 0.1);
+  border-radius: 18px;
+  background: var(--surface-strong);
+}
+
+.admin-role-editor h4 {
+  margin: 0;
+}
+
+.device-role-settings {
+  margin-top: 1rem;
+}
+
 .shared-records-layout {
   display: grid;
   grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
@@ -2396,6 +2431,14 @@ textarea {
 
   .share-status-card {
     grid-template-columns: 1fr;
+  }
+
+  .admin-role-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-user-search {
+    min-width: 0;
   }
 
   .panel-switcher-pills {

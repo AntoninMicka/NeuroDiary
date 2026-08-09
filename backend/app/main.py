@@ -39,6 +39,8 @@ from .models import (
     TrustedDeviceListResponseModel,
     TrustedDeviceModel,
     DeviceAliasRequestModel,
+    UserRolesUpdateModel,
+    DeviceActiveRolesUpdateModel,
     DeviceKeyChallengeRequestModel,
     DeviceKeyChallengeResponseModel,
     DeviceKeyPublishRequestModel,
@@ -88,6 +90,12 @@ ADMIN_EMAILS = {
     email.strip().lower()
     for email in os.getenv("NEURODIARY_ADMIN_EMAILS", "").split(",")
     if email.strip()
+}
+ROLE_DEFINITIONS = {
+    "patient": {"label": "Pacient", "primaryView": "diary", "contactLimit": None},
+    "family": {"label": "Rodinný příslušník", "primaryView": "records", "contactLimit": 5},
+    "doctor": {"label": "Lékař", "primaryView": "records", "contactLimit": None},
+    "admin": {"label": "Administrátor", "primaryView": "admin", "contactLimit": None},
 }
 
 store = create_sync_store(database_url=DATABASE_URL or None, database_path=DATABASE_PATH)
@@ -184,7 +192,11 @@ def verify_admin(
     authorization: Annotated[str | None, Header()] = None,
 ) -> AuthenticatedUser:
     user = auth_manager.resolve_authenticated_user(authorization)
-    if not user.email or user.email.lower() not in ADMIN_EMAILS:
+    if user.email:
+        share_store.register_identity(user.user_id, user.email, user.name)
+    if user.email and user.email.lower() in ADMIN_EMAILS:
+        share_store.add_role(user.user_id, "admin")
+    elif not share_store.has_role(user.user_id, "admin"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Administrátorský přístup byl zamítnut.")
     return user
 
@@ -214,6 +226,8 @@ def verify_sharing_user(
     if not user.email:
         raise HTTPException(status_code=403, detail="Sdílení vyžaduje účet s ověřeným e-mailem.")
     share_store.register_identity(user.user_id, user.email, user.name)
+    if user.email.lower() in ADMIN_EMAILS:
+        share_store.add_role(user.user_id, "admin")
     return user
 
 
@@ -268,7 +282,7 @@ def admin_status(admin: Annotated[AuthenticatedUser, Depends(verify_admin)]) -> 
             "storage": "postgres" if DATABASE_URL else "sqlite",
             "gmailEnabled": auth_manager.google_enabled,
             "adminCount": len(ADMIN_EMAILS),
-            "schemaVersion": "1",
+            "schemaVersion": "2",
         },
         "cloud": cloud_admin_service.get_status(),
         "gmail": {
@@ -280,6 +294,57 @@ def admin_status(admin: Annotated[AuthenticatedUser, Depends(verify_admin)]) -> 
             "recipient": os.getenv("NEURODIARY_ADMIN_ALERT_EMAIL", "").strip(),
         },
     }
+
+
+@app.get("/api/v1/admin/users")
+def admin_list_users(admin: Annotated[AuthenticatedUser, Depends(verify_admin)]) -> dict[str, object]:
+    return {"roles": ROLE_DEFINITIONS, "users": [
+        {
+            "userId": item["user_id"], "email": item["email"], "name": item["display_name"],
+            "roles": item["roles"], "updatedAt": item["updated_at"],
+        }
+        for item in share_store.list_users()
+    ]}
+
+
+@app.patch("/api/v1/admin/users/{target_user_id}/roles")
+def admin_update_user_roles(
+    target_user_id: str,
+    payload: UserRolesUpdateModel,
+    admin: Annotated[AuthenticatedUser, Depends(verify_admin)],
+) -> dict[str, object]:
+    roles = list(dict.fromkeys(payload.roles))
+    if not share_store.set_roles(target_user_id, roles):
+        raise HTTPException(status_code=404, detail="Uživatelský účet nebyl nalezen.")
+    audit_security(admin.user_id, "admin-console", "account_roles_changed", targetUserId=target_user_id, roles=roles)
+    return {"status": "ok", "userId": target_user_id, "roles": roles}
+
+
+@app.get("/api/v1/roles")
+def get_current_roles(
+    user: Annotated[AuthenticatedUser, Depends(verify_sharing_user)],
+    x_device_id: Annotated[str | None, Header(alias="X-Device-ID")] = None,
+) -> dict[str, object]:
+    if not x_device_id or not device_store.is_active(user.user_id, x_device_id):
+        raise HTTPException(status_code=403, detail="Role zařízení jsou dostupné jen z důvěryhodného zařízení.")
+    assigned = share_store.get_roles(user.user_id)
+    return {"assignedRoles": assigned, "activeRoles": share_store.get_active_roles(user.user_id, x_device_id), "definitions": ROLE_DEFINITIONS}
+
+
+@app.put("/api/v1/roles/active")
+def update_current_device_roles(
+    payload: DeviceActiveRolesUpdateModel,
+    user: Annotated[AuthenticatedUser, Depends(verify_sharing_user)],
+    x_device_id: Annotated[str | None, Header(alias="X-Device-ID")] = None,
+) -> dict[str, object]:
+    if not x_device_id or not device_store.is_active(user.user_id, x_device_id):
+        raise HTTPException(status_code=403, detail="Role zařízení lze změnit jen z důvěryhodného zařízení.")
+    assigned = set(share_store.get_roles(user.user_id))
+    if not set(payload.roles).issubset(assigned):
+        raise HTTPException(status_code=403, detail="Zařízení nemůže aktivovat roli, která účtu nebyla přidělena.")
+    share_store.set_active_roles(user.user_id, x_device_id, list(payload.roles))
+    audit_security(user.user_id, x_device_id, "device_active_roles_changed", roles=list(payload.roles))
+    return {"status": "ok", "assignedRoles": sorted(assigned), "activeRoles": list(payload.roles)}
 
 
 @app.post("/api/v1/admin/backups")

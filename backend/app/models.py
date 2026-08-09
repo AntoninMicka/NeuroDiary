@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 
 
 HourStateKey = Literal["dyskinesia", "on", "partial", "off", "sleep"]
+UserRoleKey = Literal["patient", "family", "doctor", "admin"]
 SleepQualityKey = Literal["poor", "mixed", "good"]
 OverallStatusKey = Literal["hard", "stable", "good"]
 
@@ -228,6 +229,28 @@ class DeviceAliasRequestModel(BaseModel):
         if not normalized:
             raise ValueError("Device alias must not be empty.")
         return normalized
+
+
+class UserRolesUpdateModel(BaseModel):
+    roles: list[UserRoleKey] = Field(min_length=1, max_length=4)
+
+    @field_validator("roles")
+    @classmethod
+    def unique_roles(cls, value: list[str]) -> list[str]:
+        if len(value) != len(set(value)):
+            raise ValueError("Roles must be unique.")
+        return value
+
+
+class DeviceActiveRolesUpdateModel(BaseModel):
+    roles: list[UserRoleKey] = Field(min_length=1, max_length=4)
+
+    @field_validator("roles")
+    @classmethod
+    def unique_active_roles(cls, value: list[str]) -> list[str]:
+        if len(value) != len(set(value)):
+            raise ValueError("Active roles must be unique.")
+        return value
 
 
 class DeviceActionResponseModel(BaseModel):

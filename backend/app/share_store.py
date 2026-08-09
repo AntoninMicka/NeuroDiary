@@ -61,6 +61,25 @@ class ShareStore:
                   expires_at {timestamp} NOT NULL, grant_id TEXT
                 )
             """)
+            connection.execute("""
+                CREATE TABLE IF NOT EXISTS account_roles (
+                  user_id TEXT NOT NULL, role TEXT NOT NULL,
+                  PRIMARY KEY (user_id, role)
+                )
+            """)
+            connection.execute("""
+                CREATE TABLE IF NOT EXISTS device_active_roles (
+                  user_id TEXT NOT NULL, device_id TEXT NOT NULL, role TEXT NOT NULL,
+                  PRIMARY KEY (user_id, device_id, role)
+                )
+            """)
+            connection.execute("""
+                INSERT INTO account_roles (user_id, role)
+                SELECT identities.user_id, 'patient' FROM share_identities identities
+                WHERE NOT EXISTS (
+                  SELECT 1 FROM account_roles roles WHERE roles.user_id = identities.user_id
+                )
+            """)
             connection.execute(
                 "CREATE INDEX IF NOT EXISTS idx_share_invitation_owner ON diary_share_invitations(owner_user_id, created_at)"
             )
@@ -81,11 +100,92 @@ class ShareStore:
                 ON CONFLICT(user_id) DO UPDATE SET email = excluded.email,
                   display_name = excluded.display_name, updated_at = excluded.updated_at
             """, (user_id, email.strip().lower(), name, now if self.postgres else now.isoformat()))
+            has_roles = connection.execute(
+                f"SELECT 1 FROM account_roles WHERE user_id = {placeholder} LIMIT 1", (user_id,),
+            ).fetchone()
+            if not has_roles:
+                connection.execute(f"""
+                    INSERT INTO account_roles (user_id, role) VALUES ({placeholder}, 'patient')
+                    ON CONFLICT(user_id, role) DO NOTHING
+                """, (user_id,))
             connection.execute(f"""
                 UPDATE diary_share_invitations SET recipient_user_id = {placeholder}, updated_at = {placeholder}
                 WHERE recipient_email = {placeholder} AND recipient_user_id IS NULL
                   AND status IN ('pending', 'accepted')
             """, (user_id, now if self.postgres else now.isoformat(), email.strip().lower()))
+            connection.commit()
+
+    def get_roles(self, user_id: str) -> list[str]:
+        p = "%s" if self.postgres else "?"
+        with self.connect() as connection:
+            rows = connection.execute(
+                f"SELECT role FROM account_roles WHERE user_id = {p} ORDER BY role", (user_id,),
+            ).fetchall()
+        return [row["role"] for row in rows]
+
+    def has_role(self, user_id: str, role: str) -> bool:
+        return role in self.get_roles(user_id)
+
+    def add_role(self, user_id: str, role: str) -> None:
+        p = "%s" if self.postgres else "?"
+        with self.connect() as connection:
+            connection.execute(f"""
+                INSERT INTO account_roles (user_id, role) VALUES ({p}, {p})
+                ON CONFLICT(user_id, role) DO NOTHING
+            """, (user_id, role))
+            connection.commit()
+
+    def set_roles(self, user_id: str, roles: list[str]) -> bool:
+        p = "%s" if self.postgres else "?"
+        with self.connect() as connection:
+            exists = connection.execute(
+                f"SELECT 1 FROM share_identities WHERE user_id = {p}", (user_id,),
+            ).fetchone()
+            if not exists:
+                return False
+            connection.execute(f"DELETE FROM account_roles WHERE user_id = {p}", (user_id,))
+            for role in roles:
+                connection.execute(
+                    f"INSERT INTO account_roles (user_id, role) VALUES ({p}, {p})", (user_id, role),
+                )
+            # Device preferences may only contain roles still assigned to the account.
+            if roles:
+                placeholders = ", ".join([p] * len(roles))
+                connection.execute(
+                    f"DELETE FROM device_active_roles WHERE user_id = {p} AND role NOT IN ({placeholders})",
+                    (user_id, *roles),
+                )
+            else:
+                connection.execute(f"DELETE FROM device_active_roles WHERE user_id = {p}", (user_id,))
+            connection.commit()
+        return True
+
+    def list_users(self):
+        with self.connect() as connection:
+            rows = connection.execute(
+                "SELECT user_id, email, display_name, updated_at FROM share_identities ORDER BY display_name, email"
+            ).fetchall()
+        return [{**dict(row), "roles": self.get_roles(row["user_id"])} for row in rows]
+
+    def get_active_roles(self, user_id: str, device_id: str) -> list[str]:
+        p = "%s" if self.postgres else "?"
+        with self.connect() as connection:
+            rows = connection.execute(f"""
+                SELECT role FROM device_active_roles WHERE user_id = {p} AND device_id = {p} ORDER BY role
+            """, (user_id, device_id)).fetchall()
+        return [row["role"] for row in rows] or self.get_roles(user_id)
+
+    def set_active_roles(self, user_id: str, device_id: str, roles: list[str]) -> None:
+        p = "%s" if self.postgres else "?"
+        with self.connect() as connection:
+            connection.execute(
+                f"DELETE FROM device_active_roles WHERE user_id = {p} AND device_id = {p}", (user_id, device_id),
+            )
+            for role in roles:
+                connection.execute(
+                    f"INSERT INTO device_active_roles (user_id, device_id, role) VALUES ({p}, {p}, {p})",
+                    (user_id, device_id, role),
+                )
             connection.commit()
 
     def find_identity(self, email: str):

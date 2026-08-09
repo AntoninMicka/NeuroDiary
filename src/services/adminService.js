@@ -39,3 +39,14 @@ export function createCloudBackup() {
 export function deleteCloudBackup(backupId) {
   return request(`/api/v1/admin/backups/${encodeURIComponent(backupId)}?confirm=true`, { method: "DELETE" });
 }
+
+export function fetchAdminUsers() {
+  return request("/api/v1/admin/users");
+}
+
+export function updateAdminUserRoles(userId, roles) {
+  return request(`/api/v1/admin/users/${encodeURIComponent(userId)}/roles`, {
+    method: "PATCH",
+    body: JSON.stringify({ roles }),
+  });
+}

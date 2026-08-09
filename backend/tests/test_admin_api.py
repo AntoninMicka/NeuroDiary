@@ -4,6 +4,7 @@ import pytest
 from fastapi import HTTPException
 
 from backend.app.auth import AuthenticatedUser
+from backend.app.models import DeviceActiveRolesUpdateModel, UserRolesUpdateModel
 
 
 def load_app(monkeypatch, tmp_path):
@@ -56,3 +57,40 @@ def test_admin_status_does_not_expose_secrets(monkeypatch, tmp_path):
     assert result["application"]["adminCount"] == 1
     assert "accessToken" not in str(result)
     assert "admin-test-secret" not in str(result)
+
+
+def test_admin_can_assign_multiple_roles_but_regular_user_cannot(monkeypatch, tmp_path):
+    main = load_app(monkeypatch, tmp_path)
+    admin = main.verify_admin(session_header(main, "admin@example.cz"))
+    patient_id = "google:patient@example.cz"
+    main.share_store.register_identity(patient_id, "patient@example.cz", "Patient")
+
+    updated = main.admin_update_user_roles(
+        patient_id, UserRolesUpdateModel(roles=["patient", "family", "doctor"]), admin,
+    )
+    users = main.admin_list_users(admin)
+    patient = next(item for item in users["users"] if item["userId"] == patient_id)
+    assert updated["roles"] == ["patient", "family", "doctor"]
+    assert patient["roles"] == ["doctor", "family", "patient"]
+    assert users["roles"]["family"]["contactLimit"] == 5
+
+    with pytest.raises(HTTPException) as denied:
+        main.verify_admin(session_header(main, "patient@example.cz"))
+    assert denied.value.status_code == 403
+
+
+def test_device_can_activate_only_roles_assigned_to_its_account(monkeypatch, tmp_path):
+    main = load_app(monkeypatch, tmp_path)
+    account = AuthenticatedUser(provider="google", user_id="google:multi", email="multi@example.cz", name="Multi")
+    device_id = "device-roles-0001"
+    main.share_store.register_identity(account.user_id, account.email, account.name)
+    main.share_store.set_roles(account.user_id, ["patient", "doctor"])
+    main.device_store.upsert(account.user_id, device_id, "Notebook")
+
+    result = main.update_current_device_roles(DeviceActiveRolesUpdateModel(roles=["doctor"]), account, device_id)
+    assert result["activeRoles"] == ["doctor"]
+    assert main.get_current_roles(account, device_id)["activeRoles"] == ["doctor"]
+
+    with pytest.raises(HTTPException) as denied:
+        main.update_current_device_roles(DeviceActiveRolesUpdateModel(roles=["admin"]), account, device_id)
+    assert denied.value.status_code == 403

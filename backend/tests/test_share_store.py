@@ -71,3 +71,22 @@ def test_invitation_cannot_be_accepted_by_another_email(tmp_path):
         invitation_id, "attacker-c", "attacker@example.test", "attacker-device-1", True,
     ) is False
     assert store.list_outgoing_invitations("owner-a")[0]["status"] == "pending"
+
+
+def test_account_roles_and_device_active_roles_are_separate(tmp_path):
+    store = ShareStore(str(tmp_path / "shares.db"))
+    store.initialize()
+    store.register_identity("multi-role", "roles@example.test", "Role User")
+    assert store.get_roles("multi-role") == ["patient"]
+
+    assert store.set_roles("multi-role", ["patient", "doctor"]) is True
+    store.set_active_roles("multi-role", "device-1", ["doctor"])
+    store.set_active_roles("multi-role", "device-2", ["patient"])
+    assert store.get_active_roles("multi-role", "device-1") == ["doctor"]
+    assert store.get_active_roles("multi-role", "device-2") == ["patient"]
+
+    # Re-registering the identity must not silently restore a role removed by an administrator.
+    store.set_roles("multi-role", ["doctor"])
+    store.register_identity("multi-role", "roles@example.test", "Role User")
+    assert store.get_roles("multi-role") == ["doctor"]
+    assert store.get_active_roles("multi-role", "device-2") == ["doctor"]

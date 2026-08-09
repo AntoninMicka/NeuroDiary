@@ -106,7 +106,8 @@ import {
   respondToDiaryShareInvitation,
   revokeDiaryShare,
 } from "./services/diarySharing.js";
-import { createCloudBackup, deleteCloudBackup, fetchAdminStatus } from "./services/adminService.js";
+import { createCloudBackup, deleteCloudBackup, fetchAdminStatus, fetchAdminUsers, updateAdminUserRoles } from "./services/adminService.js";
+import { fetchCurrentRoles, updateCurrentDeviceRoles } from "./services/roleService.js";
 import { generateRecoverySecret } from "./services/e2eCrypto.js";
 import {
   deleteContact,
@@ -242,8 +243,14 @@ const sharedRecordsSearch = ref("");
 const isSharingBusy = ref(false);
 const sharingMessage = ref("");
 const adminStatus = ref(null);
+const adminUsers = ref([]);
+const adminRoleDefinitions = ref({});
+const selectedAdminUserId = ref("");
+const adminUserSearch = ref("");
+const adminRoleDraft = ref([]);
 const adminError = ref("");
 const isAdminBusy = ref(false);
+const accountRoles = reactive({ assignedRoles: [], activeRoles: [], definitions: {} });
 const trustedDevices = ref([]);
 const pendingDeviceKeyRequests = ref([]);
 const rotationTargetDeviceIds = ref([]);
@@ -324,6 +331,15 @@ const legacyOutgoingShares = computed(() => {
   const linkedGrantIds = new Set(diaryShares.outgoingInvitations.map((item) => item.grantId).filter(Boolean));
   return diaryShares.outgoing.filter((item) => !linkedGrantIds.has(item.grantId));
 });
+const filteredAdminUsers = computed(() => {
+  const query = adminUserSearch.value.trim().toLocaleLowerCase("cs");
+  if (!query) return adminUsers.value;
+  return adminUsers.value.filter((user) => [user.name, user.email, user.userId]
+    .some((value) => String(value ?? "").toLocaleLowerCase("cs").includes(query)));
+});
+const selectedAdminUser = computed(() =>
+  adminUsers.value.find((user) => user.userId === selectedAdminUserId.value) ?? null,
+);
 const selectedDateLabel = computed(() => formatLongDate(state.selectedDate));
 const sortedMedications = computed(() =>
   [...(selectedEntry.value?.medications ?? [])].sort((left, right) => left.time.localeCompare(right.time)),
@@ -644,6 +660,7 @@ onMounted(async () => {
     void refreshWebPushRegistration();
   }
   await tryAutoRecoverLocalSyncKey();
+  if (authSession.value?.user && hasSyncIdentity.value) void refreshAccountRoles();
   if (authSession.value?.user && hasSyncIdentity.value) void refreshDiaryShares(false);
   if (isQuickSyncAvailable.value) {
     automaticSyncScheduler.schedule(0);
@@ -2127,14 +2144,59 @@ async function refreshAdminConsole({ silent = false } = {}) {
   }
   isAdminBusy.value = true;
   try {
-    adminStatus.value = await fetchAdminStatus();
+    const [statusResult, usersResult] = await Promise.all([fetchAdminStatus(), fetchAdminUsers()]);
+    adminStatus.value = statusResult;
+    adminUsers.value = usersResult.users ?? [];
+    adminRoleDefinitions.value = usersResult.roles ?? {};
+    if (!adminUsers.value.some((user) => user.userId === selectedAdminUserId.value)) {
+      selectAdminUser(adminUsers.value[0] ?? null);
+    }
     adminError.value = "";
   } catch (error) {
     adminStatus.value = null;
+    adminUsers.value = [];
     adminError.value = error.status === 403 ? "" : error.message;
     if (!silent && error.status !== 403) storageMessage.value = error.message;
   } finally {
     isAdminBusy.value = false;
+  }
+}
+
+function selectAdminUser(user) {
+  selectedAdminUserId.value = user?.userId ?? "";
+  adminRoleDraft.value = [...(user?.roles ?? [])];
+}
+
+async function saveAdminUserRoles() {
+  if (!selectedAdminUser.value || !adminRoleDraft.value.length) return;
+  isAdminBusy.value = true;
+  try {
+    await updateAdminUserRoles(selectedAdminUser.value.userId, adminRoleDraft.value);
+    await refreshAdminConsole({ silent: true });
+    storageMessage.value = "Role uživatele byly uloženy.";
+  } catch (error) {
+    adminError.value = error.message;
+  } finally {
+    isAdminBusy.value = false;
+  }
+}
+
+async function refreshAccountRoles() {
+  if (!authSession.value?.user || !hasSyncIdentity.value) return;
+  try {
+    Object.assign(accountRoles, await fetchCurrentRoles());
+  } catch (error) {
+    console.error("Role refresh failed", error);
+  }
+}
+
+async function saveCurrentDeviceRoles() {
+  if (!accountRoles.activeRoles.length) return;
+  try {
+    Object.assign(accountRoles, await updateCurrentDeviceRoles(accountRoles.activeRoles));
+    storageMessage.value = "Aktivní role tohoto zařízení byly uloženy.";
+  } catch (error) {
+    storageMessage.value = error.message;
   }
 }
 
@@ -3438,6 +3500,15 @@ function syncFloatingMenuHeight() {
                   Registrovat jako nové zařízení
                 </button>
               </div>
+              <fieldset v-if="accountRoles.assignedRoles.length" class="contact-keyring device-role-settings">
+                <legend>Aktivní role na tomto zařízení</legend>
+                <label v-for="role in accountRoles.assignedRoles" :key="`active-role-${role}`">
+                  <input v-model="accountRoles.activeRoles" type="checkbox" :value="role" />
+                  {{ accountRoles.definitions?.[role]?.label || role }}
+                </label>
+                <p class="panel-tip">Volba ovlivňuje režim UI pouze tohoto zařízení. Nemůže přidat roli, kterou účet nemá.</p>
+                <button class="ghost-button" type="button" :disabled="!accountRoles.activeRoles.length" @click="saveCurrentDeviceRoles">Uložit aktivní role</button>
+              </fieldset>
               <div v-if="identityKeyMigration?.enabled" class="private-key-warning">
                 <strong>Docasna migrace identitnich klicu je aktivni</strong>
                 <span>Registrovaná zarizeni mohou po prokazani vlastnictvi sveho soukromeho klice aktualizovat identitni klic a stat se duveryhodnymi. Cizi deviceId ani klic bez dukazu server neprijme.</span>
@@ -3570,6 +3641,53 @@ function syncFloatingMenuHeight() {
               <strong>Upozornění</strong>
               <ul><li v-for="warning in adminStatus.warnings" :key="warning">{{ warning }}</li></ul>
             </div>
+
+            <section class="sync-settings-card">
+              <div class="panel-heading sync-settings-heading">
+                <div>
+                  <h3>Uživatelé a role</h3>
+                  <p class="panel-tip">Účet může mít více rolí. Aktivní role si následně volí samostatně na každém důvěryhodném zařízení.</p>
+                </div>
+                <label class="admin-user-search">
+                  <span>Vyhledat uživatele</span>
+                  <input v-model="adminUserSearch" type="search" placeholder="Jméno, e-mail nebo ID" />
+                </label>
+              </div>
+
+              <div v-if="adminUsers.length" class="admin-role-layout">
+                <aside class="admin-user-index" aria-label="Uživatelé">
+                  <button
+                    v-for="user in filteredAdminUsers"
+                    :key="user.userId"
+                    class="shared-record-person"
+                    :class="{ 'shared-record-person-active': user.userId === selectedAdminUserId }"
+                    type="button"
+                    @click="selectAdminUser(user)"
+                  >
+                    <strong>{{ user.name || user.email }}</strong>
+                    <span>{{ user.email }}</span>
+                    <small>{{ user.roles.map((role) => adminRoleDefinitions[role]?.label || role).join(' · ') }}</small>
+                  </button>
+                  <p v-if="!filteredAdminUsers.length" class="panel-tip">Vyhledávání neodpovídá žádnému účtu.</p>
+                </aside>
+
+                <div v-if="selectedAdminUser" class="admin-role-editor">
+                  <div>
+                    <h4>{{ selectedAdminUser.name || selectedAdminUser.email }}</h4>
+                    <p class="panel-tip">{{ selectedAdminUser.email }} · {{ selectedAdminUser.userId }}</p>
+                  </div>
+                  <fieldset class="contact-keyring">
+                    <legend>Přidělené role</legend>
+                    <label v-for="(definition, role) in adminRoleDefinitions" :key="role">
+                      <input v-model="adminRoleDraft" type="checkbox" :value="role" />
+                      <span><strong>{{ definition.label }}</strong> · výchozí režim {{ definition.primaryView === 'diary' ? 'deník' : definition.primaryView === 'records' ? 'kartotéka' : 'administrace' }}<template v-if="definition.contactLimit"> · limit {{ definition.contactLimit }} kontaktů</template></span>
+                    </label>
+                  </fieldset>
+                  <button class="primary-button" type="button" :disabled="isAdminBusy || !adminRoleDraft.length" @click="saveAdminUserRoles">Uložit role</button>
+                </div>
+              </div>
+              <p v-else class="panel-tip">Zatím nejsou evidované žádné uživatelské účty.</p>
+            </section>
 
             <section class="sync-settings-card">
               <div class="panel-heading sync-settings-heading">
