@@ -548,7 +548,7 @@ Aktualni stav:
 * přidat komentář lékaře a důvod změny, možnost pacienta vrátit návrh s komentářem a verzovanou historii komunikace
 * zavést jemná oprávnění sdílení zvlášť pro denní záznamy, léčebný plán, reporty a navrhování změn, včetně časového omezení přístupu
 * vytvořit pacientsky čitelnou auditní historii zobrazení plánu, návrhů, rozhodnutí, zařízení a následné synchronizace
-* doplnit automatizovaný end-to-end scénář: sdílení deníku → dávkový návrh lékaře → porovnání pacientem → schválení → synchronizace plánu
+* [done] automatizovaný integrační scénář: sdílení deníku → dávkový návrh lékaře → schválení pacientem → synchronizace plánu → aktualizovaný snapshot v kartotéce; frontendové porovnání změn je kryté samostatným testem
 
 ### [pending] 6.10 Sdílení s lékařem
 
