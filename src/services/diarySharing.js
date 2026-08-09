@@ -26,14 +26,30 @@ export function fetchDiaryShares(settings, includeIncoming = false) {
 }
 
 export async function createDiaryShare(settings, recipientEmail) {
+  return request(settings, "/api/v1/share-invitations", {
+    method: "POST",
+    body: JSON.stringify({ recipientEmail: recipientEmail.trim() }),
+  });
+}
+
+export function respondToDiaryShareInvitation(settings, invitationId, accept) {
+  return request(settings, `/api/v1/share-invitations/${encodeURIComponent(invitationId)}/respond`, {
+    method: "POST", body: JSON.stringify({ accept }),
+  });
+}
+
+export async function activateDiaryShareInvitation(settings, invitationId) {
   const material = loadSyncKeyMaterial();
   if (!material.exportedMasterKey) throw new Error("Nejprve inicializujte šifrovanou cloudovou synchronizaci.");
-  const target = await request(settings, `/api/v1/shares/recipient-key?email=${encodeURIComponent(recipientEmail.trim())}`);
+  const target = await request(settings, `/api/v1/share-invitations/${encodeURIComponent(invitationId)}/recipient-key`);
   const keyEnvelope = await encryptMasterKeyForDevice(material.exportedMasterKey, target);
-  return request(settings, "/api/v1/shares", {
-    method: "POST",
-    body: JSON.stringify({ recipientEmail: recipientEmail.trim(), recipientDeviceId: target.deviceId, keyVersion: material.keyVersion, keyEnvelope }),
+  return request(settings, `/api/v1/share-invitations/${encodeURIComponent(invitationId)}/activate`, {
+    method: "POST", body: JSON.stringify({ keyVersion: material.keyVersion, keyEnvelope }),
   });
+}
+
+export function cancelDiaryShareInvitation(settings, invitationId) {
+  return request(settings, `/api/v1/share-invitations/${encodeURIComponent(invitationId)}`, { method: "DELETE" });
 }
 
 export function revokeDiaryShare(settings, grantId) {

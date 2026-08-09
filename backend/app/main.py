@@ -54,6 +54,9 @@ from .models import (
     SyncRotationRequestModel,
     IdentityKeyMigrationModel,
     ShareGrantRequestModel,
+    ShareInvitationRequestModel,
+    ShareInvitationResponseModel,
+    ShareInvitationActivationModel,
 )
 from .device_store import create_device_store
 from .key_exchange_store import create_key_exchange_store
@@ -428,6 +431,7 @@ def exchange_identity_token(payload: IdentityExchangeRequestModel) -> AuthSessio
         nonce=payload.nonce or None,
         profile=payload.profile.model_dump() if payload.profile else None,
     )
+    share_store.register_identity(user.user_id, user.email, user.name)
     return AuthSessionResponseModel(
         accessToken=access_token,
         expiresAt=expires_at,
@@ -886,7 +890,119 @@ def list_shares(
             "payload": snapshot.payload.model_dump(mode="json"), "keyVersion": row["key_version"],
             "keyEnvelope": json.loads(row["key_envelope_json"]),
         })
-    return {"currentUser": {"email": user.email, "name": user.name}, "outgoing": outgoing, "incoming": incoming}
+    outgoing_invitations = [
+        {
+            "invitationId": row["invitation_id"], "recipientEmail": row["recipient_email"],
+            "status": row["status"], "createdAt": row["created_at"], "updatedAt": row["updated_at"],
+            "expiresAt": row["expires_at"], "grantId": row["grant_id"],
+        }
+        for row in share_store.list_outgoing_invitations(user.user_id)
+    ]
+    incoming_invitations = [
+        {
+            "invitationId": row["invitation_id"], "ownerEmail": row["owner_email"],
+            "ownerName": row["owner_name"], "status": row["status"],
+            "createdAt": row["created_at"], "updatedAt": row["updated_at"], "expiresAt": row["expires_at"],
+        }
+        for row in share_store.list_incoming_invitations(user.user_id, user.email.strip().lower())
+    ]
+    return {
+        "currentUser": {"email": user.email, "name": user.name},
+        "outgoing": outgoing, "incoming": incoming,
+        "outgoingInvitations": outgoing_invitations, "incomingInvitations": incoming_invitations,
+    }
+
+
+@app.post("/api/v1/share-invitations")
+def create_share_invitation(
+    payload: ShareInvitationRequestModel,
+    user: Annotated[AuthenticatedUser, Depends(verify_sharing_user)],
+    x_device_id: Annotated[str | None, Header(alias="X-Device-ID")] = None,
+) -> dict[str, str]:
+    if not x_device_id or not device_store.is_active(user.user_id, x_device_id):
+        raise HTTPException(status_code=403, detail="Pozvánku lze vytvořit jen z důvěryhodného zařízení.")
+    if payload.recipientEmail == user.email.strip().lower():
+        raise HTTPException(status_code=400, detail="Deník nelze sdílet s vlastním účtem.")
+    recipient = share_store.find_identity(payload.recipientEmail)
+    invitation_id = share_store.create_invitation(
+        user.user_id, payload.recipientEmail, recipient["user_id"] if recipient else None,
+    )
+    audit_security(user.user_id, x_device_id, "diary_share_invitation_created", invitationId=invitation_id)
+    # The response intentionally does not reveal whether the e-mail already has an account.
+    return {"status": "pending", "invitationId": invitation_id}
+
+
+@app.post("/api/v1/share-invitations/{invitation_id}/respond")
+def respond_to_share_invitation(
+    invitation_id: str,
+    payload: ShareInvitationResponseModel,
+    user: Annotated[AuthenticatedUser, Depends(verify_sharing_user)],
+    x_device_id: Annotated[str | None, Header(alias="X-Device-ID")] = None,
+) -> dict[str, str]:
+    if not x_device_id or not device_store.is_active(user.user_id, x_device_id):
+        raise HTTPException(status_code=403, detail="Na pozvánku lze odpovědět jen z důvěryhodného zařízení.")
+    if payload.accept and not key_exchange_store.get_key(user.user_id, x_device_id):
+        raise HTTPException(status_code=409, detail="Nejprve je nutné publikovat ověřený klíč tohoto zařízení.")
+    if not share_store.respond_to_invitation(
+        invitation_id, user.user_id, user.email.strip().lower(), x_device_id, payload.accept,
+    ):
+        raise HTTPException(status_code=404, detail="Aktivní pozvánka nebyla nalezena.")
+    next_status = "accepted" if payload.accept else "declined"
+    audit_security(user.user_id, x_device_id, f"diary_share_invitation_{next_status}", invitationId=invitation_id)
+    return {"status": next_status}
+
+
+@app.get("/api/v1/share-invitations/{invitation_id}/recipient-key")
+def get_invitation_recipient_key(
+    invitation_id: str,
+    user: Annotated[AuthenticatedUser, Depends(verify_sharing_user)],
+) -> dict[str, object]:
+    invitation = share_store.get_invitation_for_owner(user.user_id, invitation_id)
+    if not invitation or invitation["status"] != "accepted" or not invitation["recipient_user_id"] or not invitation["recipient_device_id"]:
+        raise HTTPException(status_code=409, detail="Pozvánka zatím nebyla přijata.")
+    key = key_exchange_store.get_key(invitation["recipient_user_id"], invitation["recipient_device_id"])
+    if not key or not device_store.is_active(invitation["recipient_user_id"], invitation["recipient_device_id"]):
+        raise HTTPException(status_code=409, detail="Přijímající zařízení už není důvěryhodné.")
+    return {"deviceId": key.device_id, "publicKeyJwk": json.loads(key.public_key_jwk), "fingerprint": key.fingerprint}
+
+
+@app.post("/api/v1/share-invitations/{invitation_id}/activate")
+def activate_share_invitation(
+    invitation_id: str,
+    payload: ShareInvitationActivationModel,
+    user: Annotated[AuthenticatedUser, Depends(verify_sharing_user)],
+    x_device_id: Annotated[str | None, Header(alias="X-Device-ID")] = None,
+) -> dict[str, str]:
+    if not x_device_id or not device_store.is_active(user.user_id, x_device_id):
+        raise HTTPException(status_code=403, detail="Sdílení lze aktivovat jen z důvěryhodného zařízení.")
+    invitation = share_store.get_invitation_for_owner(user.user_id, invitation_id)
+    if not invitation or invitation["status"] != "accepted":
+        raise HTTPException(status_code=409, detail="Pozvánka není připravena k aktivaci.")
+    target_key = key_exchange_store.get_key(invitation["recipient_user_id"], invitation["recipient_device_id"])
+    if not target_key or payload.keyEnvelope.targetFingerprint != target_key.fingerprint:
+        raise HTTPException(status_code=400, detail="Obálka klíče nepatří přijímajícímu zařízení.")
+    grant_id = share_store.save_grant(
+        user.user_id, invitation["recipient_user_id"], invitation["recipient_device_id"],
+        payload.keyVersion, payload.keyEnvelope.model_dump(),
+    )
+    if not share_store.activate_invitation(user.user_id, invitation_id, grant_id):
+        raise HTTPException(status_code=409, detail="Pozvánku se nepodařilo aktivovat.")
+    audit_security(user.user_id, x_device_id, "diary_share_activated", invitationId=invitation_id, grantId=grant_id)
+    return {"status": "active", "grantId": grant_id}
+
+
+@app.delete("/api/v1/share-invitations/{invitation_id}")
+def cancel_share_invitation(
+    invitation_id: str,
+    user: Annotated[AuthenticatedUser, Depends(verify_sharing_user)],
+    x_device_id: Annotated[str | None, Header(alias="X-Device-ID")] = None,
+) -> dict[str, str]:
+    if not x_device_id or not device_store.is_active(user.user_id, x_device_id):
+        raise HTTPException(status_code=403, detail="Pozvánku lze zrušit jen z důvěryhodného zařízení.")
+    if not share_store.cancel_invitation(user.user_id, invitation_id):
+        raise HTTPException(status_code=404, detail="Čekající pozvánka nebyla nalezena.")
+    audit_security(user.user_id, x_device_id, "diary_share_invitation_cancelled", invitationId=invitation_id)
+    return {"status": "cancelled"}
 
 
 @app.get("/api/v1/shares/recipient-key")
@@ -935,6 +1051,7 @@ def revoke_share(
         raise HTTPException(status_code=403, detail="Sdílení je dostupné jen z důvěryhodného zařízení.")
     if not share_store.revoke(user.user_id, grant_id):
         raise HTTPException(status_code=404, detail="Aktivní sdílení nebylo nalezeno.")
+    share_store.mark_grant_revoked(user.user_id, grant_id)
     audit_security(user.user_id, x_device_id, "diary_share_revoked", grantId=grant_id)
     return {"status": "ok"}
 

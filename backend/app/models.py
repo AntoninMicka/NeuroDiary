@@ -94,6 +94,27 @@ class ShareGrantRequestModel(BaseModel):
     keyEnvelope: "DeviceKeyTransferEnvelopeModel"
 
 
+class ShareInvitationRequestModel(BaseModel):
+    recipientEmail: str = Field(min_length=3, max_length=254)
+
+    @field_validator("recipientEmail")
+    @classmethod
+    def normalize_email(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if "@" not in normalized:
+            raise ValueError("Recipient e-mail is invalid.")
+        return normalized
+
+
+class ShareInvitationResponseModel(BaseModel):
+    accept: bool
+
+
+class ShareInvitationActivationModel(BaseModel):
+    keyVersion: int = Field(ge=1)
+    keyEnvelope: "DeviceKeyTransferEnvelopeModel"
+
+
 class DeviceRegistrationRequestModel(BaseModel):
     deviceId: str = Field(pattern=r"^[A-Za-z0-9_-]{16,128}$")
     name: str = Field(min_length=1, max_length=80)

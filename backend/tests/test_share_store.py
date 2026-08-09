@@ -31,3 +31,43 @@ def test_only_owner_can_revoke_share(tmp_path):
     assert len(store.get_incoming("reader-b", "reader-device-0001")) == 1
     assert store.revoke("owner-a", grant_id) is True
     assert store.get_incoming("reader-b", "reader-device-0001") == []
+
+
+def test_invitation_is_claimed_by_existing_or_later_registered_account(tmp_path):
+    store = ShareStore(str(tmp_path / "shares.db"))
+    store.initialize()
+    store.register_identity("owner-a", "owner@example.test", "Owner")
+    invitation_id = store.create_invitation("owner-a", "reader@example.test")
+
+    assert store.list_incoming_invitations("reader-b", "reader@example.test")[0]["invitation_id"] == invitation_id
+    store.register_identity("reader-b", "reader@example.test", "Reader")
+    invitation = store.list_outgoing_invitations("owner-a")[0]
+    assert invitation["recipient_user_id"] == "reader-b"
+
+
+def test_invitation_requires_recipient_response_before_activation(tmp_path):
+    store = ShareStore(str(tmp_path / "shares.db"))
+    store.initialize()
+    store.register_identity("owner-a", "owner@example.test", "Owner")
+    store.register_identity("reader-b", "reader@example.test", "Reader")
+    invitation_id = store.create_invitation("owner-a", "reader@example.test", "reader-b")
+
+    assert store.activate_invitation("owner-a", invitation_id, "grant-1") is False
+    assert store.respond_to_invitation(
+        invitation_id, "reader-b", "reader@example.test", "reader-device-0001", True,
+    ) is True
+    assert store.activate_invitation("other-owner", invitation_id, "grant-1") is False
+    assert store.activate_invitation("owner-a", invitation_id, "grant-1") is True
+    assert store.list_outgoing_invitations("owner-a")[0]["status"] == "active"
+
+
+def test_invitation_cannot_be_accepted_by_another_email(tmp_path):
+    store = ShareStore(str(tmp_path / "shares.db"))
+    store.initialize()
+    store.register_identity("owner-a", "owner@example.test", "Owner")
+    invitation_id = store.create_invitation("owner-a", "reader@example.test")
+
+    assert store.respond_to_invitation(
+        invitation_id, "attacker-c", "attacker@example.test", "attacker-device-1", True,
+    ) is False
+    assert store.list_outgoing_invitations("owner-a")[0]["status"] == "pending"

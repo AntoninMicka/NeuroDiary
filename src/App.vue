@@ -96,7 +96,15 @@ import {
   sharePlainReport,
 } from "./services/secureReportShare.js";
 import { sendGmailMessage } from "./services/gmailService.js";
-import { createDiaryShare, decryptSharedDiary, fetchDiaryShares, revokeDiaryShare } from "./services/diarySharing.js";
+import {
+  activateDiaryShareInvitation,
+  cancelDiaryShareInvitation,
+  createDiaryShare,
+  decryptSharedDiary,
+  fetchDiaryShares,
+  respondToDiaryShareInvitation,
+  revokeDiaryShare,
+} from "./services/diarySharing.js";
 import { createCloudBackup, deleteCloudBackup, fetchAdminStatus } from "./services/adminService.js";
 import { generateRecoverySecret } from "./services/e2eCrypto.js";
 import {
@@ -224,7 +232,7 @@ const generatedContactPrivateKey = ref("");
 const reportSharePassword = ref("");
 const encryptOneTimeReport = ref(false);
 const shareRecipientEmail = ref("");
-const diaryShares = reactive({ outgoing: [], incoming: [] });
+const diaryShares = reactive({ outgoing: [], incoming: [], outgoingInvitations: [], incomingInvitations: [] });
 const sharedDiaryViews = ref([]);
 const selectedSharedGrantId = ref("");
 const selectedSharedSection = ref("timeline");
@@ -297,6 +305,13 @@ const selectedSharedView = computed(() =>
   sharedDiaryViews.value.find((item) => item.grantId === selectedSharedGrantId.value) ?? sharedDiaryViews.value[0] ?? null,
 );
 const selectedSharedEntry = computed(() => selectedSharedView.value?.state?.entries?.[selectedSharedDate.value] ?? null);
+const pendingShareInvitationCount = computed(() =>
+  diaryShares.incomingInvitations.filter((item) => item.status === "pending").length,
+);
+const legacyOutgoingShares = computed(() => {
+  const linkedGrantIds = new Set(diaryShares.outgoingInvitations.map((item) => item.grantId).filter(Boolean));
+  return diaryShares.outgoing.filter((item) => !linkedGrantIds.has(item.grantId));
+});
 const selectedDateLabel = computed(() => formatLongDate(state.selectedDate));
 const sortedMedications = computed(() =>
   [...(selectedEntry.value?.medications ?? [])].sort((left, right) => left.time.localeCompare(right.time)),
@@ -617,6 +632,7 @@ onMounted(async () => {
     void refreshWebPushRegistration();
   }
   await tryAutoRecoverLocalSyncKey();
+  if (authSession.value?.user && hasSyncIdentity.value) void refreshDiaryShares(false);
   if (isQuickSyncAvailable.value) {
     automaticSyncScheduler.schedule(0);
   }
@@ -1138,6 +1154,8 @@ async function refreshDiaryShares(includeIncoming = activePanelId.value === "sek
     const result = await fetchDiaryShares(syncSettings, includeIncoming);
     diaryShares.outgoing = result.outgoing ?? [];
     diaryShares.incoming = result.incoming ?? [];
+    diaryShares.outgoingInvitations = result.outgoingInvitations ?? [];
+    diaryShares.incomingInvitations = result.incomingInvitations ?? [];
     const views = includeIncoming ? [] : sharedDiaryViews.value;
     for (const grant of diaryShares.incoming) {
       try {
@@ -1192,13 +1210,65 @@ async function addDiaryShare() {
   try {
     await createDiaryShare(syncSettings, shareRecipientEmail.value);
     shareRecipientEmail.value = "";
-    sharingMessage.value = "Přístup ke čtení byl udělen.";
+    sharingMessage.value = "Pozvánka ke sdílení byla vytvořena.";
     await refreshDiaryShares();
   } catch (error) {
     sharingMessage.value = error.message;
   } finally {
     isSharingBusy.value = false;
   }
+}
+
+async function respondToShareInvitation(invitationId, accept) {
+  isSharingBusy.value = true;
+  sharingMessage.value = "";
+  try {
+    if (accept) await ensureDeviceExchangeKeyPublished(syncSettings);
+    await respondToDiaryShareInvitation(syncSettings, invitationId, accept);
+    sharingMessage.value = accept
+      ? "Pozvánka byla přijata. Vlastník nyní může bezpečně aktivovat sdílení."
+      : "Pozvánka byla odmítnuta.";
+    await refreshDiaryShares(false);
+  } catch (error) {
+    sharingMessage.value = error.message;
+  } finally {
+    isSharingBusy.value = false;
+  }
+}
+
+async function activateShareInvitation(invitationId) {
+  isSharingBusy.value = true;
+  sharingMessage.value = "";
+  try {
+    await activateDiaryShareInvitation(syncSettings, invitationId);
+    sharingMessage.value = "Sdílení bylo aktivováno.";
+    await refreshDiaryShares(false);
+  } catch (error) {
+    sharingMessage.value = error.message;
+  } finally {
+    isSharingBusy.value = false;
+  }
+}
+
+async function cancelShareInvitation(invitationId) {
+  isSharingBusy.value = true;
+  sharingMessage.value = "";
+  try {
+    await cancelDiaryShareInvitation(syncSettings, invitationId);
+    sharingMessage.value = "Pozvánka byla zrušena.";
+    await refreshDiaryShares(false);
+  } catch (error) {
+    sharingMessage.value = error.message;
+  } finally {
+    isSharingBusy.value = false;
+  }
+}
+
+function shareStatusLabel(status) {
+  return ({
+    pending: "Čeká na přijetí", accepted: "Přijato – čeká na aktivaci", active: "Aktivní",
+    declined: "Odmítnuto", expired: "Vypršelo", cancelled: "Zrušeno", revoked: "Odvoláno",
+  })[status] ?? status;
 }
 
 async function removeDiaryShare(grantId) {
@@ -2783,7 +2853,7 @@ function syncFloatingMenuHeight() {
                   Kontakty
                 </button>
                 <button class="utility-menu-item" type="button" role="menuitem" @click="handleUtilityAction(() => selectPanel('sekce-sdileni'))">
-                  Sdílení dat
+                  Sdílení dat{{ pendingShareInvitationCount ? ` (${pendingShareInvitationCount})` : "" }}
                 </button>
                 <button class="utility-menu-item desktop-only" type="button" role="menuitem" @click="handleUtilityAction(() => selectPanel('sekce-kartoteka'))">
                   Sdílená kartotéka
@@ -2948,22 +3018,62 @@ function syncFloatingMenuHeight() {
           <template v-else>
             <section class="sync-settings-card">
               <h3>Sdílet můj deník</h3>
-              <p class="panel-tip">Příjemce získá pouze čtení. Musí se už alespoň jednou přihlásit, otevřít tuto sekci a mít důvěryhodné zařízení.</p>
+              <p class="panel-tip">Příjemce získá pouze čtení až po výslovném přijetí pozvánky. Pokud už účet má, pozvánka se mu zobrazí přímo zde.</p>
               <form class="share-form" @submit.prevent="addDiaryShare">
                 <label>
                   <span>E-mail příjemce</span>
                   <input v-model="shareRecipientEmail" type="email" maxlength="254" required placeholder="uzivatel@example.cz" />
                 </label>
-                <button class="primary-button" type="submit" :disabled="isSharingBusy">Udělit přístup ke čtení</button>
+                <button class="primary-button" type="submit" :disabled="isSharingBusy">Odeslat pozvánku</button>
               </form>
-              <div v-if="diaryShares.outgoing.length" class="backup-history-list">
-                <div v-for="grant in diaryShares.outgoing" :key="grant.grantId" class="shared-access-row">
-                  <span><strong>{{ grant.recipientName || grant.recipientEmail }}</strong> · {{ grant.recipientEmail }}</span>
-                  <span v-if="grant.revokedAt" class="status-chip status-chip-offline">Odvoláno</span>
-                  <button v-else class="ghost-button utility-menu-item-danger" type="button" :disabled="isSharingBusy" @click="removeDiaryShare(grant.grantId)">Odvolat</button>
-                </div>
+              <div v-if="diaryShares.outgoingInvitations.length" class="share-status-list">
+                <article v-for="invitation in diaryShares.outgoingInvitations" :key="invitation.invitationId" class="share-status-card">
+                  <div>
+                    <strong>{{ invitation.recipientEmail }}</strong>
+                    <p class="panel-tip">Vytvořeno {{ formatBackupTimestamp(invitation.createdAt) }} · platnost do {{ formatBackupTimestamp(invitation.expiresAt) }}</p>
+                  </div>
+                  <span :class="['status-chip', invitation.status === 'active' ? 'status-chip-ready' : invitation.status === 'accepted' ? 'status-chip-update' : invitation.status === 'pending' ? 'status-chip-online' : 'status-chip-offline']">
+                    {{ shareStatusLabel(invitation.status) }}
+                  </span>
+                  <div class="share-status-actions">
+                    <button v-if="invitation.status === 'accepted'" class="primary-button" type="button" :disabled="isSharingBusy" @click="activateShareInvitation(invitation.invitationId)">Aktivovat sdílení</button>
+                    <button v-if="['pending', 'accepted'].includes(invitation.status)" class="ghost-button utility-menu-item-danger" type="button" :disabled="isSharingBusy" @click="cancelShareInvitation(invitation.invitationId)">Zrušit pozvánku</button>
+                    <button v-if="invitation.status === 'active' && invitation.grantId" class="ghost-button utility-menu-item-danger" type="button" :disabled="isSharingBusy" @click="removeDiaryShare(invitation.grantId)">Odvolat přístup</button>
+                  </div>
+                </article>
               </div>
-              <p v-else class="panel-tip">Váš deník nyní s nikým nesdílíte.</p>
+              <p v-else class="panel-tip">Nemáte žádné odeslané pozvánky.</p>
+              <div v-if="legacyOutgoingShares.length" class="share-status-list">
+                <article v-for="grant in legacyOutgoingShares" :key="grant.grantId" class="share-status-card">
+                  <div>
+                    <strong>{{ grant.recipientName || grant.recipientEmail }}</strong>
+                    <p class="panel-tip">Původní aktivní propojení · {{ grant.recipientEmail }}</p>
+                  </div>
+                  <span :class="['status-chip', grant.revokedAt ? 'status-chip-offline' : 'status-chip-ready']">{{ grant.revokedAt ? "Odvoláno" : "Aktivní" }}</span>
+                  <div v-if="!grant.revokedAt" class="share-status-actions">
+                    <button class="ghost-button utility-menu-item-danger" type="button" :disabled="isSharingBusy" @click="removeDiaryShare(grant.grantId)">Odvolat přístup</button>
+                  </div>
+                </article>
+              </div>
+            </section>
+
+            <section class="sync-settings-card">
+              <h3>Pozvánky pro mě</h3>
+              <div v-if="diaryShares.incomingInvitations.length" class="share-status-list">
+                <article v-for="invitation in diaryShares.incomingInvitations" :key="invitation.invitationId" class="share-status-card">
+                  <div>
+                    <strong>{{ invitation.ownerName || invitation.ownerEmail }}</strong>
+                    <p class="panel-tip">{{ invitation.ownerEmail }} · platnost do {{ formatBackupTimestamp(invitation.expiresAt) }}</p>
+                  </div>
+                  <span :class="['status-chip', invitation.status === 'accepted' ? 'status-chip-update' : 'status-chip-online']">{{ shareStatusLabel(invitation.status) }}</span>
+                  <div v-if="invitation.status === 'pending'" class="share-status-actions">
+                    <button class="primary-button" type="button" :disabled="isSharingBusy" @click="respondToShareInvitation(invitation.invitationId, true)">Přijmout</button>
+                    <button class="ghost-button" type="button" :disabled="isSharingBusy" @click="respondToShareInvitation(invitation.invitationId, false)">Odmítnout</button>
+                  </div>
+                  <p v-else class="panel-tip">Čeká se na kryptografickou aktivaci vlastníkem.</p>
+                </article>
+              </div>
+              <p v-else class="panel-tip">Nemáte žádné čekající pozvánky.</p>
             </section>
 
             <p class="panel-tip desktop-only">Cizí deníky jsou dostupné pouze na desktopu v samostatné Sdílené kartotéce.</p>

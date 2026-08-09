@@ -4,7 +4,7 @@ import json
 import sqlite3
 import uuid
 from contextlib import contextmanager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 
@@ -52,6 +52,21 @@ class ShareStore:
                   revoked_at {timestamp}, UNIQUE(owner_user_id, recipient_user_id, recipient_device_id)
                 )
             """)
+            connection.execute(f"""
+                CREATE TABLE IF NOT EXISTS diary_share_invitations (
+                  invitation_id {identity_id}, owner_user_id TEXT NOT NULL,
+                  recipient_email TEXT NOT NULL, recipient_user_id TEXT,
+                  recipient_device_id TEXT, status TEXT NOT NULL,
+                  created_at {timestamp} NOT NULL, updated_at {timestamp} NOT NULL,
+                  expires_at {timestamp} NOT NULL, grant_id TEXT
+                )
+            """)
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_share_invitation_owner ON diary_share_invitations(owner_user_id, created_at)"
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_share_invitation_recipient ON diary_share_invitations(recipient_email, status)"
+            )
             connection.commit()
 
     def register_identity(self, user_id: str, email: str, name: str) -> None:
@@ -66,6 +81,11 @@ class ShareStore:
                 ON CONFLICT(user_id) DO UPDATE SET email = excluded.email,
                   display_name = excluded.display_name, updated_at = excluded.updated_at
             """, (user_id, email.strip().lower(), name, now if self.postgres else now.isoformat()))
+            connection.execute(f"""
+                UPDATE diary_share_invitations SET recipient_user_id = {placeholder}, updated_at = {placeholder}
+                WHERE recipient_email = {placeholder} AND recipient_user_id IS NULL
+                  AND status IN ('pending', 'accepted')
+            """, (user_id, now if self.postgres else now.isoformat(), email.strip().lower()))
             connection.commit()
 
     def find_identity(self, email: str):
@@ -75,6 +95,121 @@ class ShareStore:
                 f"SELECT user_id, email, display_name FROM share_identities WHERE email = {placeholder}",
                 (email.strip().lower(),),
             ).fetchone()
+
+    def create_invitation(self, owner_id: str, recipient_email: str, recipient_id: str | None = None):
+        now = datetime.now(UTC)
+        expires_at = now + timedelta(days=14)
+        invitation_id = str(uuid.uuid4())
+        p = "%s" if self.postgres else "?"
+        timestamp = lambda value: value if self.postgres else value.isoformat()
+        with self.connect() as connection:
+            connection.execute(f"""
+                UPDATE diary_share_invitations SET status = 'cancelled', updated_at = {p}
+                WHERE owner_user_id = {p} AND recipient_email = {p}
+                  AND status IN ('pending', 'accepted')
+            """, (timestamp(now), owner_id, recipient_email))
+            connection.execute(f"""
+                INSERT INTO diary_share_invitations
+                  (invitation_id, owner_user_id, recipient_email, recipient_user_id,
+                   recipient_device_id, status, created_at, updated_at, expires_at, grant_id)
+                VALUES ({p}, {p}, {p}, {p}, NULL, 'pending', {p}, {p}, {p}, NULL)
+            """, (invitation_id, owner_id, recipient_email, recipient_id, timestamp(now), timestamp(now), timestamp(expires_at)))
+            connection.commit()
+        return invitation_id
+
+    def expire_invitations(self) -> None:
+        now = datetime.now(UTC)
+        p = "%s" if self.postgres else "?"
+        value = now if self.postgres else now.isoformat()
+        with self.connect() as connection:
+            connection.execute(f"""
+                UPDATE diary_share_invitations SET status = 'expired', updated_at = {p}
+                WHERE status = 'pending' AND expires_at <= {p}
+            """, (value, value))
+            connection.commit()
+
+    def list_outgoing_invitations(self, owner_id: str):
+        self.expire_invitations()
+        p = "%s" if self.postgres else "?"
+        with self.connect() as connection:
+            return connection.execute(f"""
+                SELECT invitation_id, recipient_email, recipient_user_id, recipient_device_id,
+                       status, created_at, updated_at, expires_at, grant_id
+                FROM diary_share_invitations WHERE owner_user_id = {p}
+                ORDER BY created_at DESC
+            """, (owner_id,)).fetchall()
+
+    def list_incoming_invitations(self, recipient_id: str, recipient_email: str):
+        self.expire_invitations()
+        p = "%s" if self.postgres else "?"
+        with self.connect() as connection:
+            return connection.execute(f"""
+                SELECT inv.invitation_id, inv.owner_user_id, inv.status, inv.created_at,
+                       inv.updated_at, inv.expires_at, owner.email AS owner_email,
+                       owner.display_name AS owner_name
+                FROM diary_share_invitations inv
+                JOIN share_identities owner ON owner.user_id = inv.owner_user_id
+                WHERE (inv.recipient_user_id = {p} OR (inv.recipient_user_id IS NULL AND inv.recipient_email = {p}))
+                  AND inv.status IN ('pending', 'accepted')
+                ORDER BY inv.created_at DESC
+            """, (recipient_id, recipient_email)) .fetchall()
+
+    def respond_to_invitation(self, invitation_id: str, recipient_id: str, recipient_email: str, device_id: str, accept: bool) -> bool:
+        now = datetime.now(UTC)
+        p = "%s" if self.postgres else "?"
+        value = now if self.postgres else now.isoformat()
+        status = "accepted" if accept else "declined"
+        with self.connect() as connection:
+            cursor = connection.execute(f"""
+                UPDATE diary_share_invitations
+                SET recipient_user_id = {p}, recipient_device_id = {p}, status = {p}, updated_at = {p}
+                WHERE invitation_id = {p} AND recipient_email = {p} AND status = 'pending' AND expires_at > {p}
+            """, (recipient_id, device_id, status, value, invitation_id, recipient_email, value))
+            connection.commit()
+            return cursor.rowcount == 1
+
+    def get_invitation_for_owner(self, owner_id: str, invitation_id: str):
+        p = "%s" if self.postgres else "?"
+        with self.connect() as connection:
+            return connection.execute(f"""
+                SELECT * FROM diary_share_invitations
+                WHERE invitation_id = {p} AND owner_user_id = {p}
+            """, (invitation_id, owner_id)).fetchone()
+
+    def activate_invitation(self, owner_id: str, invitation_id: str, grant_id: str) -> bool:
+        now = datetime.now(UTC)
+        p = "%s" if self.postgres else "?"
+        value = now if self.postgres else now.isoformat()
+        with self.connect() as connection:
+            cursor = connection.execute(f"""
+                UPDATE diary_share_invitations SET status = 'active', grant_id = {p}, updated_at = {p}
+                WHERE invitation_id = {p} AND owner_user_id = {p} AND status = 'accepted'
+            """, (grant_id, value, invitation_id, owner_id))
+            connection.commit()
+            return cursor.rowcount == 1
+
+    def cancel_invitation(self, owner_id: str, invitation_id: str) -> bool:
+        now = datetime.now(UTC)
+        p = "%s" if self.postgres else "?"
+        value = now if self.postgres else now.isoformat()
+        with self.connect() as connection:
+            cursor = connection.execute(f"""
+                UPDATE diary_share_invitations SET status = 'cancelled', updated_at = {p}
+                WHERE invitation_id = {p} AND owner_user_id = {p} AND status IN ('pending', 'accepted')
+            """, (value, invitation_id, owner_id))
+            connection.commit()
+            return cursor.rowcount == 1
+
+    def mark_grant_revoked(self, owner_id: str, grant_id: str) -> None:
+        now = datetime.now(UTC)
+        p = "%s" if self.postgres else "?"
+        value = now if self.postgres else now.isoformat()
+        with self.connect() as connection:
+            connection.execute(f"""
+                UPDATE diary_share_invitations SET status = 'revoked', updated_at = {p}
+                WHERE owner_user_id = {p} AND grant_id = {p} AND status = 'active'
+            """, (value, owner_id, grant_id))
+            connection.commit()
 
     def save_grant(self, owner_id: str, recipient_id: str, device_id: str, key_version: int, envelope: dict):
         now = datetime.now(UTC)
@@ -91,7 +226,11 @@ class ShareStore:
                   created_at = excluded.created_at, revoked_at = NULL
             """, values)
             connection.commit()
-        return self.get_outgoing(owner_id)
+            row = connection.execute(f"""
+                SELECT grant_id FROM diary_share_grants
+                WHERE owner_user_id = {p} AND recipient_user_id = {p} AND recipient_device_id = {p}
+            """, (owner_id, recipient_id, device_id)).fetchone()
+        return row["grant_id"]
 
     def get_outgoing(self, owner_id: str):
         p = "%s" if self.postgres else "?"
@@ -124,4 +263,3 @@ class ShareStore:
             )
             connection.commit()
             return cursor.rowcount == 1
-
