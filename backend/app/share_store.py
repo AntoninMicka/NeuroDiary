@@ -396,12 +396,24 @@ class ShareStore:
         p = "%s" if self.postgres else "?"
         with self.connect() as connection:
             return connection.execute(f"""
-                SELECT proposal_id AS "proposalId", grant_id AS "grantId", owner_user_id AS "ownerUserId",
-                       proposer_user_id AS "proposerUserId", base_revision AS "baseRevision",
-                       payload_json, status, created_at AS "createdAt", decided_at AS "decidedAt"
-                FROM treatment_plan_proposals WHERE owner_user_id = {p} OR proposer_user_id = {p}
-                ORDER BY created_at DESC
+                SELECT proposals.proposal_id AS "proposalId", proposals.grant_id AS "grantId",
+                       proposals.owner_user_id AS "ownerUserId", owner.display_name AS "ownerName",
+                       proposals.proposer_user_id AS "proposerUserId", proposer.display_name AS "proposerName",
+                       proposals.base_revision AS "baseRevision", proposals.payload_json, proposals.status,
+                       proposals.created_at AS "createdAt", proposals.decided_at AS "decidedAt"
+                FROM treatment_plan_proposals proposals
+                JOIN share_identities owner ON owner.user_id = proposals.owner_user_id
+                JOIN share_identities proposer ON proposer.user_id = proposals.proposer_user_id
+                WHERE proposals.owner_user_id = {p} OR proposals.proposer_user_id = {p}
+                ORDER BY proposals.created_at DESC
             """, (user_id, user_id)).fetchall()
+
+    def get_treatment_proposal(self, proposal_id: str):
+        p = "%s" if self.postgres else "?"
+        with self.connect() as connection:
+            return connection.execute(
+                f"SELECT * FROM treatment_plan_proposals WHERE proposal_id = {p}", (proposal_id,),
+            ).fetchone()
 
     def decide_treatment_proposal(self, proposal_id: str, owner_id: str, status: str) -> bool:
         p = "%s" if self.postgres else "?"
@@ -411,5 +423,16 @@ class ShareStore:
                 UPDATE treatment_plan_proposals SET status = {p}, decided_at = {p}
                 WHERE proposal_id = {p} AND owner_user_id = {p} AND status = 'pending'
             """, (status, now if self.postgres else now.isoformat(), proposal_id, owner_id))
+            connection.commit()
+            return cursor.rowcount == 1
+
+    def cancel_treatment_proposal(self, proposal_id: str, proposer_id: str) -> bool:
+        p = "%s" if self.postgres else "?"
+        now = datetime.now(UTC)
+        with self.connect() as connection:
+            cursor = connection.execute(f"""
+                UPDATE treatment_plan_proposals SET status = 'cancelled', decided_at = {p}
+                WHERE proposal_id = {p} AND proposer_user_id = {p} AND status = 'pending'
+            """, (now if self.postgres else now.isoformat(), proposal_id, proposer_id))
             connection.commit()
             return cursor.rowcount == 1

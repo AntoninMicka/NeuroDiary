@@ -75,14 +75,20 @@ export function fetchTreatmentProposals(settings) {
   return request(settings, "/api/v1/treatment-proposals");
 }
 
-export async function decryptTreatmentProposal(proposal) {
-  const material = loadSyncKeyMaterial();
-  if (!material.exportedMasterKey) throw new Error("Na tomto zařízení chybí hlavní šifrovací klíč.");
-  return decryptDiaryState(proposal.payload, await importAccountMasterKey(material.exportedMasterKey));
+export async function decryptTreatmentProposal(proposal, grant = null) {
+  const exportedKey = grant
+    ? await decryptMasterKeyEnvelope(grant.keyEnvelope)
+    : loadSyncKeyMaterial().exportedMasterKey;
+  if (!exportedKey) throw new Error("Na tomto zařízení chybí hlavní šifrovací klíč.");
+  return decryptDiaryState(proposal.payload, await importAccountMasterKey(exportedKey));
 }
 
 export function decideTreatmentProposal(settings, proposalId, approve) {
   return request(settings, `/api/v1/treatment-proposals/${encodeURIComponent(proposalId)}/decision`, {
     method: "POST", body: JSON.stringify({ approve }),
   });
+}
+
+export function cancelTreatmentProposal(settings, proposalId) {
+  return request(settings, `/api/v1/treatment-proposals/${encodeURIComponent(proposalId)}`, { method: "DELETE" });
 }

@@ -64,6 +64,16 @@ class PushService:
             timeout=10,
         )
 
+    def send_treatment_proposal_notification(self, subscription_info: dict[str, object], body: str) -> None:
+        if not self.enabled:
+            return
+        payload = json.dumps({
+            "type": "treatment-proposal", "title": "NeuroDiary · léčebný plán",
+            "body": body, "url": "/", "sentAt": datetime.now(UTC).isoformat(),
+        }, separators=(",", ":"))
+        webpush(subscription_info=subscription_info, data=payload, vapid_private_key=self.private_key,
+                vapid_claims={"sub": self.subject}, ttl=86400, timeout=10)
+
     def is_endpoint_allowed(self, endpoint: str) -> bool:
         hostname = (urlparse(endpoint).hostname or "").lower()
         return any(

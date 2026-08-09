@@ -147,14 +147,26 @@
           <h4>4. Schválení pacientem</h4>
           <p>
             Pacient najde čekající návrh v sekci <strong>Sdílení dat</strong>. Může jej schválit
-            a použít, nebo zamítnout. Při schválení aplikace nahradí léčebný plán navrženou verzí a
+            a použít, nebo zamítnout. Před rozhodnutím vidí zvlášť přidané, odebrané a upravené
+            položky; u upravených hodnot je zobrazena původní i nová hodnota. Při schválení aplikace nahradí léčebný plán navrženou verzí a
             změnu následně synchronizuje. Pokud návrh vychází ze starší revize deníku, aplikace jej
             nepoužije; pacient musí nejprve synchronizovat data a lékař vytvořit aktuální návrh.
           </p>
         </div>
 
         <div class="manual-block">
-          <h4>5. Soukromí a odpovědnost</h4>
+          <h4>5. Datová správa a upozornění</h4>
+          <p>
+            Lékař má samostatnou sekci <strong>Datová správa</strong>, kde může návrhy filtrovat na
+            čekající, schválené a zamítnuté a čekající návrh stáhnout. Nový návrh upozorní pacienta;
+            schválení nebo zamítnutí upozorní lékaře. Upozornění se zobrazí v aplikaci a při
+            povolených systémových notifikacích také v prohlížeči. Je-li nakonfigurován Web Push a
+            zařízení je registrováno, může zpráva dorazit i po zavření aplikace.
+          </p>
+        </div>
+
+        <div class="manual-block">
+          <h4>6. Soukromí a odpovědnost</h4>
           <p>
             Návrh léčby je end-to-end šifrovaný stejně jako deník. Server ukládá pouze šifrovaný
             obsah, stav žádosti a technická metadata. Odeslání vyžaduje aktivní roli lékaře;

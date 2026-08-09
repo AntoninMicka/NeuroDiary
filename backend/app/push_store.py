@@ -124,6 +124,13 @@ class SqlitePushStore:
             connection.commit()
             return cursor.rowcount > 0
 
+    def list_subscriptions(self, user_id: str) -> list[dict[str, str]]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = ?", (user_id,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def load_due(self, due_before: datetime, limit: int = 500) -> list[DuePushReminder]:
         with self._connect() as connection:
             rows = connection.execute(
@@ -300,6 +307,14 @@ class PostgresPushStore:
                 deleted = cursor.rowcount > 0
             connection.commit()
         return deleted
+
+    def list_subscriptions(self, user_id: str) -> list[dict[str, str]]:
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = %s", (user_id,),
+                )
+                return [dict(row) for row in cursor.fetchall()]
 
     def load_due(self, due_before: datetime, limit: int = 500) -> list[DuePushReminder]:
         with self._connect() as connection:

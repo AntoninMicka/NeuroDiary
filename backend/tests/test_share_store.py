@@ -107,3 +107,18 @@ def test_treatment_proposal_is_scoped_to_active_grant_and_decided_by_owner(tmp_p
     assert store.decide_treatment_proposal(proposal_id, "doctor", "approved") is False
     assert store.decide_treatment_proposal(proposal_id, "patient", "approved") is True
     assert store.list_treatment_proposals("doctor")[0]["status"] == "approved"
+
+
+def test_doctor_can_cancel_only_own_pending_treatment_proposal(tmp_path):
+    store = ShareStore(str(tmp_path / "shares.db"))
+    store.initialize()
+    store.register_identity("patient", "patient@example.test", "Patient")
+    store.register_identity("doctor", "doctor@example.test", "Doctor")
+    store.save_grant("patient", "doctor", "doctor-device-01", 1, {"cipherText": "key"})
+    grant_id = store.get_outgoing("patient")[0]["grant_id"]
+    proposal_id = store.create_treatment_proposal(grant_id, "doctor", 1, {"cipherText": "opaque"})
+
+    assert store.cancel_treatment_proposal(proposal_id, "other") is False
+    assert store.cancel_treatment_proposal(proposal_id, "doctor") is True
+    assert store.cancel_treatment_proposal(proposal_id, "doctor") is False
+    assert store.list_treatment_proposals("patient")[0]["status"] == "cancelled"

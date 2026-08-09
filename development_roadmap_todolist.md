@@ -534,7 +534,7 @@ Aktualni stav:
 * role nesmí samy udělit přístup ke zdravotním datům; rozhodující zůstává konkrétní přijatý a aktivní grant
 * UI se přizpůsobí aktivním rolím daného zařízení
 * pokud je na zařízení aktivní role `pacient`, současné pacientské UI a hlavní navigace zůstávají beze změny, a to i při současně aktivních dalších rolích
-* pokud role `pacient` aktivní není a je aktivní role `rodina` nebo `doktor`, hlavní nabídka obsahuje `Kartotéka`, `Kontakty`, `Sdílení dat`, `Manuály` a `Údaje`; společné servisní nástroje zůstávají v nabídce `Více`
+* pokud role `pacient` aktivní není a je aktivní role `rodina` nebo `doktor`, hlavní nabídka obsahuje `Kartotéka`, `Kontakty`, `Sdílení dat`, `Manuály` a `Údaje`; lékař navíc vidí `Datovou správu` a společné servisní nástroje zůstávají v nabídce `Více`
 * role `rodina` a `doktor` používají jako výchozí obrazovku kartotéku
 * rodina vidí naplánovanou léčbu sdílejícího pacienta pouze ke čtení
 * lékař může připravit dávkový, end-to-end šifrovaný návrh více změn léčebného plánu; změny se použijí až po výslovném schválení pacientem a návrh založený na zastaralé revizi se nesmí automaticky aplikovat
@@ -542,6 +542,13 @@ Aktualni stav:
 * role `doktor` může vytvořit pozvánku pro existujícího uživatele nebo předregistraci pro nový účet a iniciovat tak žádost, aby pozvaný pacient začal svá data s lékařem sdílet
 * lékařská pozvánka nikdy sama neaktivuje přístup: pozvaný uživatel musí vlastnit nebo založit cílový účet, výslovně potvrdit sdílení a dokončit kryptografické propojení
 * u lékařem iniciovaných pozvánek zobrazit stav `čeká na registraci`, `čeká na souhlas`, `přijato`, `aktivní`, `odmítnuto`, `vypršelo` nebo `odvoláno`
+
+#### [pending] Budoucí rozšíření návrhů léčby
+
+* přidat komentář lékaře a důvod změny, možnost pacienta vrátit návrh s komentářem a verzovanou historii komunikace
+* zavést jemná oprávnění sdílení zvlášť pro denní záznamy, léčebný plán, reporty a navrhování změn, včetně časového omezení přístupu
+* vytvořit pacientsky čitelnou auditní historii zobrazení plánu, návrhů, rozhodnutí, zařízení a následné synchronizace
+* doplnit automatizovaný end-to-end scénář: sdílení deníku → dávkový návrh lékaře → porovnání pacientem → schválení → synchronizace plánu
 
 ### [pending] 6.10 Sdílení s lékařem
 

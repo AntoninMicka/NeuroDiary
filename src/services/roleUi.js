@@ -4,6 +4,7 @@ export const CAREGIVER_PANEL_ITEMS = Object.freeze([
   { id: "sekce-sdileni", label: "Sdílení dat" },
   { id: "sekce-manualy", label: "Manuály" },
   { id: "sekce-udaje", label: "Údaje" },
+  { id: "sekce-navrhy", label: "Datová správa" },
 ]);
 
 export function isCaregiverOnlyRoleSet(activeRoles = []) {

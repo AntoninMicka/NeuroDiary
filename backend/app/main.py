@@ -610,6 +610,21 @@ def audit_security(user_id: str, device_id: str, event_type: str, **details: obj
         log_event("ERROR", "security_audit_write_failed", deviceId=device_id, eventType=event_type, errorType=type(error).__name__)
 
 
+def send_treatment_notification(user_id: str, body: str) -> None:
+    if not push_service.enabled:
+        return
+    for item in push_store.list_subscriptions(user_id):
+        subscription = {"endpoint": item["endpoint"], "keys": {"p256dh": item["p256dh"], "auth": item["auth"]}}
+        try:
+            push_service.send_treatment_proposal_notification(subscription, body)
+        except WebPushException as error:
+            if push_service.is_expired_subscription(error):
+                push_store.delete_subscription(user_id, item["endpoint"])
+            log_event("WARNING", "treatment_proposal_push_failed", errorType=type(error).__name__)
+        except Exception as error:
+            log_event("ERROR", "treatment_proposal_push_failed", errorType=type(error).__name__)
+
+
 def decode_base64url_integer(value: object) -> int:
     encoded = str(value or "")
     decoded = base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4))
@@ -1185,6 +1200,8 @@ def create_treatment_proposal(
     if not proposal_id:
         raise HTTPException(status_code=404, detail="Aktivní sdílení nebylo nalezeno.")
     audit_security(user.user_id, x_device_id, "treatment_proposal_created", proposalId=proposal_id, grantId=payload.grantId)
+    proposal = share_store.get_treatment_proposal(proposal_id)
+    send_treatment_notification(proposal["owner_user_id"], "Lékař odeslal nový návrh změn léčby.")
     return {"status": "pending", "proposalId": proposal_id}
 
 
@@ -1213,7 +1230,25 @@ def decide_treatment_proposal(
     if not share_store.decide_treatment_proposal(proposal_id, user.user_id, status):
         raise HTTPException(status_code=404, detail="Čekající návrh nebyl nalezen.")
     audit_security(user.user_id, x_device_id, f"treatment_proposal_{status}", proposalId=proposal_id)
+    proposal = share_store.get_treatment_proposal(proposal_id)
+    send_treatment_notification(proposal["proposer_user_id"], f"Pacient návrh léčby {'schválil' if payload.approve else 'zamítl'}.")
     return {"status": status}
+
+
+@app.delete("/api/v1/treatment-proposals/{proposal_id}")
+def cancel_treatment_proposal(
+    proposal_id: str,
+    user: Annotated[AuthenticatedUser, Depends(verify_sharing_user)],
+    x_device_id: Annotated[str | None, Header(alias="X-Device-ID")] = None,
+) -> dict[str, str]:
+    if not x_device_id or not device_store.is_active(user.user_id, x_device_id):
+        raise HTTPException(status_code=403, detail="Návrh lze stáhnout jen z důvěryhodného zařízení.")
+    if "doctor" not in share_store.get_active_roles(user.user_id, x_device_id):
+        raise HTTPException(status_code=403, detail="Návrh může stáhnout pouze lékař.")
+    if not share_store.cancel_treatment_proposal(proposal_id, user.user_id):
+        raise HTTPException(status_code=404, detail="Čekající návrh nebyl nalezen.")
+    audit_security(user.user_id, x_device_id, "treatment_proposal_cancelled", proposalId=proposal_id)
+    return {"status": "cancelled"}
 
 
 @app.get("/", include_in_schema=False)
