@@ -19,3 +19,7 @@ export function fetchCurrentRoles() {
 export function updateCurrentDeviceRoles(roles) {
   return request("/api/v1/roles/active", { method: "PUT", body: JSON.stringify({ roles }) });
 }
+
+export function updateSelfAssignableRoles(roles) {
+  return request("/api/v1/roles/self", { method: "PUT", body: JSON.stringify({ roles }) });
+}

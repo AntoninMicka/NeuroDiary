@@ -92,10 +92,10 @@ ADMIN_EMAILS = {
     if email.strip()
 }
 ROLE_DEFINITIONS = {
-    "patient": {"label": "Pacient", "primaryView": "diary", "contactLimit": None},
-    "family": {"label": "Rodinný příslušník", "primaryView": "records", "contactLimit": 5},
-    "doctor": {"label": "Lékař", "primaryView": "records", "contactLimit": None},
-    "admin": {"label": "Administrátor", "primaryView": "admin", "contactLimit": None},
+    "patient": {"label": "Pacient", "primaryView": "diary", "contactLimit": None, "selfAssignable": True},
+    "family": {"label": "Rodinný příslušník", "primaryView": "records", "contactLimit": 5, "selfAssignable": True},
+    "doctor": {"label": "Lékař", "primaryView": "records", "contactLimit": None, "selfAssignable": False},
+    "admin": {"label": "Administrátor", "primaryView": "admin", "contactLimit": None, "selfAssignable": False},
 }
 
 store = create_sync_store(database_url=DATABASE_URL or None, database_path=DATABASE_PATH)
@@ -345,6 +345,31 @@ def update_current_device_roles(
     share_store.set_active_roles(user.user_id, x_device_id, list(payload.roles))
     audit_security(user.user_id, x_device_id, "device_active_roles_changed", roles=list(payload.roles))
     return {"status": "ok", "assignedRoles": sorted(assigned), "activeRoles": list(payload.roles)}
+
+
+@app.put("/api/v1/roles/self")
+def update_self_assignable_roles(
+    payload: UserRolesUpdateModel,
+    user: Annotated[AuthenticatedUser, Depends(verify_sharing_user)],
+    x_device_id: Annotated[str | None, Header(alias="X-Device-ID")] = None,
+) -> dict[str, object]:
+    if not x_device_id or not device_store.is_active(user.user_id, x_device_id):
+        raise HTTPException(status_code=403, detail="Role účtu lze změnit jen z důvěryhodného zařízení.")
+    requested = set(payload.roles)
+    self_assignable = {role for role, definition in ROLE_DEFINITIONS.items() if definition["selfAssignable"]}
+    if not requested.issubset(self_assignable):
+        raise HTTPException(status_code=403, detail="Role lékaře a administrátora může přidělit pouze správce.")
+    privileged = set(share_store.get_roles(user.user_id)) - self_assignable
+    combined = sorted(privileged | requested)
+    if not combined:
+        raise HTTPException(status_code=400, detail="Účet musí mít alespoň jednu roli.")
+    share_store.set_roles(user.user_id, combined)
+    audit_security(user.user_id, x_device_id, "self_assignable_roles_changed", roles=combined)
+    return {
+        "status": "ok", "assignedRoles": combined,
+        "activeRoles": share_store.get_active_roles(user.user_id, x_device_id),
+        "definitions": ROLE_DEFINITIONS,
+    }
 
 
 @app.post("/api/v1/admin/backups")

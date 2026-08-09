@@ -107,7 +107,7 @@ import {
   revokeDiaryShare,
 } from "./services/diarySharing.js";
 import { createCloudBackup, deleteCloudBackup, fetchAdminStatus, fetchAdminUsers, updateAdminUserRoles } from "./services/adminService.js";
-import { fetchCurrentRoles, updateCurrentDeviceRoles } from "./services/roleService.js";
+import { fetchCurrentRoles, updateCurrentDeviceRoles, updateSelfAssignableRoles } from "./services/roleService.js";
 import { generateRecoverySecret } from "./services/e2eCrypto.js";
 import {
   deleteContact,
@@ -251,6 +251,7 @@ const adminRoleDraft = ref([]);
 const adminError = ref("");
 const isAdminBusy = ref(false);
 const accountRoles = reactive({ assignedRoles: [], activeRoles: [], definitions: {} });
+const selfAssignableRoleDraft = ref(["patient"]);
 const trustedDevices = ref([]);
 const pendingDeviceKeyRequests = ref([]);
 const rotationTargetDeviceIds = ref([]);
@@ -2185,8 +2186,24 @@ async function refreshAccountRoles() {
   if (!authSession.value?.user || !hasSyncIdentity.value) return;
   try {
     Object.assign(accountRoles, await fetchCurrentRoles());
+    selfAssignableRoleDraft.value = accountRoles.assignedRoles.filter(
+      (role) => accountRoles.definitions?.[role]?.selfAssignable,
+    );
   } catch (error) {
     console.error("Role refresh failed", error);
+  }
+}
+
+async function saveSelfAssignableRoles() {
+  if (!selfAssignableRoleDraft.value.length) return;
+  try {
+    Object.assign(accountRoles, await updateSelfAssignableRoles(selfAssignableRoleDraft.value));
+    selfAssignableRoleDraft.value = accountRoles.assignedRoles.filter(
+      (role) => accountRoles.definitions?.[role]?.selfAssignable,
+    );
+    storageMessage.value = "Role pacienta a rodinného příslušníka byly uloženy.";
+  } catch (error) {
+    storageMessage.value = error.message;
   }
 }
 
@@ -3500,6 +3517,15 @@ function syncFloatingMenuHeight() {
                   Registrovat jako nové zařízení
                 </button>
               </div>
+              <fieldset v-if="Object.keys(accountRoles.definitions).length" class="contact-keyring device-role-settings">
+                <legend>Moje role</legend>
+                <label v-for="(definition, role) in accountRoles.definitions" v-show="definition.selfAssignable" :key="`self-role-${role}`">
+                  <input v-model="selfAssignableRoleDraft" type="checkbox" :value="role" />
+                  {{ definition.label }}
+                </label>
+                <p class="panel-tip">Role pacienta a rodinného příslušníka si můžete nastavit sami. Lékaře a administrátora přiděluje pouze správce.</p>
+                <button class="ghost-button" type="button" :disabled="!selfAssignableRoleDraft.length" @click="saveSelfAssignableRoles">Uložit moje role</button>
+              </fieldset>
               <fieldset v-if="accountRoles.assignedRoles.length" class="contact-keyring device-role-settings">
                 <legend>Aktivní role na tomto zařízení</legend>
                 <label v-for="role in accountRoles.assignedRoles" :key="`active-role-${role}`">
@@ -3680,7 +3706,7 @@ function syncFloatingMenuHeight() {
                     <legend>Přidělené role</legend>
                     <label v-for="(definition, role) in adminRoleDefinitions" :key="role">
                       <input v-model="adminRoleDraft" type="checkbox" :value="role" />
-                      <span><strong>{{ definition.label }}</strong> · výchozí režim {{ definition.primaryView === 'diary' ? 'deník' : definition.primaryView === 'records' ? 'kartotéka' : 'administrace' }}<template v-if="definition.contactLimit"> · limit {{ definition.contactLimit }} kontaktů</template></span>
+                      <span><strong>{{ definition.label }}</strong> · výchozí režim {{ definition.primaryView === 'diary' ? 'deník' : definition.primaryView === 'records' ? 'kartotéka' : 'administrace' }}<template v-if="definition.contactLimit"> · limit {{ definition.contactLimit }} kontaktů</template>{{ definition.selfAssignable ? " · uživatel může změnit sám" : " · přiděluje správce" }}</span>
                     </label>
                   </fieldset>
                   <button class="primary-button" type="button" :disabled="isAdminBusy || !adminRoleDraft.length" @click="saveAdminUserRoles">Uložit role</button>

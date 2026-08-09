@@ -94,3 +94,21 @@ def test_device_can_activate_only_roles_assigned_to_its_account(monkeypatch, tmp
     with pytest.raises(HTTPException) as denied:
         main.update_current_device_roles(DeviceActiveRolesUpdateModel(roles=["admin"]), account, device_id)
     assert denied.value.status_code == 403
+
+
+def test_user_can_self_manage_patient_and_family_but_not_privileged_roles(monkeypatch, tmp_path):
+    main = load_app(monkeypatch, tmp_path)
+    account = AuthenticatedUser(provider="google", user_id="google:self-role", email="self@example.cz", name="Self")
+    device_id = "device-self-role1"
+    main.share_store.register_identity(account.user_id, account.email, account.name)
+    main.share_store.set_roles(account.user_id, ["patient", "doctor"])
+    main.device_store.upsert(account.user_id, device_id, "Notebook")
+
+    updated = main.update_self_assignable_roles(UserRolesUpdateModel(roles=["family"]), account, device_id)
+    assert updated["assignedRoles"] == ["doctor", "family"]
+    assert updated["definitions"]["doctor"]["selfAssignable"] is False
+
+    with pytest.raises(HTTPException) as denied:
+        main.update_self_assignable_roles(UserRolesUpdateModel(roles=["family", "admin"]), account, device_id)
+    assert denied.value.status_code == 403
+    assert main.share_store.get_roles(account.user_id) == ["doctor", "family"]
