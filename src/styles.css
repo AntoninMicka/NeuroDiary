@@ -385,6 +385,10 @@ textarea {
   margin-top: 1rem;
 }
 
+.share-list-heading {
+  margin: 1.25rem 0 0;
+}
+
 .share-status-card {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

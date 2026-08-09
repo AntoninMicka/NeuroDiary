@@ -3026,6 +3026,7 @@ function syncFloatingMenuHeight() {
                 </label>
                 <button class="primary-button" type="submit" :disabled="isSharingBusy">Odeslat pozvánku</button>
               </form>
+              <h4 class="share-list-heading">Odeslané pozvánky</h4>
               <div v-if="diaryShares.outgoingInvitations.length" class="share-status-list">
                 <article v-for="invitation in diaryShares.outgoingInvitations" :key="invitation.invitationId" class="share-status-card">
                   <div>
