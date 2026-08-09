@@ -526,9 +526,20 @@ Aktualni stav:
 * role `rodina`: primárně kartotéka sdílejících pacientů, maximálně 5 kontaktů
 * role `doktor`: primárně kartotéka, bez omezení počtu pacientů
 * role `admin`: provozní a bezpečnostní správa aplikace
+* jeden účet může mít současně více rolí
+* dostupné role účtu jsou spravované serverem, ale jejich aktivní kombinace se volí samostatně pro každé důvěryhodné zařízení
+* uživatel může určit, které ze svých rolí chce na konkrétním zařízení používat; změna aktivních rolí nesmí rozšířit serverová oprávnění nad role skutečně přidělené účtu
+* aktivní role a zařízení musí být součástí bezpečnostního auditu
 * oddělení dat a oprávnění mezi profily
 * role nesmí samy udělit přístup ke zdravotním datům; rozhodující zůstává konkrétní přijatý a aktivní grant
-* připravit odlišnou výchozí navigaci: pacient do deníku, rodina a doktor do kartotéky
+* UI se přizpůsobí aktivním rolím daného zařízení
+* pokud je na zařízení aktivní role `pacient`, současné pacientské UI a hlavní navigace zůstávají beze změny, a to i při současně aktivních dalších rolích
+* pokud role `pacient` aktivní není a je aktivní role `rodina` nebo `doktor`, hlavní nabídka obsahuje pouze `Kartotéka`, `Kontakty`, `Sdílení dat` a `Manuály`
+* role `rodina` a `doktor` používají jako výchozí obrazovku kartotéku
+* při více aktivních rolích se schopnosti skládají, ale UI nesmí zobrazit duplicitní položky ani oslabit omezení nejméně privilegované operace
+* role `doktor` může vytvořit pozvánku pro existujícího uživatele nebo předregistraci pro nový účet a iniciovat tak žádost, aby pozvaný pacient začal svá data s lékařem sdílet
+* lékařská pozvánka nikdy sama neaktivuje přístup: pozvaný uživatel musí vlastnit nebo založit cílový účet, výslovně potvrdit sdílení a dokončit kryptografické propojení
+* u lékařem iniciovaných pozvánek zobrazit stav `čeká na registraci`, `čeká na souhlas`, `přijato`, `aktivní`, `odmítnuto`, `vypršelo` nebo `odvoláno`
 
 ### [pending] 6.10 Sdílení s lékařem
 
