@@ -1,4 +1,4 @@
-# NeuroDiary – Roadmap
+nastavení aliasu se# NeuroDiary – Roadmap
 
 ## Fáze 0 – Produktová vize
 

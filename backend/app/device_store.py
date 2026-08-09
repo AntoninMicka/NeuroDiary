@@ -58,7 +58,6 @@ class SqliteDeviceStore:
                 INSERT INTO trusted_devices (user_id, device_id, name, created_at, last_seen_at, revoked_at, trust_status)
                 VALUES (?, ?, ?, ?, ?, NULL, ?)
                 ON CONFLICT(user_id, device_id) DO UPDATE SET
-                  name = excluded.name,
                   last_seen_at = CASE WHEN trusted_devices.revoked_at IS NULL THEN excluded.last_seen_at ELSE trusted_devices.last_seen_at END
             """, (user_id, device_id, name, now.isoformat(), now.isoformat(), initial_status))
             connection.commit()
@@ -166,7 +165,6 @@ class PostgresDeviceStore:
                 INSERT INTO trusted_devices (user_id, device_id, name, created_at, last_seen_at, revoked_at, trust_status)
                 VALUES (%s, %s, %s, %s, %s, NULL, %s)
                 ON CONFLICT(user_id, device_id) DO UPDATE SET
-                  name = excluded.name,
                   last_seen_at = CASE WHEN trusted_devices.revoked_at IS NULL THEN excluded.last_seen_at ELSE trusted_devices.last_seen_at END
             """, (user_id, device_id, name, now, now, initial_status))
         return self.get(user_id, device_id)

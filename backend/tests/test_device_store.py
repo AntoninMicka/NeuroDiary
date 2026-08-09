@@ -29,6 +29,8 @@ def test_device_alias_can_only_rename_an_active_device_of_same_user(tmp_path):
 
     renamed = store.rename("user-a", "device-0000000001", "Domácí notebook")
     assert renamed.name == "Domácí notebook"
+    store.upsert("user-a", "device-0000000001", "Automatický název prohlížeče")
+    assert store.get("user-a", "device-0000000001").name == "Domácí notebook"
     assert store.rename("user-b", "device-0000000001", "Cizí alias") is None
     store.revoke("user-a", "device-0000000001")
     assert store.rename("user-a", "device-0000000001", "Odvolané") is None
