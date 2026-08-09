@@ -78,9 +78,25 @@ class ShareStore:
                   proposal_id {identity_id}, grant_id TEXT NOT NULL, owner_user_id TEXT NOT NULL,
                   proposer_user_id TEXT NOT NULL, base_revision INTEGER NOT NULL,
                   payload_json TEXT NOT NULL, status TEXT NOT NULL,
-                  created_at {timestamp} NOT NULL, decided_at {timestamp}
+                  created_at {timestamp} NOT NULL, decided_at {timestamp},
+                  previous_proposal_id TEXT, version INTEGER NOT NULL DEFAULT 1,
+                  response_payload_json TEXT
                 )
             """)
+            migrations = (
+                "ALTER TABLE treatment_plan_proposals ADD COLUMN previous_proposal_id TEXT",
+                "ALTER TABLE treatment_plan_proposals ADD COLUMN version INTEGER NOT NULL DEFAULT 1",
+                "ALTER TABLE treatment_plan_proposals ADD COLUMN response_payload_json TEXT",
+            )
+            if self.postgres:
+                migrations = tuple(item.replace("ADD COLUMN", "ADD COLUMN IF NOT EXISTS") for item in migrations)
+            for migration in migrations:
+                try:
+                    connection.execute(migration)
+                except Exception:
+                    if self.postgres:
+                        raise
+                    pass
             connection.execute("""
                 INSERT INTO account_roles (user_id, role)
                 SELECT identities.user_id, 'patient' FROM share_identities identities
@@ -372,7 +388,7 @@ class ShareStore:
             connection.commit()
             return cursor.rowcount == 1
 
-    def create_treatment_proposal(self, grant_id: str, proposer_id: str, base_revision: int, payload: dict):
+    def create_treatment_proposal(self, grant_id: str, proposer_id: str, base_revision: int, payload: dict, previous_proposal_id: str | None = None):
         p = "%s" if self.postgres else "?"
         now = datetime.now(UTC)
         value = now if self.postgres else now.isoformat()
@@ -384,11 +400,21 @@ class ShareStore:
             """, (grant_id, proposer_id)).fetchone()
             if not grant:
                 return None
+            version = 1
+            if previous_proposal_id:
+                previous = connection.execute(f"""
+                    SELECT version FROM treatment_plan_proposals
+                    WHERE proposal_id = {p} AND grant_id = {p} AND proposer_user_id = {p} AND status = 'returned'
+                """, (previous_proposal_id, grant_id, proposer_id)).fetchone()
+                if not previous:
+                    return None
+                version = previous["version"] + 1
             connection.execute(f"""
                 INSERT INTO treatment_plan_proposals
-                  (proposal_id, grant_id, owner_user_id, proposer_user_id, base_revision, payload_json, status, created_at, decided_at)
-                VALUES ({p}, {p}, {p}, {p}, {p}, {p}, 'pending', {p}, NULL)
-            """, (proposal_id, grant_id, grant["owner_user_id"], proposer_id, base_revision, json.dumps(payload), value))
+                  (proposal_id, grant_id, owner_user_id, proposer_user_id, base_revision, payload_json, status,
+                   created_at, decided_at, previous_proposal_id, version, response_payload_json)
+                VALUES ({p}, {p}, {p}, {p}, {p}, {p}, 'pending', {p}, NULL, {p}, {p}, NULL)
+            """, (proposal_id, grant_id, grant["owner_user_id"], proposer_id, base_revision, json.dumps(payload), value, previous_proposal_id, version))
             connection.commit()
         return proposal_id
 
@@ -400,7 +426,9 @@ class ShareStore:
                        proposals.owner_user_id AS "ownerUserId", owner.display_name AS "ownerName",
                        proposals.proposer_user_id AS "proposerUserId", proposer.display_name AS "proposerName",
                        proposals.base_revision AS "baseRevision", proposals.payload_json, proposals.status,
-                       proposals.created_at AS "createdAt", proposals.decided_at AS "decidedAt"
+                       proposals.created_at AS "createdAt", proposals.decided_at AS "decidedAt",
+                       proposals.previous_proposal_id AS "previousProposalId", proposals.version,
+                       proposals.response_payload_json
                 FROM treatment_plan_proposals proposals
                 JOIN share_identities owner ON owner.user_id = proposals.owner_user_id
                 JOIN share_identities proposer ON proposer.user_id = proposals.proposer_user_id
@@ -415,14 +443,14 @@ class ShareStore:
                 f"SELECT * FROM treatment_plan_proposals WHERE proposal_id = {p}", (proposal_id,),
             ).fetchone()
 
-    def decide_treatment_proposal(self, proposal_id: str, owner_id: str, status: str) -> bool:
+    def decide_treatment_proposal(self, proposal_id: str, owner_id: str, status: str, response_payload: dict | None = None) -> bool:
         p = "%s" if self.postgres else "?"
         now = datetime.now(UTC)
         with self.connect() as connection:
             cursor = connection.execute(f"""
-                UPDATE treatment_plan_proposals SET status = {p}, decided_at = {p}
+                UPDATE treatment_plan_proposals SET status = {p}, decided_at = {p}, response_payload_json = {p}
                 WHERE proposal_id = {p} AND owner_user_id = {p} AND status = 'pending'
-            """, (status, now if self.postgres else now.isoformat(), proposal_id, owner_id))
+            """, (status, now if self.postgres else now.isoformat(), json.dumps(response_payload) if response_payload else None, proposal_id, owner_id))
             connection.commit()
             return cursor.rowcount == 1
 

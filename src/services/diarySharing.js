@@ -65,12 +65,12 @@ export async function decryptSharedDiary(grant) {
   return decryptDiaryState(grant.payload, masterKey);
 }
 
-export async function createTreatmentProposal(settings, grant, treatmentPlan) {
+export async function createTreatmentProposal(settings, grant, treatmentPlan, doctorNote = "", previousProposalId = null) {
   const exportedKey = await decryptMasterKeyEnvelope(grant.keyEnvelope);
   const masterKey = await importAccountMasterKey(exportedKey);
-  const payload = await encryptDiaryState({ treatmentPlan }, masterKey, grant.keyVersion);
+  const payload = await encryptDiaryState({ treatmentPlan, doctorNote }, masterKey, grant.keyVersion);
   return request(settings, "/api/v1/treatment-proposals", {
-    method: "POST", body: JSON.stringify({ grantId: grant.grantId, baseRevision: grant.revision, payload }),
+    method: "POST", body: JSON.stringify({ grantId: grant.grantId, baseRevision: grant.revision, payload, previousProposalId }),
   });
 }
 
@@ -86,20 +86,35 @@ export async function decryptTreatmentProposal(proposal, grant = null) {
   return decryptDiaryState(proposal.payload, await importAccountMasterKey(exportedKey));
 }
 
-export function decideTreatmentProposal(settings, proposalId, approve) {
+export async function decideTreatmentProposal(settings, proposalId, decision, comment = "") {
+  let responsePayload = null;
+  if (decision === "returned") {
+    const material = loadSyncKeyMaterial();
+    if (!material.exportedMasterKey) throw new Error("Na tomto zařízení chybí hlavní šifrovací klíč.");
+    responsePayload = await encryptDiaryState({ comment }, await importAccountMasterKey(material.exportedMasterKey), material.keyVersion);
+  }
   return request(settings, `/api/v1/treatment-proposals/${encodeURIComponent(proposalId)}/decision`, {
-    method: "POST", body: JSON.stringify({ approve }),
+    method: "POST", body: JSON.stringify({ decision, responsePayload }),
   });
+}
+
+export async function decryptTreatmentProposalResponse(proposal, grant = null) {
+  if (!proposal.responsePayload) return null;
+  const exportedKey = grant
+    ? await decryptMasterKeyEnvelope(grant.keyEnvelope)
+    : loadSyncKeyMaterial().exportedMasterKey;
+  if (!exportedKey) throw new Error("Na tomto zařízení chybí hlavní šifrovací klíč.");
+  return decryptDiaryState(proposal.responsePayload, await importAccountMasterKey(exportedKey));
 }
 
 export function cancelTreatmentProposal(settings, proposalId) {
   return request(settings, `/api/v1/treatment-proposals/${encodeURIComponent(proposalId)}`, { method: "DELETE" });
 }
 
-export async function persistEncryptedTreatmentDraft(grant, treatmentPlan) {
+export async function persistEncryptedTreatmentDraft(grant, treatmentPlan, doctorNote = "", previousProposalId = null) {
   const exportedKey = await decryptMasterKeyEnvelope(grant.keyEnvelope);
   const masterKey = await importAccountMasterKey(exportedKey);
-  const payload = await encryptDiaryState({ treatmentPlan }, masterKey, grant.keyVersion);
+  const payload = await encryptDiaryState({ treatmentPlan, doctorNote, previousProposalId }, masterKey, grant.keyVersion);
   return saveTreatmentDraft(draftScope(), {
     grantId: grant.grantId,
     ownerName: grant.state?.patientName || grant.ownerName || "",

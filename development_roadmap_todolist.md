@@ -544,9 +544,9 @@ Aktualni stav:
 * lékařská pozvánka nikdy sama neaktivuje přístup: pozvaný uživatel musí vlastnit nebo založit cílový účet, výslovně potvrdit sdílení a dokončit kryptografické propojení
 * u lékařem iniciovaných pozvánek zobrazit stav `čeká na registraci`, `čeká na souhlas`, `přijato`, `aktivní`, `odmítnuto`, `vypršelo` nebo `odvoláno`
 
-#### [pending] Budoucí rozšíření návrhů léčby
+#### Budoucí rozšíření návrhů léčby
 
-* přidat komentář lékaře a důvod změny, možnost pacienta vrátit návrh s komentářem a verzovanou historii komunikace
+* [done] komentář lékaře a důvod změny, možnost pacienta vrátit návrh s komentářem a verzovaná historie komunikace
 * zavést jemná oprávnění sdílení zvlášť pro denní záznamy, léčebný plán, reporty a navrhování změn, včetně časového omezení přístupu
 * vytvořit pacientsky čitelnou auditní historii zobrazení plánu, návrhů, rozhodnutí, zařízení a následné synchronizace
 * [done] automatizovaný integrační scénář: sdílení deníku → dávkový návrh lékaře → schválení pacientem → synchronizace plánu → aktualizovaný snapshot v kartotéce; frontendové porovnání změn je kryté samostatným testem

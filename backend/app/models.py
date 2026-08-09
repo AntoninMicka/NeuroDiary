@@ -120,10 +120,12 @@ class TreatmentProposalCreateModel(BaseModel):
     grantId: str = Field(min_length=1, max_length=128)
     baseRevision: int = Field(ge=0)
     payload: EncryptedPayloadModel
+    previousProposalId: str | None = Field(default=None, max_length=128)
 
 
 class TreatmentProposalDecisionModel(BaseModel):
-    approve: bool
+    decision: Literal["approved", "declined", "returned"]
+    responsePayload: EncryptedPayloadModel | None = None
 
 
 class DeviceRegistrationRequestModel(BaseModel):

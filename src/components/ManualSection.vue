@@ -139,7 +139,7 @@
             Lékař může ve stejné záložce upravit kopii současného léčebného plánu: změnit více
             položek, přidat nové nebo nepotřebné odebrat. Tlačítko
             <strong>Odeslat celý návrh pacientovi</strong> odešle všechny změny jako jeden celek.
-            Odesláním se pacientův plán ještě nezmění.
+            Součástí návrhu je důvod a vysvětlení změn pro pacienta. Odesláním se pacientův plán ještě nezmění.
           </p>
         </div>
 
@@ -147,10 +147,12 @@
           <h4>4. Schválení pacientem</h4>
           <p>
             Pacient najde čekající návrh v sekci <strong>Sdílení dat</strong>. Může jej schválit
-            a použít, nebo zamítnout. Před rozhodnutím vidí zvlášť přidané, odebrané a upravené
+            a použít, zamítnout nebo vrátit lékaři k přepracování s povinnou připomínkou. Před rozhodnutím vidí zvlášť přidané, odebrané a upravené
             položky; u upravených hodnot je zobrazena původní i nová hodnota. Při schválení aplikace nahradí léčebný plán navrženou verzí a
             změnu následně synchronizuje. Pokud návrh vychází ze starší revize deníku, aplikace jej
             nepoužije; pacient musí nejprve synchronizovat data a lékař vytvořit aktuální návrh.
+            Vrácený návrh může lékař otevřít v Datové správě a odeslat jako další verzi; původní
+            verze, důvod změny i pacientova šifrovaná připomínka zůstávají v historii vlákna.
           </p>
         </div>
 

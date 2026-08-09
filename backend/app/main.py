@@ -1195,7 +1195,7 @@ def create_treatment_proposal(
     if "doctor" not in share_store.get_active_roles(user.user_id, x_device_id):
         raise HTTPException(status_code=403, detail="Změnu léčby může navrhnout pouze lékař.")
     proposal_id = share_store.create_treatment_proposal(
-        payload.grantId, user.user_id, payload.baseRevision, payload.payload.model_dump(),
+        payload.grantId, user.user_id, payload.baseRevision, payload.payload.model_dump(), payload.previousProposalId,
     )
     if not proposal_id:
         raise HTTPException(status_code=404, detail="Aktivní sdílení nebylo nalezeno.")
@@ -1212,7 +1212,10 @@ def list_treatment_proposals(
 ) -> dict[str, object]:
     if not x_device_id or not device_store.is_active(user.user_id, x_device_id):
         raise HTTPException(status_code=403, detail="Návrhy jsou dostupné jen z důvěryhodného zařízení.")
-    return {"proposals": [dict(row) | {"payload": json.loads(row["payload_json"])} for row in share_store.list_treatment_proposals(user.user_id)]}
+    return {"proposals": [dict(row) | {
+        "payload": json.loads(row["payload_json"]),
+        "responsePayload": json.loads(row["response_payload_json"]) if row["response_payload_json"] else None,
+    } for row in share_store.list_treatment_proposals(user.user_id)]}
 
 
 @app.post("/api/v1/treatment-proposals/{proposal_id}/decision")
@@ -1226,12 +1229,17 @@ def decide_treatment_proposal(
         raise HTTPException(status_code=403, detail="Návrh lze schválit jen z důvěryhodného zařízení.")
     if "patient" not in share_store.get_active_roles(user.user_id, x_device_id):
         raise HTTPException(status_code=403, detail="Návrh může schválit pouze pacient.")
-    status = "approved" if payload.approve else "declined"
-    if not share_store.decide_treatment_proposal(proposal_id, user.user_id, status):
+    status = payload.decision
+    if status == "returned" and payload.responsePayload is None:
+        raise HTTPException(status_code=400, detail="Vrácený návrh musí obsahovat šifrovaný komentář pacienta.")
+    if not share_store.decide_treatment_proposal(
+        proposal_id, user.user_id, status, payload.responsePayload.model_dump() if payload.responsePayload else None,
+    ):
         raise HTTPException(status_code=404, detail="Čekající návrh nebyl nalezen.")
     audit_security(user.user_id, x_device_id, f"treatment_proposal_{status}", proposalId=proposal_id)
     proposal = share_store.get_treatment_proposal(proposal_id)
-    send_treatment_notification(proposal["proposer_user_id"], f"Pacient návrh léčby {'schválil' if payload.approve else 'zamítl'}.")
+    decision_label = {"approved": "schválil", "declined": "zamítl", "returned": "vrátil k přepracování"}[status]
+    send_treatment_notification(proposal["proposer_user_id"], f"Pacient návrh léčby {decision_label}.")
     return {"status": status}
 
 

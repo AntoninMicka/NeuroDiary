@@ -105,6 +105,7 @@ import {
   createTreatmentProposal,
   fetchTreatmentProposals,
   decryptTreatmentProposal,
+  decryptTreatmentProposalResponse,
   decideTreatmentProposal,
   cancelTreatmentProposal,
   persistEncryptedTreatmentDraft,
@@ -251,6 +252,9 @@ const sharedDiaryViews = ref([]);
 const selectedSharedGrantId = ref("");
 const selectedSharedSection = ref("timeline");
 const treatmentProposalDraft = ref([]);
+const treatmentProposalDoctorNote = ref("");
+const treatmentProposalPreviousId = ref(null);
+const treatmentReturnComments = reactive({});
 const treatmentProposalDraftDirty = ref(false);
 const treatmentDraftItems = ref(listEncryptedTreatmentDrafts());
 const treatmentDraftSavedAt = ref("");
@@ -1243,6 +1247,8 @@ async function selectSharedDiary(view) {
   selectedSharedDate.value = dates.at(-1) ?? getTodayKey();
   selectedSharedSection.value = "timeline";
   treatmentProposalDraft.value = structuredClone(view?.state?.treatmentPlan ?? []);
+  treatmentProposalDoctorNote.value = "";
+  treatmentProposalPreviousId.value = null;
   treatmentProposalDraftDirty.value = false;
   treatmentDraftSavedAt.value = "";
   if (!view) return;
@@ -1250,6 +1256,8 @@ async function selectSharedDiary(view) {
     const savedDraft = await restoreEncryptedTreatmentDraft(view);
     if (loadVersion !== treatmentDraftLoadVersion || !savedDraft) return;
     treatmentProposalDraft.value = structuredClone(savedDraft.treatmentPlan ?? []);
+    treatmentProposalDoctorNote.value = savedDraft.doctorNote ?? "";
+    treatmentProposalPreviousId.value = savedDraft.previousProposalId ?? null;
     treatmentProposalDraftDirty.value = true;
     treatmentDraftSavedAt.value = savedDraft.updatedAt;
   } catch (error) {
@@ -1272,7 +1280,9 @@ async function saveCurrentTreatmentDraft() {
   const view = selectedSharedView.value;
   if (!view || !treatmentProposalDraftDirty.value) return;
   try {
-    const saved = await persistEncryptedTreatmentDraft(view, treatmentProposalDraft.value);
+    const saved = await persistEncryptedTreatmentDraft(
+      view, treatmentProposalDraft.value, treatmentProposalDoctorNote.value, treatmentProposalPreviousId.value,
+    );
     treatmentDraftSavedAt.value = saved.updatedAt;
     treatmentDraftItems.value = listEncryptedTreatmentDrafts();
   } catch (error) {
@@ -1284,7 +1294,10 @@ async function submitTreatmentProposal() {
   if (!selectedSharedView.value || treatmentProposalDraft.value.some((item) => !item.name.trim() || !item.dose.trim())) return;
   isSharingBusy.value = true;
   try {
-    await createTreatmentProposal(syncSettings, selectedSharedView.value, treatmentProposalDraft.value);
+    await createTreatmentProposal(
+      syncSettings, selectedSharedView.value, treatmentProposalDraft.value,
+      treatmentProposalDoctorNote.value, treatmentProposalPreviousId.value,
+    );
     removeEncryptedTreatmentDraft(selectedSharedView.value.grantId);
     treatmentDraftItems.value = listEncryptedTreatmentDrafts();
     treatmentProposalDraftDirty.value = false;
@@ -1325,7 +1338,9 @@ async function refreshTreatmentProposals() {
     const proposals = await Promise.all((result.proposals ?? []).map(async (proposal) => {
       try {
         const grant = sharedDiaryViews.value.find((item) => item.grantId === proposal.grantId);
-        return { ...proposal, changes: await decryptTreatmentProposal(proposal, grant), error: "" };
+        const changes = await decryptTreatmentProposal(proposal, grant);
+        const response = await decryptTreatmentProposalResponse(proposal, grant);
+        return { ...proposal, changes, response, error: "" };
       }
       catch (error) { return { ...proposal, changes: null, error: error.message }; }
     }));
@@ -1346,7 +1361,7 @@ function notifyTreatmentProposalChanges(proposals) {
     if (!oldStatus && proposal.status === "pending" && proposal.ownerUserId === currentUserId) {
       body = `${proposal.proposerName || "Lékař"} poslal nový návrh změn léčby.`;
     } else if (oldStatus === "pending" && oldStatus !== proposal.status && proposal.proposerUserId === currentUserId) {
-      body = `Pacient ${proposal.ownerName || ""} návrh ${proposal.status === "approved" ? "schválil" : proposal.status === "declined" ? "zamítl" : "uzavřel"}.`;
+      body = `Pacient ${proposal.ownerName || ""} návrh ${proposal.status === "approved" ? "schválil" : proposal.status === "declined" ? "zamítl" : proposal.status === "returned" ? "vrátil k přepracování" : "uzavřel"}.`;
     }
     if (body) {
       storageMessage.value = body;
@@ -1364,7 +1379,11 @@ function treatmentProposalDiff(proposal) {
 }
 
 function proposalStatusLabel(status) {
-  return ({ pending: "Čeká na pacienta", approved: "Schváleno", declined: "Zamítnuto", cancelled: "Staženo" })[status] ?? status;
+  return ({ pending: "Čeká na pacienta", approved: "Schváleno", declined: "Zamítnuto", returned: "Vráceno k přepracování", cancelled: "Staženo" })[status] ?? status;
+}
+
+function proposalParentVersion(proposal) {
+  return treatmentProposals.value.find((item) => item.proposalId === proposal.previousProposalId)?.version ?? null;
 }
 
 async function withdrawTreatmentProposal(proposal) {
@@ -1373,20 +1392,38 @@ async function withdrawTreatmentProposal(proposal) {
   await refreshTreatmentProposals();
 }
 
-async function respondToTreatmentProposal(proposal, approve) {
-  if (approve) {
+async function respondToTreatmentProposal(proposal, decision) {
+  if (decision === "approved") {
     if (proposal.baseRevision !== Number(syncSettings.revision ?? 0)) {
       sharingMessage.value = "Návrh vychází ze starší revize deníku. Nejprve synchronizujte data a požádejte lékaře o nový návrh.";
       return;
     }
   }
-  await decideTreatmentProposal(syncSettings, proposal.proposalId, approve);
-  if (approve) {
+  const comment = treatmentReturnComments[proposal.proposalId]?.trim() ?? "";
+  if (decision === "returned" && !comment) {
+    sharingMessage.value = "Při vrácení návrhu napište lékaři, co má přepracovat.";
+    return;
+  }
+  await decideTreatmentProposal(syncSettings, proposal.proposalId, decision, comment);
+  if (decision === "approved") {
     state.treatmentPlan = structuredClone(proposal.changes?.treatmentPlan ?? []);
     selectedTreatmentPlanId.value = activeTodayTreatmentPlan.value[0]?.id ?? "";
   }
-  sharingMessage.value = approve ? "Navržené změny léčby byly schváleny a použity." : "Návrh změn léčby byl zamítnut.";
+  sharingMessage.value = decision === "approved" ? "Navržené změny léčby byly schváleny a použity."
+    : decision === "returned" ? "Návrh byl vrácen lékaři k přepracování." : "Návrh změn léčby byl zamítnut.";
   await refreshTreatmentProposals();
+}
+
+async function reviseTreatmentProposal(proposal) {
+  const view = sharedDiaryViews.value.find((item) => item.grantId === proposal.grantId);
+  if (!view || !proposal.changes) return;
+  await selectSharedDiary(view);
+  treatmentProposalDraft.value = structuredClone(proposal.changes.treatmentPlan ?? []);
+  treatmentProposalDoctorNote.value = proposal.changes.doctorNote ?? "";
+  treatmentProposalPreviousId.value = proposal.proposalId;
+  treatmentProposalDraftDirty.value = true;
+  selectPanel("sekce-kartoteka");
+  selectedSharedSection.value = "treatment";
 }
 
 function printSharedDiaryReport() {
@@ -3315,6 +3352,7 @@ function syncFloatingMenuHeight() {
                   <p class="panel-tip">Od {{ proposal.proposerName || 'lékaře' }} · revize {{ proposal.baseRevision }}</p>
                   <p v-if="proposal.error" class="form-error">{{ proposal.error }}</p>
                   <div v-else class="proposal-diff">
+                    <p v-if="proposal.changes?.doctorNote"><strong>Důvod lékaře:</strong> {{ proposal.changes.doctorNote }}</p>
                     <p><strong>{{ treatmentProposalDiff(proposal).total }} změn:</strong> {{ treatmentProposalDiff(proposal).added.length }} přidáno, {{ treatmentProposalDiff(proposal).changed.length }} upraveno, {{ treatmentProposalDiff(proposal).removed.length }} odebráno.</p>
                     <p v-for="item in treatmentProposalDiff(proposal).added" :key="`add-${item.id}`" class="proposal-change-added">+ {{ item.time }} · {{ item.name }} · {{ item.dose }}</p>
                     <p v-for="item in treatmentProposalDiff(proposal).removed" :key="`remove-${item.id}`" class="proposal-change-removed">− {{ item.time }} · {{ item.name }} · {{ item.dose }}</p>
@@ -3325,8 +3363,10 @@ function syncFloatingMenuHeight() {
                   </div>
                 </div>
                 <div class="share-status-actions">
-                  <button class="primary-button" type="button" :disabled="!proposal.changes" @click="respondToTreatmentProposal(proposal, true)">Schválit a použít</button>
-                  <button class="ghost-button" type="button" @click="respondToTreatmentProposal(proposal, false)">Zamítnout</button>
+                  <label class="proposal-return-comment"><span>Připomínka pro lékaře</span><textarea v-model="treatmentReturnComments[proposal.proposalId]" rows="2" maxlength="1000" placeholder="Co má lékař v návrhu upravit?"></textarea></label>
+                  <button class="primary-button" type="button" :disabled="!proposal.changes" @click="respondToTreatmentProposal(proposal, 'approved')">Schválit a použít</button>
+                  <button class="ghost-button" type="button" @click="respondToTreatmentProposal(proposal, 'returned')">Vrátit k přepracování</button>
+                  <button class="ghost-button" type="button" @click="respondToTreatmentProposal(proposal, 'declined')">Zamítnout</button>
                 </div>
               </article>
             </section>
@@ -3490,6 +3530,8 @@ function syncFloatingMenuHeight() {
                   <button v-if="isDoctorRoleActive" class="ghost-button" type="button" @click="addTreatmentProposalRow">Přidat položku</button>
                 </div>
                 <div v-if="isDoctorRoleActive" class="stack-form">
+                  <label><span>Důvod a vysvětlení změn</span><textarea v-model="treatmentProposalDoctorNote" rows="3" maxlength="2000" placeholder="Vysvětlete pacientovi navržené změny" @input="markTreatmentDraftDirty"></textarea></label>
+                  <p v-if="treatmentProposalPreviousId" class="panel-tip">Připravujete přepracovanou verzi vráceného návrhu.</p>
                   <div v-for="(item, index) in treatmentProposalDraft" :key="item.id" class="treatment-proposal-row">
                     <input v-model="item.name" type="text" maxlength="100" aria-label="Název léku" placeholder="Název léku" @input="markTreatmentDraftDirty" />
                     <input v-model="item.dose" type="text" maxlength="50" aria-label="Dávka" placeholder="Dávka" @input="markTreatmentDraftDirty" />
@@ -3538,6 +3580,7 @@ function syncFloatingMenuHeight() {
             <button :class="{ active: treatmentProposalFilter === 'pending' }" @click="treatmentProposalFilter = 'pending'">Čekající</button>
             <button :class="{ active: treatmentProposalFilter === 'approved' }" @click="treatmentProposalFilter = 'approved'">Schválené</button>
             <button :class="{ active: treatmentProposalFilter === 'declined' }" @click="treatmentProposalFilter = 'declined'">Zamítnuté</button>
+            <button :class="{ active: treatmentProposalFilter === 'returned' }" @click="treatmentProposalFilter = 'returned'">Vrácené</button>
           </div>
           <div v-if="treatmentDraftItems.length && ['all', 'draft'].includes(treatmentProposalFilter)" class="share-status-list">
             <article v-for="draft in treatmentDraftItems" :key="draft.grantId" class="share-status-card">
@@ -3553,11 +3596,16 @@ function syncFloatingMenuHeight() {
             <article v-for="proposal in filteredTreatmentProposals" :key="proposal.proposalId" class="share-status-card">
               <div>
                 <strong>{{ proposal.ownerName || 'Pacient' }}</strong>
-                <p class="panel-tip">{{ formatAdminTimestamp(proposal.createdAt) }} · revize {{ proposal.baseRevision }} · {{ proposal.changes?.treatmentPlan?.length ?? '?' }} položek</p>
+                <p class="panel-tip">Verze {{ proposal.version }}<template v-if="proposalParentVersion(proposal)"> · navazuje na verzi {{ proposalParentVersion(proposal) }}</template> · {{ formatAdminTimestamp(proposal.createdAt) }} · revize {{ proposal.baseRevision }} · {{ proposal.changes?.treatmentPlan?.length ?? '?' }} položek</p>
+                <p v-if="proposal.changes?.doctorNote" class="panel-tip"><strong>Důvod:</strong> {{ proposal.changes.doctorNote }}</p>
+                <p v-if="proposal.response?.comment" class="proposal-change-removed"><strong>Připomínka pacienta:</strong> {{ proposal.response.comment }}</p>
               </div>
               <span class="status-chip">{{ proposalStatusLabel(proposal.status) }}</span>
               <div v-if="proposal.status === 'pending'" class="share-status-actions">
                 <button class="ghost-button utility-menu-item-danger" type="button" @click="withdrawTreatmentProposal(proposal)">Stáhnout návrh</button>
+              </div>
+              <div v-else-if="proposal.status === 'returned'" class="share-status-actions">
+                <button class="primary-button" type="button" @click="reviseTreatmentProposal(proposal)">Přepracovat jako novou verzi</button>
               </div>
             </article>
           </div>

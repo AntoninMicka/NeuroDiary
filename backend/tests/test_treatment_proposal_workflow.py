@@ -71,7 +71,7 @@ def test_doctor_proposal_patient_approval_and_synced_plan_reaches_shared_record(
     assert patient_queue[0]["proposerName"] == doctor.name
 
     decision = main.decide_treatment_proposal(
-        created["proposalId"], TreatmentProposalDecisionModel(approve=True), patient, patient_device,
+        created["proposalId"], TreatmentProposalDecisionModel(decision="approved"), patient, patient_device,
     )
     assert decision["status"] == "approved"
 
@@ -106,3 +106,35 @@ def test_family_role_cannot_create_treatment_proposal(monkeypatch, tmp_path):
             family_device,
         )
     assert denied.value.status_code == 403
+
+
+def test_patient_can_return_proposal_and_doctor_creates_next_version(monkeypatch, tmp_path):
+    main = load_app(monkeypatch, tmp_path)
+    patient = account("google:patient", "patient@example.test", "Patient")
+    doctor = account("google:doctor", "doctor@example.test", "Doctor")
+    patient_device, doctor_device = "patient-device-0001", "doctor-device-00001"
+    for user, device, role in ((patient, patient_device, "patient"), (doctor, doctor_device, "doctor")):
+        main.share_store.register_identity(user.user_id, user.email, user.name)
+        main.device_store.upsert(user.user_id, device, device)
+        main.share_store.set_roles(user.user_id, [role])
+        main.share_store.set_active_roles(user.user_id, device, [role])
+    grant_id = main.share_store.save_grant(patient.user_id, doctor.user_id, doctor_device, 1, {"cipherText": "key"})
+    first = main.create_treatment_proposal(
+        TreatmentProposalCreateModel(grantId=grant_id, baseRevision=1, payload=encrypted_payload("version-1")), doctor, doctor_device,
+    )
+    returned = main.decide_treatment_proposal(
+        first["proposalId"],
+        TreatmentProposalDecisionModel(decision="returned", responsePayload=encrypted_payload("patient-comment")),
+        patient, patient_device,
+    )
+    second = main.create_treatment_proposal(
+        TreatmentProposalCreateModel(
+            grantId=grant_id, baseRevision=1, payload=encrypted_payload("version-2"), previousProposalId=first["proposalId"],
+        ), doctor, doctor_device,
+    )
+    proposals = main.list_treatment_proposals(doctor, doctor_device)["proposals"]
+    assert returned["status"] == "returned"
+    assert second["status"] == "pending"
+    assert proposals[0]["version"] == 2
+    assert proposals[0]["previousProposalId"] == first["proposalId"]
+    assert proposals[1]["responsePayload"]["cipherText"] == "patient-comment"

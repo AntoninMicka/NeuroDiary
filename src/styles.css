@@ -570,6 +570,12 @@ textarea {
 .proposal-change-added { color: #176b4d; }
 .proposal-change-removed { color: #9b3d30; }
 
+.proposal-return-comment {
+  flex: 1 0 100%;
+  display: grid;
+  gap: 0.35rem;
+}
+
 .shared-report-panel {
   display: grid;
   align-items: flex-start;
