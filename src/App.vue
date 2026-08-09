@@ -107,6 +107,10 @@ import {
   decryptTreatmentProposal,
   decideTreatmentProposal,
   cancelTreatmentProposal,
+  persistEncryptedTreatmentDraft,
+  restoreEncryptedTreatmentDraft,
+  listEncryptedTreatmentDrafts,
+  removeEncryptedTreatmentDraft,
   fetchDiaryShares,
   respondToDiaryShareInvitation,
   revokeDiaryShare,
@@ -248,6 +252,8 @@ const selectedSharedGrantId = ref("");
 const selectedSharedSection = ref("timeline");
 const treatmentProposalDraft = ref([]);
 const treatmentProposalDraftDirty = ref(false);
+const treatmentDraftItems = ref(listEncryptedTreatmentDrafts());
+const treatmentDraftSavedAt = ref("");
 const treatmentProposals = ref([]);
 const treatmentProposalFilter = ref("all");
 const selectedSharedDate = ref(getTodayKey());
@@ -556,6 +562,8 @@ let menuResizeObserver = null;
 let mediaQueryList = null;
 let quickCaptureClockIntervalId = 0;
 let localBackupTimeoutId = 0;
+let treatmentDraftTimeoutId = 0;
+let treatmentDraftLoadVersion = 0;
 let localChangeVersion = 0;
 let isUpdatingSyncMetadata = false;
 let isDeviceIdentityOperation = false;
@@ -733,6 +741,7 @@ watchEffect(() => {
 onUnmounted(() => {
   globalThis.clearInterval(quickCaptureClockIntervalId);
   globalThis.clearTimeout(localBackupTimeoutId);
+  globalThis.clearTimeout(treatmentDraftTimeoutId);
   automaticSyncScheduler.cancel();
   globalThis.removeEventListener("focus", refreshQuickCaptureClock);
   globalThis.document?.removeEventListener("visibilitychange", refreshQuickCaptureClock);
@@ -1223,18 +1232,52 @@ async function refreshDiaryShares(includeIncoming = activePanelId.value === "sek
   }
 }
 
-function selectSharedDiary(view) {
+async function selectSharedDiary(view) {
+  globalThis.clearTimeout(treatmentDraftTimeoutId);
+  if (treatmentProposalDraftDirty.value && selectedSharedView.value) {
+    await saveCurrentTreatmentDraft();
+  }
+  const loadVersion = ++treatmentDraftLoadVersion;
   selectedSharedGrantId.value = view?.grantId ?? "";
   const dates = Object.keys(view?.state?.entries ?? {}).sort();
   selectedSharedDate.value = dates.at(-1) ?? getTodayKey();
   selectedSharedSection.value = "timeline";
   treatmentProposalDraft.value = structuredClone(view?.state?.treatmentPlan ?? []);
   treatmentProposalDraftDirty.value = false;
+  treatmentDraftSavedAt.value = "";
+  if (!view) return;
+  try {
+    const savedDraft = await restoreEncryptedTreatmentDraft(view);
+    if (loadVersion !== treatmentDraftLoadVersion || !savedDraft) return;
+    treatmentProposalDraft.value = structuredClone(savedDraft.treatmentPlan ?? []);
+    treatmentProposalDraftDirty.value = true;
+    treatmentDraftSavedAt.value = savedDraft.updatedAt;
+  } catch (error) {
+    sharingMessage.value = `Koncept léčby se nepodařilo obnovit: ${error.message}`;
+  }
 }
 
 function addTreatmentProposalRow() {
   treatmentProposalDraft.value.push({ id: crypto.randomUUID(), name: "", dose: "", time: "08:00", validFrom: getTodayKey(), validTo: "" });
+  markTreatmentDraftDirty();
+}
+
+function markTreatmentDraftDirty() {
   treatmentProposalDraftDirty.value = true;
+  globalThis.clearTimeout(treatmentDraftTimeoutId);
+  treatmentDraftTimeoutId = globalThis.setTimeout(() => void saveCurrentTreatmentDraft(), 500);
+}
+
+async function saveCurrentTreatmentDraft() {
+  const view = selectedSharedView.value;
+  if (!view || !treatmentProposalDraftDirty.value) return;
+  try {
+    const saved = await persistEncryptedTreatmentDraft(view, treatmentProposalDraft.value);
+    treatmentDraftSavedAt.value = saved.updatedAt;
+    treatmentDraftItems.value = listEncryptedTreatmentDrafts();
+  } catch (error) {
+    sharingMessage.value = `Koncept léčby se nepodařilo uložit: ${error.message}`;
+  }
 }
 
 async function submitTreatmentProposal() {
@@ -1242,6 +1285,8 @@ async function submitTreatmentProposal() {
   isSharingBusy.value = true;
   try {
     await createTreatmentProposal(syncSettings, selectedSharedView.value, treatmentProposalDraft.value);
+    removeEncryptedTreatmentDraft(selectedSharedView.value.grantId);
+    treatmentDraftItems.value = listEncryptedTreatmentDrafts();
     treatmentProposalDraftDirty.value = false;
     sharingMessage.value = "Návrh změn léčby byl odeslán pacientovi ke schválení.";
   } catch (error) {
@@ -1249,6 +1294,28 @@ async function submitTreatmentProposal() {
   } finally {
     isSharingBusy.value = false;
   }
+}
+
+async function continueTreatmentDraft(draft) {
+  const view = sharedDiaryViews.value.find((item) => item.grantId === draft.grantId);
+  if (!view) {
+    sharingMessage.value = "Sdílený deník pro tento koncept není momentálně dostupný. Obnovte Kartotéku.";
+    return;
+  }
+  await selectSharedDiary(view);
+  selectPanel("sekce-kartoteka");
+  selectedSharedSection.value = "treatment";
+}
+
+function discardTreatmentDraft(draft) {
+  removeEncryptedTreatmentDraft(draft.grantId);
+  treatmentDraftItems.value = listEncryptedTreatmentDrafts();
+  if (selectedSharedGrantId.value === draft.grantId) {
+    treatmentProposalDraft.value = structuredClone(selectedSharedView.value?.state?.treatmentPlan ?? []);
+    treatmentProposalDraftDirty.value = false;
+    treatmentDraftSavedAt.value = "";
+  }
+  sharingMessage.value = "Rozepsaný návrh byl smazán z tohoto zařízení.";
 }
 
 async function refreshTreatmentProposals() {
@@ -2245,6 +2312,7 @@ async function signOut() {
   Object.assign(accountRoles, { assignedRoles: [], activeRoles: [], definitions: {} });
   selfAssignableRoleDraft.value = ["patient"];
   currentDeviceRoleDraft.value = [];
+  treatmentDraftItems.value = [];
   if (activePanelId.value === "sekce-admin") activePanelId.value = "sekce-home";
   webPushStatus.value = "needs-auth";
   applyAuthenticatedAccount(null);
@@ -2300,6 +2368,7 @@ async function refreshAccountRoles() {
   if (!authSession.value?.user || !hasSyncIdentity.value) return;
   try {
     Object.assign(accountRoles, await fetchCurrentRoles());
+    treatmentDraftItems.value = listEncryptedTreatmentDrafts();
     currentDeviceRoleDraft.value = [...accountRoles.activeRoles];
     selfAssignableRoleDraft.value = accountRoles.assignedRoles.filter(
       (role) => accountRoles.definitions?.[role]?.selfAssignable,
@@ -3422,11 +3491,12 @@ function syncFloatingMenuHeight() {
                 </div>
                 <div v-if="isDoctorRoleActive" class="stack-form">
                   <div v-for="(item, index) in treatmentProposalDraft" :key="item.id" class="treatment-proposal-row">
-                    <input v-model="item.name" type="text" maxlength="100" aria-label="Název léku" placeholder="Název léku" @input="treatmentProposalDraftDirty = true" />
-                    <input v-model="item.dose" type="text" maxlength="50" aria-label="Dávka" placeholder="Dávka" @input="treatmentProposalDraftDirty = true" />
-                    <input v-model="item.time" type="time" aria-label="Čas" @input="treatmentProposalDraftDirty = true" />
-                    <button class="ghost-button utility-menu-item-danger" type="button" @click="treatmentProposalDraft.splice(index, 1); treatmentProposalDraftDirty = true">Odebrat</button>
+                    <input v-model="item.name" type="text" maxlength="100" aria-label="Název léku" placeholder="Název léku" @input="markTreatmentDraftDirty" />
+                    <input v-model="item.dose" type="text" maxlength="50" aria-label="Dávka" placeholder="Dávka" @input="markTreatmentDraftDirty" />
+                    <input v-model="item.time" type="time" aria-label="Čas" @input="markTreatmentDraftDirty" />
+                    <button class="ghost-button utility-menu-item-danger" type="button" @click="treatmentProposalDraft.splice(index, 1); markTreatmentDraftDirty()">Odebrat</button>
                   </div>
+                  <p v-if="treatmentDraftSavedAt" class="panel-tip">Koncept automaticky uložen {{ formatAdminTimestamp(treatmentDraftSavedAt) }}.</p>
                   <button class="primary-button" type="button" :disabled="isSharingBusy || !treatmentProposalDraft.length" @click="submitTreatmentProposal">Odeslat celý návrh pacientovi</button>
                 </div>
                 <ul v-else-if="selectedSharedView.state.treatmentPlan?.length" class="backup-history-list">
@@ -3469,11 +3539,16 @@ function syncFloatingMenuHeight() {
             <button :class="{ active: treatmentProposalFilter === 'approved' }" @click="treatmentProposalFilter = 'approved'">Schválené</button>
             <button :class="{ active: treatmentProposalFilter === 'declined' }" @click="treatmentProposalFilter = 'declined'">Zamítnuté</button>
           </div>
-          <article v-if="treatmentProposalDraftDirty && ['all', 'draft'].includes(treatmentProposalFilter)" class="share-status-card">
-            <div><strong>{{ selectedSharedView?.state?.patientName || selectedSharedView?.ownerName || 'Pacient' }}</strong><p class="panel-tip">Rozepsaný návrh · {{ treatmentProposalDraft.length }} položek</p></div>
-            <span class="status-chip status-chip-update">Rozepsáno</span>
-            <div class="share-status-actions"><button class="primary-button" type="button" @click="selectPanel('sekce-kartoteka'); selectedSharedSection = 'treatment'">Pokračovat v úpravách</button></div>
-          </article>
+          <div v-if="treatmentDraftItems.length && ['all', 'draft'].includes(treatmentProposalFilter)" class="share-status-list">
+            <article v-for="draft in treatmentDraftItems" :key="draft.grantId" class="share-status-card">
+              <div><strong>{{ draft.ownerName || 'Pacient' }}</strong><p class="panel-tip">Rozepsaný návrh · {{ draft.itemCount }} položek · uloženo {{ formatAdminTimestamp(draft.updatedAt) }}</p></div>
+              <span class="status-chip status-chip-update">Rozepsáno</span>
+              <div class="share-status-actions">
+                <button class="primary-button" type="button" @click="continueTreatmentDraft(draft)">Pokračovat v úpravách</button>
+                <button class="ghost-button utility-menu-item-danger" type="button" @click="discardTreatmentDraft(draft)">Smazat koncept</button>
+              </div>
+            </article>
+          </div>
           <div v-if="filteredTreatmentProposals.length" class="share-status-list">
             <article v-for="proposal in filteredTreatmentProposals" :key="proposal.proposalId" class="share-status-card">
               <div>
@@ -3486,7 +3561,7 @@ function syncFloatingMenuHeight() {
               </div>
             </article>
           </div>
-          <p v-else-if="!(treatmentProposalDraftDirty && ['all', 'draft'].includes(treatmentProposalFilter))" class="panel-tip">Pro vybraný filtr nejsou dostupné žádné návrhy.</p>
+          <p v-else-if="!(treatmentDraftItems.length && ['all', 'draft'].includes(treatmentProposalFilter))" class="panel-tip">Pro vybraný filtr nejsou dostupné žádné návrhy.</p>
           <p v-if="sharingMessage" class="storage-message">{{ sharingMessage }}</p>
         </section>
 

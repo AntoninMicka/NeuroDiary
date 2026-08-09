@@ -538,6 +538,7 @@ Aktualni stav:
 * role `rodina` a `doktor` používají jako výchozí obrazovku kartotéku
 * rodina vidí naplánovanou léčbu sdílejícího pacienta pouze ke čtení
 * lékař může připravit dávkový, end-to-end šifrovaný návrh více změn léčebného plánu; změny se použijí až po výslovném schválení pacientem a návrh založený na zastaralé revizi se nesmí automaticky aplikovat
+* [done] rozpracované návrhy se automaticky a šifrovaně ukládají samostatně pro každý grant a lékařský účet, lze je obnovit po restartu nebo smazat v Datové správě
 * při více aktivních rolích se schopnosti skládají, ale UI nesmí zobrazit duplicitní položky ani oslabit omezení nejméně privilegované operace
 * role `doktor` může vytvořit pozvánku pro existujícího uživatele nebo předregistraci pro nový účet a iniciovat tak žádost, aby pozvaný pacient začal svá data s lékařem sdílet
 * lékařská pozvánka nikdy sama neaktivuje přístup: pozvaný uživatel musí vlastnit nebo založit cílový účet, výslovně potvrdit sdílení a dokončit kryptografické propojení

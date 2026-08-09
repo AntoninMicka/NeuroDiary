@@ -158,7 +158,10 @@
           <h4>5. Datová správa a upozornění</h4>
           <p>
             Lékař má samostatnou sekci <strong>Datová správa</strong>, kde může návrhy filtrovat na
-            čekající, schválené a zamítnuté a čekající návrh stáhnout. Nový návrh upozorní pacienta;
+            rozepsané, čekající, schválené a zamítnuté a čekající návrh stáhnout. Rozpracovaný
+            návrh se automaticky ukládá samostatně pro každého pacienta a po restartu jej lze obnovit
+            nebo bezpečně smazat. Jeho zdravotní obsah je v místním úložišti šifrovaný pacientovým
+            sdíleným klíčem a koncepty jsou oddělené podle přihlášeného lékařského účtu. Nový návrh upozorní pacienta;
             schválení nebo zamítnutí upozorní lékaře. Upozornění se zobrazí v aplikaci a při
             povolených systémových notifikacích také v prohlížeči. Je-li nakonfigurován Web Push a
             zařízení je registrováno, může zpráva dorazit i po zavření aplikace.

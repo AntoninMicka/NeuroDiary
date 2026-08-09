@@ -1,8 +1,11 @@
 import { decryptDiaryState, encryptDiaryState, importAccountMasterKey } from "./e2eCrypto.js";
 import { decryptMasterKeyEnvelope, encryptMasterKeyForDevice } from "./deviceKeyExchange.js";
-import { getAuthorizationHeaderValue } from "./authService.js";
+import { getAuthorizationHeaderValue, loadStoredAuthSession } from "./authService.js";
 import { getCurrentDeviceId } from "./trustedDevices.js";
 import { loadSyncKeyMaterial } from "./syncService.js";
+import { deleteTreatmentDraft, listTreatmentDrafts, loadTreatmentDraft, saveTreatmentDraft } from "./treatmentDraftStore.js";
+
+const draftScope = () => loadStoredAuthSession()?.user?.userId || "guest";
 
 function endpoint(settings, path) {
   const base = (settings.endpoint || globalThis.location?.origin || "").replace(/\/+$/, "");
@@ -91,4 +94,33 @@ export function decideTreatmentProposal(settings, proposalId, approve) {
 
 export function cancelTreatmentProposal(settings, proposalId) {
   return request(settings, `/api/v1/treatment-proposals/${encodeURIComponent(proposalId)}`, { method: "DELETE" });
+}
+
+export async function persistEncryptedTreatmentDraft(grant, treatmentPlan) {
+  const exportedKey = await decryptMasterKeyEnvelope(grant.keyEnvelope);
+  const masterKey = await importAccountMasterKey(exportedKey);
+  const payload = await encryptDiaryState({ treatmentPlan }, masterKey, grant.keyVersion);
+  return saveTreatmentDraft(draftScope(), {
+    grantId: grant.grantId,
+    ownerName: grant.state?.patientName || grant.ownerName || "",
+    baseRevision: grant.revision,
+    itemCount: treatmentPlan.length,
+    payload,
+  });
+}
+
+export async function restoreEncryptedTreatmentDraft(grant) {
+  const draft = loadTreatmentDraft(draftScope(), grant.grantId);
+  if (!draft) return null;
+  const exportedKey = await decryptMasterKeyEnvelope(grant.keyEnvelope);
+  const masterKey = await importAccountMasterKey(exportedKey);
+  return { ...draft, ...(await decryptDiaryState(draft.payload, masterKey)) };
+}
+
+export function listEncryptedTreatmentDrafts() {
+  return listTreatmentDrafts(draftScope()).map(({ payload: _payload, ...metadata }) => metadata);
+}
+
+export function removeEncryptedTreatmentDraft(grantId) {
+  return deleteTreatmentDraft(draftScope(), grantId);
 }
