@@ -1156,7 +1156,9 @@ function ensureSyncIdentity() {
 }
 
 function selectPanel(panelId) {
-  if (!visiblePanelItems.value.some((item) => item.id === panelId)) {
+  const isVisiblePanel = visiblePanelItems.value.some((item) => item.id === panelId);
+  const isAvailableAdminPanel = panelId === "sekce-admin" && Boolean(adminStatus.value);
+  if (!isVisiblePanel && !isAvailableAdminPanel) {
     return;
   }
   activePanelId.value = panelId;
@@ -2915,8 +2917,9 @@ function syncFloatingMenuHeight() {
               </button>
             </div>
 
-            <div v-if="!isCaregiverOnlyMode" class="utility-menu">
+            <div class="utility-menu">
               <button
+                v-if="!isCaregiverOnlyMode"
                 class="ghost-button"
                 :class="{ 'panel-pill-active': activePanelId === 'sekce-report' }"
                 type="button"
@@ -2938,6 +2941,7 @@ function syncFloatingMenuHeight() {
 
               <div v-if="isUtilityMenuOpen" class="utility-menu-panel" role="menu" aria-label="Další sekce, export a zálohy">
                 <button
+                  v-if="!isCaregiverOnlyMode"
                   class="utility-menu-item"
                   type="button"
                   role="menuitem"
@@ -2946,10 +2950,10 @@ function syncFloatingMenuHeight() {
                 >
                   Hodinová matice
                 </button>
-                <button class="utility-menu-item" type="button" role="menuitem" @click="handleUtilityAction(() => selectPanel('sekce-udaje'))">
+                <button v-if="!isCaregiverOnlyMode" class="utility-menu-item" type="button" role="menuitem" @click="handleUtilityAction(() => selectPanel('sekce-udaje'))">
                   Údaje
                 </button>
-                <button class="utility-menu-item" type="button" role="menuitem" @click="handleUtilityAction(() => selectPanel('sekce-trendy'))">
+                <button v-if="!isCaregiverOnlyMode" class="utility-menu-item" type="button" role="menuitem" @click="handleUtilityAction(() => selectPanel('sekce-trendy'))">
                   Trendy
                 </button>
                 <button class="utility-menu-item" type="button" role="menuitem" @click="handleUtilityAction(() => selectPanel('sekce-kontakty'))">
