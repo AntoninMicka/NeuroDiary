@@ -386,11 +386,12 @@ Aktuální stav:
 * typy událostí pro zařízení, klíče, role, sdílení a návrhy léčby se neskládají volným textem
 * audit pokrývá úspěšné přihlášení, reset cloudových dat, hromadné odvolání zařízení,
   zapnutí a vypnutí push notifikací a ruční vytvoření nebo smazání cloudové zálohy
+* každý typ události má explicitní allowlist metadat; neočekávaná, strukturovaná nebo příliš
+  dlouhá data se odmítnou a do auditní historie se neuloží
 
 Navazující kroky:
 
 * při zavedení serverových exportů, souhlasů a výmazu účtu doplnit jejich auditní události
-* definovat povolená metadata a vyloučit zdravotní data, tokeny a klíče
 * doplnit stránkování, retenci, uživatelsky čitelné popisy a ochranu integrity historie
 * otestovat oprávnění a izolaci auditních záznamů mezi účty
 

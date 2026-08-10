@@ -19,7 +19,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 
 from .auth import AuthManager, AuthenticatedUser
-from .audit_events import AuditEventType, INVITATION_DECISION_EVENTS, TREATMENT_PROPOSAL_DECISION_EVENTS
+from .audit_events import (
+    AuditEventType,
+    INVITATION_DECISION_EVENTS,
+    TREATMENT_PROPOSAL_DECISION_EVENTS,
+    validate_audit_details,
+)
 from .cloud_admin import CloudAdminService
 from .models import (
     AuthConfigResponseModel,
@@ -628,7 +633,14 @@ def canonical_jwk(jwk: dict[str, object]) -> str:
 def audit_security(user_id: str, device_id: str, event_type: AuditEventType, **details: object) -> None:
     event_name = event_type.value
     try:
-        key_exchange_store.record_audit(str(uuid.uuid4()), user_id, device_id, event_name, json.dumps(details, separators=(",", ":")))
+        safe_details = validate_audit_details(event_type, details)
+        key_exchange_store.record_audit(
+            str(uuid.uuid4()),
+            user_id,
+            device_id,
+            event_name,
+            json.dumps(safe_details, separators=(",", ":")),
+        )
     except Exception as error:
         # Audit availability must not lock users out of the emergency registration path.
         log_event("ERROR", "security_audit_write_failed", deviceId=device_id, eventType=event_name, errorType=type(error).__name__)

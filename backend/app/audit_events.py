@@ -54,3 +54,72 @@ TREATMENT_PROPOSAL_DECISION_EVENTS = {
     "declined": AuditEventType.TREATMENT_PROPOSAL_DECLINED,
     "returned": AuditEventType.TREATMENT_PROPOSAL_RETURNED,
 }
+
+
+AUDIT_DETAIL_FIELDS: dict[AuditEventType, frozenset[str]] = {
+    AuditEventType.ACCOUNT_ROLES_CHANGED: frozenset({"targetUserId", "roles"}),
+    AuditEventType.AUTH_SESSION_CREATED: frozenset({"provider"}),
+    AuditEventType.ADMIN_BACKUP_CREATED: frozenset({"backupId"}),
+    AuditEventType.ADMIN_BACKUP_DELETED: frozenset({"backupId"}),
+    AuditEventType.DEVICE_ACTIVE_ROLES_CHANGED: frozenset({"roles"}),
+    AuditEventType.SELF_ASSIGNABLE_ROLES_CHANGED: frozenset({"roles"}),
+    AuditEventType.EMERGENCY_REVOKED_DEVICE_REACTIVATED: frozenset(),
+    AuditEventType.EMERGENCY_DEVICE_REGISTRATION_ACCEPTED: frozenset(),
+    AuditEventType.DEVICE_BOOTSTRAP_TRUSTED: frozenset({"fingerprint"}),
+    AuditEventType.DEVICE_MIGRATION_TRUSTED: frozenset({"fingerprint"}),
+    AuditEventType.DEVICE_KEY_VERIFIED: frozenset({"fingerprint"}),
+    AuditEventType.EMERGENCY_DEVICE_KEY_ACCEPTED: frozenset({"fingerprint"}),
+    AuditEventType.IDENTITY_KEY_MIGRATION_DISABLED: frozenset(),
+    AuditEventType.MASTER_KEY_REQUESTED: frozenset({"requestId"}),
+    AuditEventType.MASTER_KEY_TRANSFER_CREATED: frozenset(
+        {"requestId", "transferId", "targetDeviceId", "keyVersion"},
+    ),
+    AuditEventType.MASTER_KEY_TRANSFER_CONFIRMED: frozenset({"transferId"}),
+    AuditEventType.DEVICE_ALIAS_CHANGED: frozenset({"targetDeviceId"}),
+    AuditEventType.DEVICE_REVOKED: frozenset({"revokedDeviceId"}),
+    AuditEventType.OTHER_DEVICES_REVOKED: frozenset({"affected"}),
+    AuditEventType.PUSH_NOTIFICATIONS_ENABLED: frozenset({"scheduledCount"}),
+    AuditEventType.PUSH_NOTIFICATIONS_DISABLED: frozenset(),
+    AuditEventType.SYNC_STATE_RESET: frozenset(),
+    AuditEventType.ROTATION_KEY_DISTRIBUTED: frozenset(
+        {"transferId", "targetDeviceId", "keyVersion"},
+    ),
+    AuditEventType.KEY_ROTATED: frozenset({"keyVersion", "targetCount"}),
+    AuditEventType.DIARY_SHARE_INVITATION_CREATED: frozenset({"invitationId"}),
+    AuditEventType.DIARY_SHARE_INVITATION_ACCEPTED: frozenset({"invitationId"}),
+    AuditEventType.DIARY_SHARE_INVITATION_DECLINED: frozenset({"invitationId"}),
+    AuditEventType.DIARY_SHARE_INVITATION_CANCELLED: frozenset({"invitationId"}),
+    AuditEventType.DIARY_SHARE_ACTIVATED: frozenset({"invitationId", "grantId"}),
+    AuditEventType.DIARY_SHARE_CREATED: frozenset({"recipientUserId", "recipientDeviceId"}),
+    AuditEventType.DIARY_SHARE_REVOKED: frozenset({"grantId"}),
+    AuditEventType.TREATMENT_PROPOSAL_CREATED: frozenset({"proposalId", "grantId"}),
+    AuditEventType.TREATMENT_PROPOSAL_APPROVED: frozenset({"proposalId"}),
+    AuditEventType.TREATMENT_PROPOSAL_DECLINED: frozenset({"proposalId"}),
+    AuditEventType.TREATMENT_PROPOSAL_RETURNED: frozenset({"proposalId"}),
+    AuditEventType.TREATMENT_PROPOSAL_CANCELLED: frozenset({"proposalId"}),
+}
+
+
+def validate_audit_details(event_type: AuditEventType, details: dict[str, object]) -> dict[str, object]:
+    """Accept only small, explicitly catalogued, non-sensitive audit metadata."""
+
+    unexpected = set(details) - AUDIT_DETAIL_FIELDS[event_type]
+    if unexpected:
+        raise ValueError(f"Unexpected audit detail fields: {', '.join(sorted(unexpected))}")
+
+    for field, value in details.items():
+        if isinstance(value, str):
+            if len(value) > 256:
+                raise ValueError(f"Audit detail field {field} exceeds 256 characters.")
+        elif isinstance(value, bool):
+            continue
+        elif isinstance(value, int):
+            if value < 0:
+                raise ValueError(f"Audit detail field {field} must not be negative.")
+        elif isinstance(value, list):
+            if len(value) > 16 or any(not isinstance(item, str) or len(item) > 64 for item in value):
+                raise ValueError(f"Audit detail field {field} contains an invalid list.")
+        else:
+            raise ValueError(f"Audit detail field {field} has an unsupported value type.")
+
+    return details
