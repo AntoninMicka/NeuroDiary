@@ -274,12 +274,14 @@ class SecurityAuditEventModel(BaseModel):
     eventId: str
     deviceId: str
     eventType: str
+    label: str
     details: dict[str, object]
     createdAt: datetime
 
 
 class SecurityAuditListResponseModel(BaseModel):
     events: list[SecurityAuditEventModel]
+    nextCursor: str | None = None
 
 
 class IdentityKeyMigrationModel(BaseModel):

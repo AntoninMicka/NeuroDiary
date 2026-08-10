@@ -12,6 +12,7 @@ from backend.app.audit_events import (
     validate_audit_details,
 )
 from backend.app.models import DeviceRegistrationRequestModel, IdentityExchangeRequestModel
+from backend.app.key_exchange_store import SqliteKeyExchangeStore
 
 
 def load_app(monkeypatch, tmp_path):
@@ -106,3 +107,37 @@ def test_invalid_metadata_is_not_persisted_and_does_not_break_operation(monkeypa
     )
 
     assert main.key_exchange_store.list_audit("google:audit-user") == []
+
+
+def test_audit_api_uses_stable_cursor_pagination_and_labels(monkeypatch, tmp_path):
+    main = load_app(monkeypatch, tmp_path)
+    user_id = "google:audit-user"
+    for _ in range(3):
+        main.audit_security(user_id, "device-0000000001", AuditEventType.SYNC_STATE_RESET)
+
+    first = main.list_security_audit(user_id, limit=2, cursor=None)
+    second = main.list_security_audit(user_id, limit=2, cursor=first.nextCursor)
+
+    assert len(first.events) == 2
+    assert first.nextCursor == first.events[-1].eventId
+    assert first.events[0].label == "Odstraněna cloudová data deníku"
+    assert [event.eventId for event in first.events + second.events] == [
+        item["event_id"] for item in main.key_exchange_store.list_audit(user_id)
+    ]
+    assert second.nextCursor is None
+
+
+def test_recording_audit_event_removes_items_past_retention(tmp_path):
+    store = SqliteKeyExchangeStore(str(tmp_path / "retention.db"), audit_retention_days=30)
+    store.initialize()
+    expired_at = datetime.now(UTC) - timedelta(days=31)
+    with store._connect() as connection:
+        connection.execute(
+            "INSERT INTO security_audit_events VALUES (?, ?, ?, ?, ?, ?)",
+            ("expired", "user", "device", "sync_state_reset", "{}", expired_at.isoformat()),
+        )
+        connection.commit()
+
+    store.record_audit("current", "user", "device", "sync_state_reset", "{}")
+
+    assert [event["event_id"] for event in store.list_audit("user")] == ["current"]

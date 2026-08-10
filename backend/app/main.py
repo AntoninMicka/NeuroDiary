@@ -14,7 +14,7 @@ from typing import Annotated
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from cryptography.hazmat.primitives import hashes
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 
@@ -23,6 +23,7 @@ from .audit_events import (
     AuditEventType,
     INVITATION_DECISION_EVENTS,
     TREATMENT_PROPOSAL_DECISION_EVENTS,
+    audit_event_label,
     validate_audit_details,
 )
 from .cloud_admin import CloudAdminService
@@ -94,6 +95,7 @@ CORS_ORIGINS = [
     if origin.strip()
 ]
 PUSH_SCHEDULER_TOKEN = os.getenv("NEURODIARY_PUSH_SCHEDULER_TOKEN", "").strip()
+AUDIT_RETENTION_DAYS = max(30, min(int(os.getenv("NEURODIARY_AUDIT_RETENTION_DAYS", "730")), 3650))
 ADMIN_EMAILS = {
     email.strip().lower()
     for email in os.getenv("NEURODIARY_ADMIN_EMAILS", "").split(",")
@@ -108,7 +110,11 @@ ROLE_DEFINITIONS = {
 
 store = create_sync_store(database_url=DATABASE_URL or None, database_path=DATABASE_PATH)
 device_store = create_device_store(database_url=DATABASE_URL or None, database_path=DATABASE_PATH)
-key_exchange_store = create_key_exchange_store(database_url=DATABASE_URL or None, database_path=DATABASE_PATH)
+key_exchange_store = create_key_exchange_store(
+    database_url=DATABASE_URL or None,
+    database_path=DATABASE_PATH,
+    audit_retention_days=AUDIT_RETENTION_DAYS,
+)
 push_store = create_push_store(database_url=DATABASE_URL or None, database_path=DATABASE_PATH)
 push_service = PushService()
 auth_manager = AuthManager()
@@ -918,11 +924,26 @@ def revoke_trusted_device(
 @app.get("/api/v1/security/audit", response_model=SecurityAuditListResponseModel)
 def list_security_audit(
     user_id: Annotated[str, Depends(verify_trusted_device)],
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    cursor: Annotated[str | None, Query(max_length=128)] = None,
 ) -> SecurityAuditListResponseModel:
-    return SecurityAuditListResponseModel(events=[
-        SecurityAuditEventModel(eventId=item["event_id"], deviceId=item["device_id"], eventType=item["event_type"], details=json.loads(item["details_json"]), createdAt=datetime.fromisoformat(item["created_at"]) if isinstance(item["created_at"], str) else item["created_at"])
-        for item in key_exchange_store.list_audit(user_id)
-    ])
+    page = key_exchange_store.list_audit(user_id, limit=limit + 1, before_event_id=cursor)
+    has_more = len(page) > limit
+    items = page[:limit]
+    return SecurityAuditListResponseModel(
+        events=[
+            SecurityAuditEventModel(
+                eventId=item["event_id"],
+                deviceId=item["device_id"],
+                eventType=item["event_type"],
+                label=audit_event_label(item["event_type"]),
+                details=json.loads(item["details_json"]),
+                createdAt=datetime.fromisoformat(item["created_at"]) if isinstance(item["created_at"], str) else item["created_at"],
+            )
+            for item in items
+        ],
+        nextCursor=items[-1]["event_id"] if has_more else None,
+    )
 
 
 @app.post("/api/v1/devices/revoke-others", response_model=DeviceActionResponseModel)

@@ -76,6 +76,7 @@ Pokud nechces vsechno klikat rucne, prvni cast tohohle checklistu umi automatizo
 - [ ] nastavit `NEURODIARY_APPLE_REDIRECT_PATH`
   doporucena hodnota:
   `/auth/apple/callback`
+- [ ] volitelne nastavit `NEURODIARY_AUDIT_RETENTION_DAYS` (vychozi `730`, povoleno `30–3650` dni)
 - [ ] nastavit `CLOUD_RUN_DEPLOY_FLAGS`
   doporuceny zaklad:
   `--add-cloudsql-instances=PROJECT_ID:REGION:INSTANCE_ID --min-instances=0 --max-instances=3`

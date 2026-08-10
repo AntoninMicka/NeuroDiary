@@ -31,8 +31,9 @@ class TransferRecord:
 
 
 class SqliteKeyExchangeStore:
-    def __init__(self, database_path: str) -> None:
+    def __init__(self, database_path: str, audit_retention_days: int = 730) -> None:
         self.database_path = Path(database_path)
+        self.audit_retention_days = max(30, min(audit_retention_days, 3650))
 
     @contextmanager
     def _connect(self):
@@ -69,6 +70,8 @@ class SqliteKeyExchangeStore:
                   event_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, device_id TEXT NOT NULL,
                   event_type TEXT NOT NULL, details_json TEXT NOT NULL, created_at TEXT NOT NULL
                 );
+                CREATE INDEX IF NOT EXISTS idx_security_audit_user_created
+                  ON security_audit_events (user_id, created_at DESC, event_id DESC);
                 CREATE TABLE IF NOT EXISTS identity_key_migrations (
                   user_id TEXT PRIMARY KEY, enabled INTEGER NOT NULL, created_at TEXT NOT NULL,
                   disabled_at TEXT, disabled_by_device_id TEXT,
@@ -212,16 +215,34 @@ class SqliteKeyExchangeStore:
 
     def record_audit(self, event_id, user_id, device_id, event_type, details_json):
         now = datetime.now(UTC)
+        retention_cutoff = now - timedelta(days=self.audit_retention_days)
         with self._connect() as connection:
+            connection.execute("DELETE FROM security_audit_events WHERE created_at < ?", (retention_cutoff.isoformat(),))
             connection.execute("INSERT INTO security_audit_events VALUES (?, ?, ?, ?, ?, ?)", (event_id, user_id, device_id, event_type, details_json, now.isoformat()))
             connection.commit()
 
-    def list_audit(self, user_id, limit=100):
+    def list_audit(self, user_id, limit=100, before_event_id=None):
         with self._connect() as connection:
-            return [dict(row) for row in connection.execute("""
-                SELECT event_id, device_id, event_type, details_json, created_at
-                FROM security_audit_events WHERE user_id = ? ORDER BY created_at DESC LIMIT ?
-            """, (user_id, limit)).fetchall()]
+            if before_event_id:
+                cursor = connection.execute(
+                    "SELECT created_at, event_id FROM security_audit_events WHERE user_id = ? AND event_id = ?",
+                    (user_id, before_event_id),
+                ).fetchone()
+                if cursor is None:
+                    return []
+                rows = connection.execute("""
+                    SELECT event_id, device_id, event_type, details_json, created_at
+                    FROM security_audit_events
+                    WHERE user_id = ? AND (created_at < ? OR (created_at = ? AND event_id < ?))
+                    ORDER BY created_at DESC, event_id DESC LIMIT ?
+                """, (user_id, cursor["created_at"], cursor["created_at"], cursor["event_id"], limit)).fetchall()
+            else:
+                rows = connection.execute("""
+                    SELECT event_id, device_id, event_type, details_json, created_at
+                    FROM security_audit_events WHERE user_id = ?
+                    ORDER BY created_at DESC, event_id DESC LIMIT ?
+                """, (user_id, limit)).fetchall()
+            return [dict(row) for row in rows]
 
     def get_migration(self, user_id):
         now = datetime.now(UTC)
@@ -247,8 +268,9 @@ class SqliteKeyExchangeStore:
 
 
 class PostgresKeyExchangeStore(SqliteKeyExchangeStore):
-    def __init__(self, database_url: str) -> None:
+    def __init__(self, database_url: str, audit_retention_days: int = 730) -> None:
         self.database_url = database_url
+        self.audit_retention_days = max(30, min(audit_retention_days, 3650))
 
     def _connect(self):
         from psycopg import connect
@@ -288,6 +310,10 @@ class PostgresKeyExchangeStore(SqliteKeyExchangeStore):
             """]
             for statement in statements:
                 connection.execute(statement)
+            connection.execute("""
+                CREATE INDEX IF NOT EXISTS idx_security_audit_user_created
+                ON security_audit_events (user_id, created_at DESC, event_id DESC)
+            """)
             connection.execute("ALTER TABLE identity_key_migrations ADD COLUMN IF NOT EXISTS emergency_registration_open INTEGER NOT NULL DEFAULT 1")
             # Early key-exchange builds used JSONB. Canonical key ownership proofs compare
             # the exact serialized JWK, so normalize legacy deployments to TEXT.
@@ -346,9 +372,9 @@ class PostgresKeyExchangeStore(SqliteKeyExchangeStore):
             raw.close()
 
 
-def create_key_exchange_store(*, database_url: str | None, database_path: str):
+def create_key_exchange_store(*, database_url: str | None, database_path: str, audit_retention_days: int = 730):
     if database_url and database_url.startswith(("postgresql://", "postgres://")):
-        return PostgresKeyExchangeStore(database_url)
+        return PostgresKeyExchangeStore(database_url, audit_retention_days)
     if database_url and database_url.startswith("sqlite:///"):
         database_path = database_url.removeprefix("sqlite:///")
-    return SqliteKeyExchangeStore(database_path)
+    return SqliteKeyExchangeStore(database_path, audit_retention_days)

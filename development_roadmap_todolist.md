@@ -388,11 +388,13 @@ Aktuální stav:
   zapnutí a vypnutí push notifikací a ruční vytvoření nebo smazání cloudové zálohy
 * každý typ události má explicitní allowlist metadat; neočekávaná, strukturovaná nebo příliš
   dlouhá data se odmítnou a do auditní historie se neuloží
+* API vrací audit po stránkách pomocí stabilního kurzoru a přidává uživatelsky čitelný popisek
+* audit má konfigurovatelnou retenci `NEURODIARY_AUDIT_RETENTION_DAYS` s výchozí dobou 730 dní
 
 Navazující kroky:
 
 * při zavedení serverových exportů, souhlasů a výmazu účtu doplnit jejich auditní události
-* doplnit stránkování, retenci, uživatelsky čitelné popisy a ochranu integrity historie
+* doplnit ochranu integrity historie
 * otestovat oprávnění a izolaci auditních záznamů mezi účty
 
 ### [pending] 5.5 GDPR

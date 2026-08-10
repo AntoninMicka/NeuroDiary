@@ -99,6 +99,56 @@ AUDIT_DETAIL_FIELDS: dict[AuditEventType, frozenset[str]] = {
     AuditEventType.TREATMENT_PROPOSAL_CANCELLED: frozenset({"proposalId"}),
 }
 
+AUDIT_EVENT_LABELS: dict[AuditEventType, str] = {
+    event: event.value.replace("_", " ").capitalize()
+    for event in AuditEventType
+}
+AUDIT_EVENT_LABELS.update({
+    AuditEventType.ACCOUNT_ROLES_CHANGED: "Změněny role účtu",
+    AuditEventType.AUTH_SESSION_CREATED: "Úspěšné přihlášení",
+    AuditEventType.ADMIN_BACKUP_CREATED: "Vytvořena cloudová záloha",
+    AuditEventType.ADMIN_BACKUP_DELETED: "Odstraněna cloudová záloha",
+    AuditEventType.DEVICE_ACTIVE_ROLES_CHANGED: "Změněny aktivní role zařízení",
+    AuditEventType.SELF_ASSIGNABLE_ROLES_CHANGED: "Změněny role uživatele",
+    AuditEventType.EMERGENCY_REVOKED_DEVICE_REACTIVATED: "Nouzově obnoveno odvolané zařízení",
+    AuditEventType.EMERGENCY_DEVICE_REGISTRATION_ACCEPTED: "Nouzově přijata registrace zařízení",
+    AuditEventType.DEVICE_BOOTSTRAP_TRUSTED: "Nastaveno první důvěryhodné zařízení",
+    AuditEventType.DEVICE_MIGRATION_TRUSTED: "Zařízení přijato během migrace klíčů",
+    AuditEventType.DEVICE_KEY_VERIFIED: "Ověřen klíč zařízení",
+    AuditEventType.EMERGENCY_DEVICE_KEY_ACCEPTED: "Nouzově přijat klíč zařízení",
+    AuditEventType.IDENTITY_KEY_MIGRATION_DISABLED: "Ukončena migrace identitních klíčů",
+    AuditEventType.MASTER_KEY_REQUESTED: "Vyžádán hlavní šifrovací klíč",
+    AuditEventType.MASTER_KEY_TRANSFER_CREATED: "Připraven přenos hlavního klíče",
+    AuditEventType.MASTER_KEY_TRANSFER_CONFIRMED: "Potvrzen přenos hlavního klíče",
+    AuditEventType.DEVICE_ALIAS_CHANGED: "Přejmenováno zařízení",
+    AuditEventType.DEVICE_REVOKED: "Odvoláno důvěryhodné zařízení",
+    AuditEventType.OTHER_DEVICES_REVOKED: "Odvolána ostatní zařízení",
+    AuditEventType.PUSH_NOTIFICATIONS_ENABLED: "Zapnuty push notifikace",
+    AuditEventType.PUSH_NOTIFICATIONS_DISABLED: "Vypnuty push notifikace",
+    AuditEventType.SYNC_STATE_RESET: "Odstraněna cloudová data deníku",
+    AuditEventType.ROTATION_KEY_DISTRIBUTED: "Distribuován obnovený šifrovací klíč",
+    AuditEventType.KEY_ROTATED: "Obnoven šifrovací klíč",
+    AuditEventType.DIARY_SHARE_INVITATION_CREATED: "Vytvořena pozvánka ke sdílení",
+    AuditEventType.DIARY_SHARE_INVITATION_ACCEPTED: "Přijata pozvánka ke sdílení",
+    AuditEventType.DIARY_SHARE_INVITATION_DECLINED: "Odmítnuta pozvánka ke sdílení",
+    AuditEventType.DIARY_SHARE_INVITATION_CANCELLED: "Zrušena pozvánka ke sdílení",
+    AuditEventType.DIARY_SHARE_ACTIVATED: "Aktivováno sdílení deníku",
+    AuditEventType.DIARY_SHARE_CREATED: "Vytvořeno sdílení deníku",
+    AuditEventType.DIARY_SHARE_REVOKED: "Odvoláno sdílení deníku",
+    AuditEventType.TREATMENT_PROPOSAL_CREATED: "Vytvořen návrh změny léčby",
+    AuditEventType.TREATMENT_PROPOSAL_APPROVED: "Schválen návrh změny léčby",
+    AuditEventType.TREATMENT_PROPOSAL_DECLINED: "Odmítnut návrh změny léčby",
+    AuditEventType.TREATMENT_PROPOSAL_RETURNED: "Vrácen návrh změny léčby",
+    AuditEventType.TREATMENT_PROPOSAL_CANCELLED: "Zrušen návrh změny léčby",
+})
+
+
+def audit_event_label(event_type: str) -> str:
+    try:
+        return AUDIT_EVENT_LABELS[AuditEventType(event_type)]
+    except ValueError:
+        return "Bezpečnostní událost"
+
 
 def validate_audit_details(event_type: AuditEventType, details: dict[str, object]) -> dict[str, object]:
     """Accept only small, explicitly catalogued, non-sensitive audit metadata."""
