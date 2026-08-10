@@ -2,6 +2,7 @@ import importlib
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from fastapi import HTTPException
 
 from backend.app.auth import AuthenticatedUser
 from backend.app.audit_events import (
@@ -25,6 +26,16 @@ def load_app(monkeypatch, tmp_path):
     main = importlib.reload(main)
     main.on_startup()
     return main
+
+
+def authorization(main, user_id):
+    token, _ = main.auth_manager.build_session_token(AuthenticatedUser(
+        provider="google",
+        user_id=user_id,
+        email=f"{user_id.removeprefix('google:')}@example.test",
+        name=user_id,
+    ))
+    return f"Bearer {token}"
 
 
 def test_audit_event_catalog_has_unique_stable_values():
@@ -172,3 +183,55 @@ def test_audit_integrity_detects_deleted_tail_event(tmp_path):
         connection.commit()
 
     assert store.verify_audit("user")["status"] == "failed"
+
+
+def test_audit_endpoint_requires_authentication_and_trusted_device(monkeypatch, tmp_path):
+    main = load_app(monkeypatch, tmp_path)
+    user_id = "google:secured-user"
+    trusted = "device-0000000001"
+    untrusted = "device-0000000002"
+    main.register_current_device(DeviceRegistrationRequestModel(deviceId=trusted, name="Trusted"), user_id)
+    main.audit_security(user_id, trusted, AuditEventType.SYNC_STATE_RESET)
+
+    with pytest.raises(HTTPException) as unauthenticated:
+        main.verify_bearer_token(None)
+    assert unauthenticated.value.status_code == 401
+
+    resolved_user = main.verify_bearer_token(authorization(main, user_id))
+    with pytest.raises(HTTPException) as untrusted_error:
+        main.verify_trusted_device(resolved_user, untrusted)
+    assert untrusted_error.value.status_code == 403
+    assert main.verify_trusted_device(resolved_user, trusted) == user_id
+    assert main.list_security_audit(resolved_user, limit=50, cursor=None).events
+
+    main.device_store.revoke(user_id, trusted)
+    with pytest.raises(HTTPException) as revoked_error:
+        main.verify_trusted_device(resolved_user, trusted)
+    assert revoked_error.value.status_code == 403
+
+
+def test_audit_endpoint_isolates_accounts_and_rejects_foreign_cursor(monkeypatch, tmp_path):
+    main = load_app(monkeypatch, tmp_path)
+    user_a = "google:user-a"
+    user_b = "google:user-b"
+    device_a = "device-a-00000001"
+    device_b = "device-b-00000001"
+    main.register_current_device(DeviceRegistrationRequestModel(deviceId=device_a, name="A"), user_a)
+    main.register_current_device(DeviceRegistrationRequestModel(deviceId=device_b, name="B"), user_b)
+    main.audit_security(user_a, device_a, AuditEventType.SYNC_STATE_RESET)
+    main.audit_security(user_b, device_b, AuditEventType.SYNC_STATE_RESET)
+    main.audit_security(user_b, device_b, AuditEventType.PUSH_NOTIFICATIONS_DISABLED)
+
+    resolved_a = main.verify_bearer_token(authorization(main, user_a))
+    resolved_b = main.verify_bearer_token(authorization(main, user_b))
+    main.verify_trusted_device(resolved_a, device_a)
+    main.verify_trusted_device(resolved_b, device_b)
+    response_a = main.list_security_audit(resolved_a, limit=100, cursor=None)
+    response_b = main.list_security_audit(resolved_b, limit=1, cursor=None)
+
+    assert response_a.events
+    assert {event.deviceId for event in response_a.events} == {device_a}
+    assert response_b.nextCursor
+
+    foreign_page = main.list_security_audit(resolved_a, limit=50, cursor=response_b.nextCursor)
+    assert foreign_page.events == []

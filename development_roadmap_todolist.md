@@ -391,11 +391,12 @@ Aktuální stav:
 * API vrací audit po stránkách pomocí stabilního kurzoru a přidává uživatelsky čitelný popisek
 * audit má konfigurovatelnou retenci `NEURODIARY_AUDIT_RETENTION_DAYS` s výchozí dobou 730 dní
 * auditní záznamy tvoří HMAC hashový řetězec a API při čtení ověřuje změnu nebo odstranění historie
+* integrační testy ověřují povinné přihlášení, důvěryhodné zařízení, odvolané zařízení,
+  izolaci účtů a bezpečné odmítnutí kurzoru jiného účtu
 
 Navazující kroky:
 
 * při zavedení serverových exportů, souhlasů a výmazu účtu doplnit jejich auditní události
-* otestovat oprávnění a izolaci auditních záznamů mezi účty
 
 ### [pending] 5.5 GDPR
 
