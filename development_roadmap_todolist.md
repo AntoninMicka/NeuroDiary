@@ -384,10 +384,12 @@ Aktuální stav:
 
 * backend používá jednotný katalog bezpečnostních auditních událostí
 * typy událostí pro zařízení, klíče, role, sdílení a návrhy léčby se neskládají volným textem
+* audit pokrývá úspěšné přihlášení, reset cloudových dat, hromadné odvolání zařízení,
+  zapnutí a vypnutí push notifikací a ruční vytvoření nebo smazání cloudové zálohy
 
 Navazující kroky:
 
-* rozšířit audit na přihlášení, exporty, souhlasy, odvolání přístupu a výmaz
+* při zavedení serverových exportů, souhlasů a výmazu účtu doplnit jejich auditní události
 * definovat povolená metadata a vyloučit zdravotní data, tokeny a klíče
 * doplnit stránkování, retenci, uživatelsky čitelné popisy a ochranu integrity historie
 * otestovat oprávnění a izolaci auditních záznamů mezi účty

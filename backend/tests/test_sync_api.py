@@ -77,6 +77,7 @@ def test_sync_push_pull_conflict_and_reset(monkeypatch, tmp_path):
     assert conflict.revision == 1
     assert conflict.payload.model_dump() == first_payload
     assert reset.deleted is True
+    assert main.key_exchange_store.list_audit(user_id)[0]["event_type"] == "sync_state_reset"
     assert after_reset.revision == 0
     assert after_reset.payload is None
 

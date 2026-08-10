@@ -383,6 +383,12 @@ def admin_create_backup(
         backup = cloud_admin_service.create_backup(f"NeuroDiary manual backup by {admin.email}")
     except RuntimeError as error:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(error)) from error
+    audit_security(
+        admin.user_id,
+        "admin-console",
+        AuditEventType.ADMIN_BACKUP_CREATED,
+        backupId=str(backup.get("id", "")),
+    )
     log_event("WARNING", "admin_backup_created", administrator=admin.email, backupId=str(backup.get("id", "")))
     return {"status": "created", "backup": backup}
 
@@ -399,6 +405,7 @@ def admin_delete_backup(
         cloud_admin_service.delete_backup(backup_id)
     except RuntimeError as error:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(error)) from error
+    audit_security(admin.user_id, "admin-console", AuditEventType.ADMIN_BACKUP_DELETED, backupId=backup_id)
     log_event("WARNING", "admin_backup_deleted", administrator=admin.email, backupId=backup_id)
     return {"status": "deleted", "backupId": backup_id}
 
@@ -428,6 +435,7 @@ def push_config() -> PushConfigResponseModel:
 def register_push(
     payload: PushRegistrationRequestModel,
     user_id: Annotated[str, Depends(verify_trusted_device)],
+    x_device_id: Annotated[str | None, Header(alias="X-Device-ID")] = None,
 ) -> PushRegistrationResponseModel:
     if not push_service.enabled:
         raise HTTPException(
@@ -447,6 +455,12 @@ def register_push(
     ]
     safe_payload = payload.model_copy(update={"reminders": future_reminders})
     scheduled_count = push_store.replace_registration(user_id, safe_payload)
+    audit_security(
+        user_id,
+        x_device_id or "unknown-device",
+        AuditEventType.PUSH_NOTIFICATIONS_ENABLED,
+        scheduledCount=scheduled_count,
+    )
     return PushRegistrationResponseModel(status="ok", scheduledCount=scheduled_count)
 
 
@@ -454,8 +468,15 @@ def register_push(
 def unregister_push(
     payload: PushUnsubscribeRequestModel,
     user_id: Annotated[str, Depends(verify_trusted_device)],
+    x_device_id: Annotated[str | None, Header(alias="X-Device-ID")] = None,
 ) -> PushRegistrationResponseModel:
-    push_store.delete_subscription(user_id, payload.endpoint)
+    removed = push_store.delete_subscription(user_id, payload.endpoint)
+    if removed:
+        audit_security(
+            user_id,
+            x_device_id or "unknown-device",
+            AuditEventType.PUSH_NOTIFICATIONS_DISABLED,
+        )
     return PushRegistrationResponseModel(status="ok", scheduledCount=0)
 
 
@@ -526,6 +547,7 @@ def exchange_identity_token(payload: IdentityExchangeRequestModel) -> AuthSessio
         profile=payload.profile.model_dump() if payload.profile else None,
     )
     share_store.register_identity(user.user_id, user.email, user.name)
+    audit_security(user.user_id, "authentication", AuditEventType.AUTH_SESSION_CREATED, provider=user.provider)
     return AuthSessionResponseModel(
         accessToken=access_token,
         expiresAt=expires_at,
@@ -898,7 +920,9 @@ def revoke_other_devices(
 ) -> DeviceActionResponseModel:
     if not x_device_id or not device_store.is_active(user_id, x_device_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Current device is not trusted.")
-    return DeviceActionResponseModel(status="ok", affected=device_store.revoke_others(user_id, x_device_id))
+    affected = device_store.revoke_others(user_id, x_device_id)
+    audit_security(user_id, x_device_id, AuditEventType.OTHER_DEVICES_REVOKED, affected=affected)
+    return DeviceActionResponseModel(status="ok", affected=affected)
 
 
 @app.get("/api/v1/sync/pull", response_model=SyncPullResponseModel)
@@ -988,8 +1012,12 @@ def rotate_state_key(
 
 
 @app.delete("/api/v1/sync/reset", response_model=SyncResetResponseModel)
-def reset_state(user_id: Annotated[str, Depends(verify_trusted_device)]) -> SyncResetResponseModel:
+def reset_state(
+    user_id: Annotated[str, Depends(verify_trusted_device)],
+    x_device_id: Annotated[str | None, Header(alias="X-Device-ID")] = None,
+) -> SyncResetResponseModel:
     deleted_at = store.delete_state(user_id)
+    audit_security(user_id, x_device_id or "unknown-device", AuditEventType.SYNC_STATE_RESET)
     return SyncResetResponseModel(status="ok", deleted=True, updatedAt=deleted_at)
 
 
