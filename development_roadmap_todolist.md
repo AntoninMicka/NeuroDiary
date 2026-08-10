@@ -398,7 +398,20 @@ Navazující kroky:
 
 * při zavedení serverových exportů, souhlasů a výmazu účtu doplnit jejich auditní události
 
-### [pending] 5.5 GDPR
+### [in_progress] 5.5 GDPR
+
+Aktuální stav:
+
+* vznikl technický GDPR inventář kategorií dat, účelů, příjemců, návrhů právních titulů a retence
+* jsou zmapována práva subjektu údajů, současné schopnosti aplikace a chybějící technické toky
+* jsou výslovně evidována rozhodnutí vyžadující provozovatele, právní posouzení a DPIA
+
+Navazující kroky:
+
+* doplnit verzovanou evidenci souhlasů a jejich odvolání
+* vytvořit úplný strojově čitelný export účtu
+* implementovat bezpečný výmaz účtu a návazný výmaz ze záloh
+* připravit veřejnou privacy policy po doplnění identity a kontaktů správce
 
 ### [in_progress] 5.6 Bezpečné sdílení a souhlas
 

@@ -25,6 +25,7 @@ Tento soubor je pouze stručný rozcestník a shrnutí dlouhodobého směru proj
 | [`docs/api.md`](docs/api.md) | Kontrakt API | Endpointy, vstupy, výstupy a chování rozhraní |
 | [`docs/sync.md`](docs/sync.md) | Synchronizační model | Sync strategie, konflikty, E2E principy a slučování dat |
 | [`docs/operations.md`](docs/operations.md) | Provoz aplikace | Monitoring, endpointy, plánovače a provozní bezpečnost |
+| [`docs/gdpr.md`](docs/gdpr.md) | GDPR a soukromí | Datový inventář, účely, retence, práva subjektů a otevřená compliance rozhodnutí |
 | Tematické soubory v `docs/`, například [`docs/wearing_off.md`](docs/wearing_off.md) | Specifikace již navržené oblasti | Detailní pravidla a omezení konkrétní implementované nebo analyzované funkce |
 
 ## Kam zapsat novou položku
