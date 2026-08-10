@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { CAREGIVER_PANEL_ITEMS, getDefaultPanelForRoles, isCaregiverOnlyRoleSet } from "../src/services/roleUi.js";
+import { CAREGIVER_PANEL_ITEMS, canAccessClinicalAnalyses, getDefaultPanelForRoles, isCaregiverOnlyRoleSet } from "../src/services/roleUi.js";
 
 test("patient role keeps the patient UI even alongside caregiver roles", () => {
   assert.equal(isCaregiverOnlyRoleSet(["patient", "doctor"]), false);
@@ -19,4 +19,12 @@ test("family and doctor without patient use the caregiver UI", () => {
 test("missing roles and an admin-only role do not imply caregiver mode", () => {
   assert.equal(isCaregiverOnlyRoleSet([]), false);
   assert.equal(isCaregiverOnlyRoleSet(["admin"]), false);
+});
+
+test("clinical analyses require an active doctor role", () => {
+  assert.equal(canAccessClinicalAnalyses(["doctor"]), true);
+  assert.equal(canAccessClinicalAnalyses(["patient", "doctor"]), true);
+  assert.equal(canAccessClinicalAnalyses(["patient"]), false);
+  assert.equal(canAccessClinicalAnalyses(["family", "admin"]), false);
+  assert.equal(canAccessClinicalAnalyses([]), false);
 });

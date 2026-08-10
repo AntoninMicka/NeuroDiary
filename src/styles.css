@@ -366,6 +366,20 @@ textarea {
   gap: 0.65rem;
 }
 
+.clinical-analysis-warning {
+  display: grid;
+  gap: 0.35rem;
+  padding: 1rem;
+  border: 3px solid #b42318;
+  border-radius: 12px;
+  background: #fff0ed;
+  color: #7a271a;
+}
+
+.clinical-analysis-warning strong {
+  font-size: 1.05rem;
+}
+
 .share-form {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

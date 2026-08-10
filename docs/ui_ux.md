@@ -43,3 +43,13 @@ zcela prazdny den se nepovazuje za vynechani vsech planovanych leku.
 
 Formulare pouzivaji nativni vstupy, `aria-invalid` a textove chybove zpravy. Rozlozeni adherence,
 trendu a pripominek se pod 860 px sklada do jednoho nebo dvou sloupcu.
+# Regulatorní omezení analýz
+
+- Denní analytický souhrn, dlouhodobé trendy a wearing-off výpočty se zobrazí pouze při aktivní
+  serverem přidělené roli `doctor`.
+- Přímá volba analytického panelu bez aktivní role `doctor` musí být odmítnuta a po odebrání role
+  se otevřený analytický panel okamžitě zavře.
+- Každý dostupný analytický pohled musí výrazně uvádět, že funkce není certifikovaná, není
+  zdravotnickým prostředkem a neslouží pro diagnózu ani změnu léčby.
+- Tiskové, PDF a sdílené reporty nesmí obsahovat denní trendy, wearing-off pozorování, dlouhodobé
+  grafy ani jiné odvozené analytické metriky, a to ani pokud je vytváří lékař.

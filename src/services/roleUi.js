@@ -15,3 +15,7 @@ export function isCaregiverOnlyRoleSet(activeRoles = []) {
 export function getDefaultPanelForRoles(activeRoles = []) {
   return isCaregiverOnlyRoleSet(activeRoles) ? "sekce-kartoteka" : "sekce-home";
 }
+
+export function canAccessClinicalAnalyses(activeRoles = []) {
+  return new Set(activeRoles).has("doctor");
+}

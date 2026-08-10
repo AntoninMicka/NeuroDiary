@@ -81,15 +81,16 @@ test("ignores incomplete days even if they contain an OFF observation", () => {
   assert.equal(result.candidatePercent, null);
 });
 
-test("doctor report includes the quality-filtered wearing-off summary", () => {
+test("doctor report never includes uncertified analyses", () => {
   const entries = { "2026-03-01": createReliableEntry(1) };
   const html = buildDoctorReportHtml({
     entries,
     treatmentPlan,
     selectedDate: "2026-03-01",
   });
-  assert.match(html, /Orientační wearing-off pozorování/);
-  assert.match(html, /nikoli diagnózu/);
+  assert.doesNotMatch(html, /Orientační wearing-off pozorování/);
+  assert.doesNotMatch(html, /<h3>Denní trend<\/h3>/);
+  assert.doesNotMatch(html, /class="weekly-hour-chart"/);
 });
 
 test("doctor report can omit daily trend and wearing-off observations", () => {
@@ -105,7 +106,7 @@ test("doctor report can omit daily trend and wearing-off observations", () => {
   assert.doesNotMatch(html, /<h3>Denní trend<\/h3>/);
   assert.doesNotMatch(html, /Orientační wearing-off pozorování/);
   assert.doesNotMatch(html, /class="weekly-hour-chart"/);
-  assert.match(html, /<h3>Hodinový souhrn<\/h3>/);
+  assert.doesNotMatch(html, /<h3>Hodinový souhrn<\/h3>/);
 });
 
 test("doctor report excludes today unless including it is enabled", () => {
@@ -167,7 +168,7 @@ test("tracking axis ends at hour 23", () => {
   assert.equal(TRACKING_HOURS.includes("24"), false);
 });
 
-test("doctor report renders 25-week hourly charts and marks treatment-plan changes", () => {
+test("doctor report keeps weekly analyses disabled even when data is available", () => {
   const entries = { "2026-03-07": createReliableEntry(7) };
   const html = buildDoctorReportHtml({
     entries,
@@ -178,8 +179,7 @@ test("doctor report renders 25-week hourly charts and marks treatment-plan chang
     selectedDate: "2026-03-07",
   });
   assert.doesNotMatch(html, /Nejcastejsi hodnota/);
-  assert.match(html, /25× 7 dní/);
-  assert.match(html, /class="chart-plan-change"/);
-  assert.match(html, /Od 15\. 02\. 2026: Levodopa 100 mg/);
-  assert.equal((html.match(/class="weekly-hour-chart"/g) ?? []).length, TRACKING_HOURS.length);
+  assert.doesNotMatch(html, /25× 7 dní/);
+  assert.doesNotMatch(html, /class="chart-plan-change"/);
+  assert.equal((html.match(/class="weekly-hour-chart"/g) ?? []).length, 0);
 });

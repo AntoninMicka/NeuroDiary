@@ -650,9 +650,6 @@ export function buildDoctorReportHtml({
   birthYear = "",
   includeToday = true,
   todayDate = getTodayKey(),
-  includeDailyTrend = true,
-  includeWearingOff = true,
-  includeWeeklyCharts = true,
 }) {
   const entry = entries[selectedDate];
   if (!entry) {
@@ -1294,11 +1291,6 @@ export function buildDoctorReportHtml({
           </section>
         </section>
 
-        ${buildAnalysisPage(entries, treatmentPlan, reportEndDate, {
-          includeDailyTrend,
-          includeWearingOff,
-          includeWeeklyCharts,
-        })}
       </main>
     </body>
   </html>`;
@@ -1311,9 +1303,6 @@ export function openDoctorReportPrint({
   patientName,
   birthYear,
   includeToday = true,
-  includeDailyTrend = true,
-  includeWearingOff = true,
-  includeWeeklyCharts = true,
 }) {
   const reportWindow = window.open("", "_blank");
   if (!reportWindow) {
@@ -1327,9 +1316,6 @@ export function openDoctorReportPrint({
     patientName,
     birthYear,
     includeToday,
-    includeDailyTrend,
-    includeWearingOff,
-    includeWeeklyCharts,
   });
   reportWindow.document.open();
   reportWindow.document.write(html);

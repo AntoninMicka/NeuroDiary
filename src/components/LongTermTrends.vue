@@ -49,6 +49,10 @@ function formatShortDate(dateKey) {
 
 <template>
   <section class="panel panel-wide">
+    <div class="clinical-analysis-warning" role="alert">
+      <strong>Necertifikovaná analytická funkce</strong>
+      <span>Trendy a wearing-off výpočty jsou pouze orientační, nejsou zdravotnickým prostředkem ani podkladem pro diagnózu či změnu léčby.</span>
+    </div>
     <div class="panel-heading">
       <div>
         <p class="section-kicker">Dlouhodobé trendy</p>

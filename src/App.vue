@@ -118,7 +118,7 @@ import {
 } from "./services/diarySharing.js";
 import { createCloudBackup, deleteCloudBackup, fetchAdminStatus, fetchAdminUsers, updateAdminUserRoles } from "./services/adminService.js";
 import { fetchCurrentRoles, updateCurrentDeviceRoles, updateSelfAssignableRoles } from "./services/roleService.js";
-import { CAREGIVER_PANEL_ITEMS, isCaregiverOnlyRoleSet } from "./services/roleUi.js";
+import { CAREGIVER_PANEL_ITEMS, canAccessClinicalAnalyses, isCaregiverOnlyRoleSet } from "./services/roleUi.js";
 import { generateRecoverySecret } from "./services/e2eCrypto.js";
 import { compareTreatmentPlans, TREATMENT_FIELD_LABELS } from "./services/treatmentProposal.js";
 import {
@@ -235,9 +235,6 @@ const selectedStateKey = ref("on");
 const selectedTreatmentPlanId = ref("");
 const reportOptions = reactive({
   includeToday: false,
-  dailyTrend: true,
-  wearingOff: true,
-  weeklyCharts: true,
 });
 const doctorContact = reactive({ name: "", email: "" });
 const contacts = ref(loadContacts());
@@ -352,6 +349,7 @@ const pendingShareInvitationCount = computed(() =>
   diaryShares.incomingInvitations.filter((item) => item.status === "pending").length,
 );
 const isDoctorRoleActive = computed(() => accountRoles.activeRoles.includes("doctor"));
+const canUseClinicalAnalyses = computed(() => canAccessClinicalAnalyses(accountRoles.activeRoles));
 const filteredTreatmentProposals = computed(() => treatmentProposals.value.filter((proposal) =>
   treatmentProposalFilter.value === "all" || proposal.status === treatmentProposalFilter.value,
 ));
@@ -425,8 +423,16 @@ const isCaregiverOnlyMode = computed(() => isCaregiverOnlyRoleSet(accountRoles.a
 const caregiverPanelItems = computed(() => CAREGIVER_PANEL_ITEMS.filter(
   (item) => item.id !== "sekce-navrhy" || accountRoles.activeRoles.includes("doctor"),
 ));
-const primaryPanelItems = computed(() => isCaregiverOnlyMode.value ? caregiverPanelItems.value : PATIENT_PRIMARY_PANEL_ITEMS);
-const visiblePanelItems = computed(() => isCaregiverOnlyMode.value ? caregiverPanelItems.value : PANEL_ITEMS);
+const ANALYSIS_PANEL_IDS = new Set(["sekce-souhrn", "sekce-trendy"]);
+const filterRestrictedPanels = (items) => items.filter(
+  (item) => canUseClinicalAnalyses.value || !ANALYSIS_PANEL_IDS.has(item.id),
+);
+const primaryPanelItems = computed(() => filterRestrictedPanels(
+  isCaregiverOnlyMode.value ? caregiverPanelItems.value : PATIENT_PRIMARY_PANEL_ITEMS,
+));
+const visiblePanelItems = computed(() => filterRestrictedPanels(
+  isCaregiverOnlyMode.value ? caregiverPanelItems.value : PANEL_ITEMS,
+));
 const DATE_NAV_PANEL_IDS = new Set([
   "sekce-udaje",
   "sekce-matice",
@@ -623,6 +629,13 @@ watch(
 watch(isCaregiverOnlyMode, (caregiverOnly) => {
   if (!caregiverOnly || visiblePanelItems.value.some((item) => item.id === activePanelId.value)) return;
   selectPanel("sekce-kartoteka");
+});
+
+watch(canUseClinicalAnalyses, (allowed) => {
+  if (!allowed && ANALYSIS_PANEL_IDS.has(activePanelId.value)) {
+    selectPanel(isCaregiverOnlyMode.value ? "sekce-kartoteka" : "sekce-home");
+  }
+  if (!allowed && selectedSharedSection.value === "summary") selectedSharedSection.value = "timeline";
 });
 
 watch(
@@ -1188,6 +1201,10 @@ function ensureSyncIdentity() {
 }
 
 function selectPanel(panelId) {
+  if (ANALYSIS_PANEL_IDS.has(panelId) && !canUseClinicalAnalyses.value) {
+    storageMessage.value = "Analytické funkce jsou dostupné pouze pro aktivní roli lékaře.";
+    return;
+  }
   const isVisiblePanel = visiblePanelItems.value.some((item) => item.id === panelId);
   const isAvailableAdminPanel = panelId === "sekce-admin" && Boolean(adminStatus.value);
   if (!isVisiblePanel && !isAvailableAdminPanel) {
@@ -1437,9 +1454,6 @@ function printSharedDiaryReport() {
       patientName: view.state.patientName ?? "",
       birthYear: view.state.birthYear ?? "",
       includeToday: reportOptions.includeToday,
-      includeDailyTrend: reportOptions.dailyTrend,
-      includeWearingOff: reportOptions.wearingOff,
-      includeWeeklyCharts: reportOptions.weeklyCharts,
     });
     sharingMessage.value = "Sdílený report byl otevřen k tisku.";
   } catch (error) {
@@ -1931,9 +1945,6 @@ function printDoctorReport() {
       patientName: state.patientName,
       birthYear: state.birthYear,
       includeToday: reportOptions.includeToday,
-      includeDailyTrend: reportOptions.dailyTrend,
-      includeWearingOff: reportOptions.wearingOff,
-      includeWeeklyCharts: reportOptions.weeklyCharts,
     });
     storageMessage.value = "Report pro lékaře byl otevřen k tisku.";
   } catch (error) {
@@ -1952,9 +1963,6 @@ async function saveDoctorReportPdf() {
       patientName: state.patientName,
       birthYear: state.birthYear,
       includeToday: reportOptions.includeToday,
-      includeDailyTrend: reportOptions.dailyTrend,
-      includeWearingOff: reportOptions.wearingOff,
-      includeWeeklyCharts: reportOptions.weeklyCharts,
     });
     storageMessage.value = "PDF report byl ulozen.";
   } catch (error) {
@@ -1971,9 +1979,6 @@ function buildCurrentReportOptions() {
     patientName: state.patientName,
     birthYear: state.birthYear,
     includeToday: reportOptions.includeToday,
-    includeDailyTrend: reportOptions.dailyTrend,
-    includeWearingOff: reportOptions.wearingOff,
-    includeWeeklyCharts: reportOptions.weeklyCharts,
   };
 }
 
@@ -3174,7 +3179,7 @@ function syncFloatingMenuHeight() {
                 <button v-if="!isCaregiverOnlyMode" class="utility-menu-item" type="button" role="menuitem" @click="handleUtilityAction(() => selectPanel('sekce-udaje'))">
                   Údaje
                 </button>
-                <button v-if="!isCaregiverOnlyMode" class="utility-menu-item" type="button" role="menuitem" @click="handleUtilityAction(() => selectPanel('sekce-trendy'))">
+                <button v-if="!isCaregiverOnlyMode && canUseClinicalAnalyses" class="utility-menu-item" type="button" role="menuitem" @click="handleUtilityAction(() => selectPanel('sekce-trendy'))">
                   Trendy
                 </button>
                 <button class="utility-menu-item" type="button" role="menuitem" @click="handleUtilityAction(() => selectPanel('sekce-kontakty'))">
@@ -3279,9 +3284,10 @@ function syncFloatingMenuHeight() {
             <fieldset class="contact-keyring">
               <legend>Obsah reportu</legend>
               <label><input v-model="reportOptions.includeToday" type="checkbox" /> Zahrnout dnešní den</label>
-              <label><input v-model="reportOptions.dailyTrend" type="checkbox" /> Tisknout denní trend</label>
-              <label><input v-model="reportOptions.wearingOff" type="checkbox" /> Tisknout orientační wearing-off pozorování</label>
-              <label><input v-model="reportOptions.weeklyCharts" type="checkbox" /> Tisknout týdenní grafy</label>
+              <div class="clinical-analysis-warning" role="alert">
+                <strong>Analýzy jsou v reportech vypnuté</strong>
+                <span>Necertifikované trendy, wearing-off výpočty a analytické grafy se do reportu nevytvářejí.</span>
+              </div>
             </fieldset>
 
             <fieldset class="contact-keyring">
@@ -3504,7 +3510,7 @@ function syncFloatingMenuHeight() {
 
               <nav class="shared-record-tabs" aria-label="Funkce sdíleného deníku">
                 <button type="button" :class="{ active: selectedSharedSection === 'timeline' }" @click="selectedSharedSection = 'timeline'">Časová osa</button>
-                <button type="button" :class="{ active: selectedSharedSection === 'summary' }" @click="selectedSharedSection = 'summary'">Souhrn</button>
+                <button v-if="canUseClinicalAnalyses" type="button" :class="{ active: selectedSharedSection === 'summary' }" @click="selectedSharedSection = 'summary'">Souhrn</button>
                 <button type="button" :class="{ active: selectedSharedSection === 'treatment' }" @click="selectedSharedSection = 'treatment'">Naplánovaná léčba</button>
                 <button type="button" :class="{ active: selectedSharedSection === 'report' }" @click="selectedSharedSection = 'report'">Report pro tisk</button>
               </nav>
@@ -3518,7 +3524,7 @@ function syncFloatingMenuHeight() {
                 @select-date="selectedSharedDate = $event"
               />
               <DaySummary
-                v-else-if="selectedSharedSection === 'summary' && selectedSharedEntry"
+                v-else-if="canUseClinicalAnalyses && selectedSharedSection === 'summary' && selectedSharedEntry"
                 :entry="selectedSharedEntry"
                 :entries="selectedSharedView.state.entries"
                 :selected-date="selectedSharedDate"
@@ -3554,9 +3560,10 @@ function syncFloatingMenuHeight() {
                 <fieldset class="contact-keyring shared-report-options">
                   <legend>Obsah reportu</legend>
                   <label><input v-model="reportOptions.includeToday" type="checkbox" /> Zahrnout dnešní den</label>
-                  <label><input v-model="reportOptions.dailyTrend" type="checkbox" /> Tisknout denní trend</label>
-                  <label><input v-model="reportOptions.wearingOff" type="checkbox" /> Tisknout orientační wearing-off pozorování</label>
-                  <label><input v-model="reportOptions.weeklyCharts" type="checkbox" /> Tisknout týdenní grafy</label>
+                  <div class="clinical-analysis-warning" role="alert">
+                    <strong>Analýzy jsou v reportech vypnuté</strong>
+                    <span>Necertifikované trendy, wearing-off výpočty a analytické grafy nejsou dostupné.</span>
+                  </div>
                 </fieldset>
                 <button class="primary-button" type="button" @click="printSharedDiaryReport">Vytvořit report pro tisk</button>
               </section>
@@ -4179,7 +4186,7 @@ function syncFloatingMenuHeight() {
           @select-date="updateSelectedDate"
         />
         <DaySummary
-          v-else-if="activePanelId === 'sekce-souhrn'"
+          v-else-if="canUseClinicalAnalyses && activePanelId === 'sekce-souhrn'"
           class="layout-summary"
           :entry="selectedEntry"
           :entries="state.entries"
@@ -4188,7 +4195,7 @@ function syncFloatingMenuHeight() {
           @open-daily-overview="activePanelId = 'sekce-prehled'"
         />
         <LongTermTrends
-          v-else-if="activePanelId === 'sekce-trendy'"
+          v-else-if="canUseClinicalAnalyses && activePanelId === 'sekce-trendy'"
           class="layout-trends"
           :entries="state.entries"
           :treatment-plan="sortedTreatmentPlan"

@@ -257,8 +257,9 @@
         <div class="manual-block">
           <h4>8. Omezení prototypu</h4>
           <p>
-            Soucasna verze je prototyp. Klinicka interpretace statistik, dlouhodobych trendu a
-            reportovych metrik musi byt overena se specializovanym lekarem.
+            Analytické funkce jsou dostupné pouze při aktivní roli lékaře a jsou výrazně označené
+            jako necertifikované. Nejde o zdravotnický prostředek ani podklad pro diagnózu nebo
+            změnu léčby. Analýzy a analytické metriky jsou v tiskových a PDF reportech vypnuté.
           </p>
         </div>
 

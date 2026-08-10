@@ -199,6 +199,8 @@ Aktuální stav:
 * orientační adherence po týdnech podle léčebného plánu platného v daném období
 * dlouhodobá adherence respektuje historické verze léčebného plánu
 * zbývá klinické ověření interpretace metrik
+* z regulatorních důvodů jsou analýzy dostupné pouze aktivní roli `doctor`, s výrazným varováním
+* analytické metriky a grafy jsou bez ohledu na roli vypnuté ve všech tiskových, PDF a sdílených reportech
 
 ### [done] 3.6 Kvalita dat pro analýzy
 
