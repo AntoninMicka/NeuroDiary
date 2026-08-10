@@ -378,7 +378,19 @@ Navazující kroky:
 * řešení rotace klíčů
 * rozhodnout, která metadata mohou zůstat mimo šifrovaný obsah
 
-### [pending] 5.4 Audit log
+### [in_progress] 5.4 Audit log
+
+Aktuální stav:
+
+* backend používá jednotný katalog bezpečnostních auditních událostí
+* typy událostí pro zařízení, klíče, role, sdílení a návrhy léčby se neskládají volným textem
+
+Navazující kroky:
+
+* rozšířit audit na přihlášení, exporty, souhlasy, odvolání přístupu a výmaz
+* definovat povolená metadata a vyloučit zdravotní data, tokeny a klíče
+* doplnit stránkování, retenci, uživatelsky čitelné popisy a ochranu integrity historie
+* otestovat oprávnění a izolaci auditních záznamů mezi účty
 
 ### [pending] 5.5 GDPR
 

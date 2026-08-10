@@ -19,6 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 
 from .auth import AuthManager, AuthenticatedUser
+from .audit_events import AuditEventType, INVITATION_DECISION_EVENTS, TREATMENT_PROPOSAL_DECISION_EVENTS
 from .cloud_admin import CloudAdminService
 from .models import (
     AuthConfigResponseModel,
@@ -318,7 +319,7 @@ def admin_update_user_roles(
     roles = list(dict.fromkeys(payload.roles))
     if not share_store.set_roles(target_user_id, roles):
         raise HTTPException(status_code=404, detail="Uživatelský účet nebyl nalezen.")
-    audit_security(admin.user_id, "admin-console", "account_roles_changed", targetUserId=target_user_id, roles=roles)
+    audit_security(admin.user_id, "admin-console", AuditEventType.ACCOUNT_ROLES_CHANGED, targetUserId=target_user_id, roles=roles)
     return {"status": "ok", "userId": target_user_id, "roles": roles}
 
 
@@ -345,7 +346,7 @@ def update_current_device_roles(
     if not set(payload.roles).issubset(assigned):
         raise HTTPException(status_code=403, detail="Zařízení nemůže aktivovat roli, která účtu nebyla přidělena.")
     share_store.set_active_roles(user.user_id, x_device_id, list(payload.roles))
-    audit_security(user.user_id, x_device_id, "device_active_roles_changed", roles=list(payload.roles))
+    audit_security(user.user_id, x_device_id, AuditEventType.DEVICE_ACTIVE_ROLES_CHANGED, roles=list(payload.roles))
     return {"status": "ok", "assignedRoles": sorted(assigned), "activeRoles": list(payload.roles)}
 
 
@@ -366,7 +367,7 @@ def update_self_assignable_roles(
     if not combined:
         raise HTTPException(status_code=400, detail="Účet musí mít alespoň jednu roli.")
     share_store.set_roles(user.user_id, combined)
-    audit_security(user.user_id, x_device_id, "self_assignable_roles_changed", roles=combined)
+    audit_security(user.user_id, x_device_id, AuditEventType.SELF_ASSIGNABLE_ROLES_CHANGED, roles=combined)
     return {
         "status": "ok", "assignedRoles": combined,
         "activeRoles": share_store.get_active_roles(user.user_id, x_device_id),
@@ -583,7 +584,7 @@ def register_current_device(
     if was_revoked and migration_enabled:
         device_store.emergency_reactivate(user_id, payload.deviceId)
         record = device_store.get(user_id, payload.deviceId)
-        audit_security(user_id, payload.deviceId, "emergency_revoked_device_reactivated")
+        audit_security(user_id, payload.deviceId, AuditEventType.EMERGENCY_REVOKED_DEVICE_REACTIVATED)
     elif record.revoked_at is not None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Device has been revoked.")
     if migration_enabled:
@@ -591,7 +592,7 @@ def register_current_device(
         device_store.trust(user_id, payload.deviceId)
         record = device_store.get(user_id, payload.deviceId)
         if was_pending:
-            audit_security(user_id, payload.deviceId, "emergency_device_registration_accepted")
+            audit_security(user_id, payload.deviceId, AuditEventType.EMERGENCY_DEVICE_REGISTRATION_ACCEPTED)
     return TrustedDeviceModel(
         deviceId=record.device_id, name=record.name, createdAt=record.created_at,
         lastSeenAt=record.last_seen_at, revokedAt=record.revoked_at, current=True, trustStatus=record.trust_status,
@@ -602,12 +603,13 @@ def canonical_jwk(jwk: dict[str, object]) -> str:
     return json.dumps(jwk, sort_keys=True, separators=(",", ":"))
 
 
-def audit_security(user_id: str, device_id: str, event_type: str, **details: object) -> None:
+def audit_security(user_id: str, device_id: str, event_type: AuditEventType, **details: object) -> None:
+    event_name = event_type.value
     try:
-        key_exchange_store.record_audit(str(uuid.uuid4()), user_id, device_id, event_type, json.dumps(details, separators=(",", ":")))
+        key_exchange_store.record_audit(str(uuid.uuid4()), user_id, device_id, event_name, json.dumps(details, separators=(",", ":")))
     except Exception as error:
         # Audit availability must not lock users out of the emergency registration path.
-        log_event("ERROR", "security_audit_write_failed", deviceId=device_id, eventType=event_type, errorType=type(error).__name__)
+        log_event("ERROR", "security_audit_write_failed", deviceId=device_id, eventType=event_name, errorType=type(error).__name__)
 
 
 def send_treatment_notification(user_id: str, body: str) -> None:
@@ -682,8 +684,8 @@ def publish_current_device_key(
     record, is_bootstrap_device = key_exchange_store.put_key_with_bootstrap(user_id, payload.deviceId, jwk_json, fingerprint)
     if is_bootstrap_device or migration_enabled:
         device_store.trust(user_id, payload.deviceId)
-        audit_security(user_id, payload.deviceId, "device_bootstrap_trusted" if is_bootstrap_device else "device_migration_trusted", fingerprint=fingerprint)
-    audit_security(user_id, payload.deviceId, "device_key_verified", fingerprint=fingerprint)
+        audit_security(user_id, payload.deviceId, AuditEventType.DEVICE_BOOTSTRAP_TRUSTED if is_bootstrap_device else AuditEventType.DEVICE_MIGRATION_TRUSTED, fingerprint=fingerprint)
+    audit_security(user_id, payload.deviceId, AuditEventType.DEVICE_KEY_VERIFIED, fingerprint=fingerprint)
     return DevicePublicKeyModel(deviceId=record.device_id, publicKeyJwk=json.loads(record.public_key_jwk), fingerprint=record.fingerprint, verifiedAt=record.verified_at)
 
 
@@ -702,7 +704,7 @@ def publish_current_device_key_emergency(
     fingerprint = hashlib.sha256(jwk_json.encode()).hexdigest()
     record, _ = key_exchange_store.put_key_with_bootstrap(user_id, payload.deviceId, jwk_json, fingerprint)
     device_store.trust(user_id, payload.deviceId)
-    audit_security(user_id, payload.deviceId, "emergency_device_key_accepted", fingerprint=fingerprint)
+    audit_security(user_id, payload.deviceId, AuditEventType.EMERGENCY_DEVICE_KEY_ACCEPTED, fingerprint=fingerprint)
     return DevicePublicKeyModel(deviceId=record.device_id, publicKeyJwk=json.loads(record.public_key_jwk), fingerprint=record.fingerprint, verifiedAt=record.verified_at)
 
 
@@ -724,7 +726,7 @@ def disable_identity_key_migration(
     x_device_id: Annotated[str | None, Header(alias="X-Device-ID")] = None,
 ) -> IdentityKeyMigrationModel:
     if key_exchange_store.disable_migration(user_id, x_device_id):
-        audit_security(user_id, x_device_id, "identity_key_migration_disabled")
+        audit_security(user_id, x_device_id, AuditEventType.IDENTITY_KEY_MIGRATION_DISABLED)
     return migration_response(key_exchange_store.get_migration(user_id))
 
 
@@ -746,7 +748,7 @@ def request_current_device_key(
         raise HTTPException(status_code=409, detail="Current device must publish a verified public key first.")
     request_id = str(uuid.uuid4())
     record = key_exchange_store.create_request(request_id, user_id, x_device_id, datetime.now(UTC) + timedelta(hours=24))
-    audit_security(user_id, x_device_id, "master_key_requested", requestId=request_id)
+    audit_security(user_id, x_device_id, AuditEventType.MASTER_KEY_REQUESTED, requestId=request_id)
     return DeviceKeyRequestModel(requestId=record["request_id"], targetDeviceId=record["target_device_id"], createdAt=record["created_at"], expiresAt=record["expires_at"])
 
 
@@ -780,7 +782,7 @@ def create_device_key_transfer(
     transfer_id = str(uuid.uuid4())
     expires_at = datetime.now(UTC) + timedelta(seconds=payload.expiresInSeconds)
     record = key_exchange_store.create_transfer(transfer_id, user_id, x_device_id, payload.targetDeviceId, payload.keyVersion, payload.envelope.model_dump_json(), expires_at)
-    audit_security(user_id, x_device_id, "master_key_transfer_created", transferId=transfer_id, targetDeviceId=payload.targetDeviceId, keyVersion=payload.keyVersion)
+    audit_security(user_id, x_device_id, AuditEventType.MASTER_KEY_TRANSFER_CREATED, transferId=transfer_id, targetDeviceId=payload.targetDeviceId, keyVersion=payload.keyVersion)
     return DeviceKeyTransferModel(transferId=record.transfer_id, sourceDeviceId=record.source_device_id, targetDeviceId=record.target_device_id, keyVersion=record.key_version, envelope=json.loads(record.envelope_json), createdAt=record.created_at, expiresAt=record.expires_at)
 
 
@@ -797,7 +799,7 @@ def fulfill_device_key_request(
     result = create_device_key_transfer(payload.transfer, user_id, x_device_id)
     if not key_exchange_store.fulfill_request(user_id, payload.requestId, payload.transfer.targetDeviceId):
         raise HTTPException(status_code=409, detail="Key request was already fulfilled.")
-    audit_security(user_id, x_device_id, "master_key_transfer_created", requestId=payload.requestId, targetDeviceId=payload.transfer.targetDeviceId, keyVersion=payload.transfer.keyVersion)
+    audit_security(user_id, x_device_id, AuditEventType.MASTER_KEY_TRANSFER_CREATED, requestId=payload.requestId, targetDeviceId=payload.transfer.targetDeviceId, keyVersion=payload.transfer.keyVersion)
     return result
 
 
@@ -821,7 +823,7 @@ def confirm_current_device_key_transfer(
     if not key_exchange_store.confirm_transfer(user_id, x_device_id, payload.transferId):
         raise HTTPException(status_code=404, detail="Key transfer is missing, expired, or already confirmed.")
     device_store.trust(user_id, x_device_id)
-    audit_security(user_id, x_device_id, "master_key_transfer_confirmed", transferId=payload.transferId)
+    audit_security(user_id, x_device_id, AuditEventType.MASTER_KEY_TRANSFER_CONFIRMED, transferId=payload.transferId)
     return DeviceActionResponseModel(status="ok", affected=1)
 
 
@@ -855,7 +857,7 @@ def rename_trusted_device(
     record = device_store.rename(user_id, device_id, payload.name)
     if not record:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Aktivní zařízení nebylo nalezeno.")
-    audit_security(user_id, x_device_id, "device_alias_changed", targetDeviceId=device_id)
+    audit_security(user_id, x_device_id, AuditEventType.DEVICE_ALIAS_CHANGED, targetDeviceId=device_id)
     return TrustedDeviceModel(
         deviceId=record.device_id, name=record.name, createdAt=record.created_at,
         lastSeenAt=record.last_seen_at, revokedAt=record.revoked_at,
@@ -875,7 +877,7 @@ def revoke_trusted_device(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current device cannot revoke itself.")
     device_store.revoke(user_id, device_id)
     key_exchange_store.delete_device(user_id, device_id)
-    audit_security(user_id, x_device_id, "device_revoked", revokedDeviceId=device_id)
+    audit_security(user_id, x_device_id, AuditEventType.DEVICE_REVOKED, revokedDeviceId=device_id)
     return DeviceActionResponseModel(status="ok", affected=1)
 
 
@@ -980,8 +982,8 @@ def rotate_state_key(
     for transfer in validated_targets:
         transfer_id = str(uuid.uuid4())
         key_exchange_store.create_transfer(transfer_id, user_id, x_device_id, transfer.targetDeviceId, expected_version, transfer.envelope.model_dump_json(), expires_at)
-        audit_security(user_id, x_device_id, "rotation_key_distributed", transferId=transfer_id, targetDeviceId=transfer.targetDeviceId, keyVersion=expected_version)
-    audit_security(user_id, x_device_id, "key_rotated", keyVersion=expected_version, targetCount=len(validated_targets))
+        audit_security(user_id, x_device_id, AuditEventType.ROTATION_KEY_DISTRIBUTED, transferId=transfer_id, targetDeviceId=transfer.targetDeviceId, keyVersion=expected_version)
+    audit_security(user_id, x_device_id, AuditEventType.KEY_ROTATED, keyVersion=expected_version, targetCount=len(validated_targets))
     return SyncPushResponseModel(status="ok", revision=result.revision, updatedAt=result.updated_at, payload=result.payload, wrappedKey=result.wrapped_key)
 
 
@@ -1055,7 +1057,7 @@ def create_share_invitation(
     invitation_id = share_store.create_invitation(
         user.user_id, payload.recipientEmail, recipient["user_id"] if recipient else None,
     )
-    audit_security(user.user_id, x_device_id, "diary_share_invitation_created", invitationId=invitation_id)
+    audit_security(user.user_id, x_device_id, AuditEventType.DIARY_SHARE_INVITATION_CREATED, invitationId=invitation_id)
     # The response intentionally does not reveal whether the e-mail already has an account.
     return {"status": "pending", "invitationId": invitation_id}
 
@@ -1076,7 +1078,7 @@ def respond_to_share_invitation(
     ):
         raise HTTPException(status_code=404, detail="Aktivní pozvánka nebyla nalezena.")
     next_status = "accepted" if payload.accept else "declined"
-    audit_security(user.user_id, x_device_id, f"diary_share_invitation_{next_status}", invitationId=invitation_id)
+    audit_security(user.user_id, x_device_id, INVITATION_DECISION_EVENTS[next_status], invitationId=invitation_id)
     return {"status": next_status}
 
 
@@ -1115,7 +1117,7 @@ def activate_share_invitation(
     )
     if not share_store.activate_invitation(user.user_id, invitation_id, grant_id):
         raise HTTPException(status_code=409, detail="Pozvánku se nepodařilo aktivovat.")
-    audit_security(user.user_id, x_device_id, "diary_share_activated", invitationId=invitation_id, grantId=grant_id)
+    audit_security(user.user_id, x_device_id, AuditEventType.DIARY_SHARE_ACTIVATED, invitationId=invitation_id, grantId=grant_id)
     return {"status": "active", "grantId": grant_id}
 
 
@@ -1129,7 +1131,7 @@ def cancel_share_invitation(
         raise HTTPException(status_code=403, detail="Pozvánku lze zrušit jen z důvěryhodného zařízení.")
     if not share_store.cancel_invitation(user.user_id, invitation_id):
         raise HTTPException(status_code=404, detail="Čekající pozvánka nebyla nalezena.")
-    audit_security(user.user_id, x_device_id, "diary_share_invitation_cancelled", invitationId=invitation_id)
+    audit_security(user.user_id, x_device_id, AuditEventType.DIARY_SHARE_INVITATION_CANCELLED, invitationId=invitation_id)
     return {"status": "cancelled"}
 
 
@@ -1165,7 +1167,7 @@ def create_share(
     if payload.keyEnvelope.targetFingerprint != target_key.fingerprint:
         raise HTTPException(status_code=400, detail="Obálka klíče nepatří zařízení příjemce.")
     share_store.save_grant(user.user_id, recipient["user_id"], payload.recipientDeviceId, payload.keyVersion, payload.keyEnvelope.model_dump())
-    audit_security(user.user_id, x_device_id, "diary_share_created", recipientUserId=recipient["user_id"], recipientDeviceId=payload.recipientDeviceId)
+    audit_security(user.user_id, x_device_id, AuditEventType.DIARY_SHARE_CREATED, recipientUserId=recipient["user_id"], recipientDeviceId=payload.recipientDeviceId)
     return {"status": "ok"}
 
 
@@ -1180,7 +1182,7 @@ def revoke_share(
     if not share_store.revoke(user.user_id, grant_id):
         raise HTTPException(status_code=404, detail="Aktivní sdílení nebylo nalezeno.")
     share_store.mark_grant_revoked(user.user_id, grant_id)
-    audit_security(user.user_id, x_device_id, "diary_share_revoked", grantId=grant_id)
+    audit_security(user.user_id, x_device_id, AuditEventType.DIARY_SHARE_REVOKED, grantId=grant_id)
     return {"status": "ok"}
 
 
@@ -1199,7 +1201,7 @@ def create_treatment_proposal(
     )
     if not proposal_id:
         raise HTTPException(status_code=404, detail="Aktivní sdílení nebylo nalezeno.")
-    audit_security(user.user_id, x_device_id, "treatment_proposal_created", proposalId=proposal_id, grantId=payload.grantId)
+    audit_security(user.user_id, x_device_id, AuditEventType.TREATMENT_PROPOSAL_CREATED, proposalId=proposal_id, grantId=payload.grantId)
     proposal = share_store.get_treatment_proposal(proposal_id)
     send_treatment_notification(proposal["owner_user_id"], "Lékař odeslal nový návrh změn léčby.")
     return {"status": "pending", "proposalId": proposal_id}
@@ -1236,7 +1238,7 @@ def decide_treatment_proposal(
         proposal_id, user.user_id, status, payload.responsePayload.model_dump() if payload.responsePayload else None,
     ):
         raise HTTPException(status_code=404, detail="Čekající návrh nebyl nalezen.")
-    audit_security(user.user_id, x_device_id, f"treatment_proposal_{status}", proposalId=proposal_id)
+    audit_security(user.user_id, x_device_id, TREATMENT_PROPOSAL_DECISION_EVENTS[status], proposalId=proposal_id)
     proposal = share_store.get_treatment_proposal(proposal_id)
     decision_label = {"approved": "schválil", "declined": "zamítl", "returned": "vrátil k přepracování"}[status]
     send_treatment_notification(proposal["proposer_user_id"], f"Pacient návrh léčby {decision_label}.")
@@ -1255,7 +1257,7 @@ def cancel_treatment_proposal(
         raise HTTPException(status_code=403, detail="Návrh může stáhnout pouze lékař.")
     if not share_store.cancel_treatment_proposal(proposal_id, user.user_id):
         raise HTTPException(status_code=404, detail="Čekající návrh nebyl nalezen.")
-    audit_security(user.user_id, x_device_id, "treatment_proposal_cancelled", proposalId=proposal_id)
+    audit_security(user.user_id, x_device_id, AuditEventType.TREATMENT_PROPOSAL_CANCELLED, proposalId=proposal_id)
     return {"status": "cancelled"}
 
 
