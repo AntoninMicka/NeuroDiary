@@ -96,6 +96,12 @@ CORS_ORIGINS = [
 ]
 PUSH_SCHEDULER_TOKEN = os.getenv("NEURODIARY_PUSH_SCHEDULER_TOKEN", "").strip()
 AUDIT_RETENTION_DAYS = max(30, min(int(os.getenv("NEURODIARY_AUDIT_RETENTION_DAYS", "730")), 3650))
+AUDIT_INTEGRITY_KEY = (
+    os.getenv("NEURODIARY_AUDIT_INTEGRITY_KEY", "").strip()
+    or os.getenv("NEURODIARY_SESSION_SECRET", "").strip()
+    or API_TOKEN
+    or "neurodiary-dev-audit-integrity-key"
+)
 ADMIN_EMAILS = {
     email.strip().lower()
     for email in os.getenv("NEURODIARY_ADMIN_EMAILS", "").split(",")
@@ -114,6 +120,7 @@ key_exchange_store = create_key_exchange_store(
     database_url=DATABASE_URL or None,
     database_path=DATABASE_PATH,
     audit_retention_days=AUDIT_RETENTION_DAYS,
+    audit_integrity_key=AUDIT_INTEGRITY_KEY,
 )
 push_store = create_push_store(database_url=DATABASE_URL or None, database_path=DATABASE_PATH)
 push_service = PushService()
@@ -930,6 +937,7 @@ def list_security_audit(
     page = key_exchange_store.list_audit(user_id, limit=limit + 1, before_event_id=cursor)
     has_more = len(page) > limit
     items = page[:limit]
+    integrity = key_exchange_store.verify_audit(user_id)
     return SecurityAuditListResponseModel(
         events=[
             SecurityAuditEventModel(
@@ -943,6 +951,8 @@ def list_security_audit(
             for item in items
         ],
         nextCursor=items[-1]["event_id"] if has_more else None,
+        integrityStatus=integrity["status"],
+        integrityCheckedEvents=integrity["checked"],
     )
 
 

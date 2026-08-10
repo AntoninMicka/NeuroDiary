@@ -282,6 +282,8 @@ class SecurityAuditEventModel(BaseModel):
 class SecurityAuditListResponseModel(BaseModel):
     events: list[SecurityAuditEventModel]
     nextCursor: str | None = None
+    integrityStatus: Literal["verified", "failed", "empty"]
+    integrityCheckedEvents: int = Field(ge=0)
 
 
 class IdentityKeyMigrationModel(BaseModel):

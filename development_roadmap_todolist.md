@@ -390,11 +390,11 @@ Aktuální stav:
   dlouhá data se odmítnou a do auditní historie se neuloží
 * API vrací audit po stránkách pomocí stabilního kurzoru a přidává uživatelsky čitelný popisek
 * audit má konfigurovatelnou retenci `NEURODIARY_AUDIT_RETENTION_DAYS` s výchozí dobou 730 dní
+* auditní záznamy tvoří HMAC hashový řetězec a API při čtení ověřuje změnu nebo odstranění historie
 
 Navazující kroky:
 
 * při zavedení serverových exportů, souhlasů a výmazu účtu doplnit jejich auditní události
-* doplnit ochranu integrity historie
 * otestovat oprávnění a izolaci auditních záznamů mezi účty
 
 ### [pending] 5.5 GDPR

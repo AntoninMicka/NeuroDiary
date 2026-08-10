@@ -86,6 +86,7 @@ Pokud nechces vsechno klikat rucne, prvni cast tohohle checklistu umi automatizo
 - [ ] nastavit `NEURODIARY_API_TOKEN`
 - [ ] nastavit `NEURODIARY_DATABASE_URL`
 - [ ] nastavit `NEURODIARY_SESSION_SECRET`
+- [ ] volitelne nastavit samostatny `NEURODIARY_AUDIT_INTEGRITY_KEY`; jinak se pouzije session secret
 
 Poznamka:
 

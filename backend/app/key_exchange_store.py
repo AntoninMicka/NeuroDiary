@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import hmac
 import sqlite3
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -31,9 +33,10 @@ class TransferRecord:
 
 
 class SqliteKeyExchangeStore:
-    def __init__(self, database_path: str, audit_retention_days: int = 730) -> None:
+    def __init__(self, database_path: str, audit_retention_days: int = 730, audit_integrity_key: str = "") -> None:
         self.database_path = Path(database_path)
         self.audit_retention_days = max(30, min(audit_retention_days, 3650))
+        self.audit_integrity_key = audit_integrity_key.encode()
 
     @contextmanager
     def _connect(self):
@@ -68,7 +71,11 @@ class SqliteKeyExchangeStore:
                 );
                 CREATE TABLE IF NOT EXISTS security_audit_events (
                   event_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, device_id TEXT NOT NULL,
-                  event_type TEXT NOT NULL, details_json TEXT NOT NULL, created_at TEXT NOT NULL
+                  event_type TEXT NOT NULL, details_json TEXT NOT NULL, created_at TEXT NOT NULL,
+                  previous_hash TEXT, event_hash TEXT
+                );
+                CREATE TABLE IF NOT EXISTS security_audit_heads (
+                  user_id TEXT PRIMARY KEY, event_id TEXT NOT NULL, event_hash TEXT NOT NULL
                 );
                 CREATE INDEX IF NOT EXISTS idx_security_audit_user_created
                   ON security_audit_events (user_id, created_at DESC, event_id DESC);
@@ -81,6 +88,11 @@ class SqliteKeyExchangeStore:
             migration_columns = {row[1] for row in connection.execute("PRAGMA table_info(identity_key_migrations)").fetchall()}
             if "emergency_registration_open" not in migration_columns:
                 connection.execute("ALTER TABLE identity_key_migrations ADD COLUMN emergency_registration_open INTEGER NOT NULL DEFAULT 1")
+            audit_columns = {row[1] for row in connection.execute("PRAGMA table_info(security_audit_events)").fetchall()}
+            if "previous_hash" not in audit_columns:
+                connection.execute("ALTER TABLE security_audit_events ADD COLUMN previous_hash TEXT")
+            if "event_hash" not in audit_columns:
+                connection.execute("ALTER TABLE security_audit_events ADD COLUMN event_hash TEXT")
             connection.commit()
 
     def create_challenge(self, challenge_id, user_id, device_id, public_key_jwk, fingerprint, secret_hash, expires_at):
@@ -213,13 +225,56 @@ class SqliteKeyExchangeStore:
             connection.execute("DELETE FROM device_key_requests WHERE user_id = ? AND target_device_id = ?", (user_id, device_id))
             connection.commit()
 
+    def _lock_audit_writer(self, connection, user_id) -> None:
+        connection.execute("BEGIN IMMEDIATE")
+
     def record_audit(self, event_id, user_id, device_id, event_type, details_json):
         now = datetime.now(UTC)
         retention_cutoff = now - timedelta(days=self.audit_retention_days)
         with self._connect() as connection:
-            connection.execute("DELETE FROM security_audit_events WHERE created_at < ?", (retention_cutoff.isoformat(),))
-            connection.execute("INSERT INTO security_audit_events VALUES (?, ?, ?, ?, ?, ?)", (event_id, user_id, device_id, event_type, details_json, now.isoformat()))
+            self._lock_audit_writer(connection, user_id)
+            connection.execute("DELETE FROM security_audit_events WHERE user_id = ? AND created_at < ?", (user_id, retention_cutoff.isoformat()))
+            head = connection.execute(
+                "SELECT event_hash FROM security_audit_heads WHERE user_id = ?", (user_id,),
+            ).fetchone()
+            previous_hash = head["event_hash"] if head else ""
+            created_at = now.isoformat()
+            canonical = "\n".join((event_id, user_id, device_id, event_type, details_json, created_at, previous_hash))
+            event_hash = hmac.new(self.audit_integrity_key, canonical.encode(), hashlib.sha256).hexdigest()
+            connection.execute("""
+                INSERT INTO security_audit_events
+                  (event_id, user_id, device_id, event_type, details_json, created_at, previous_hash, event_hash)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (event_id, user_id, device_id, event_type, details_json, created_at, previous_hash, event_hash))
+            connection.execute("""
+                INSERT INTO security_audit_heads (user_id, event_id, event_hash) VALUES (?, ?, ?)
+                ON CONFLICT(user_id) DO UPDATE SET event_id = excluded.event_id, event_hash = excluded.event_hash
+            """, (user_id, event_id, event_hash))
             connection.commit()
+
+    def verify_audit(self, user_id):
+        with self._connect() as connection:
+            rows = connection.execute("""
+                SELECT event_id, user_id, device_id, event_type, details_json, created_at,
+                       previous_hash, event_hash
+                FROM security_audit_events WHERE user_id = ? AND event_hash IS NOT NULL
+                ORDER BY created_at, event_id
+            """, (user_id,)).fetchall()
+            head = connection.execute(
+                "SELECT event_id, event_hash FROM security_audit_heads WHERE user_id = ?", (user_id,),
+            ).fetchone()
+        previous = rows[0]["previous_hash"] if rows else ""
+        for row in rows:
+            if row["previous_hash"] != previous:
+                return {"status": "failed", "checked": len(rows)}
+            canonical = "\n".join((row["event_id"], row["user_id"], row["device_id"], row["event_type"], row["details_json"], _as_datetime(row["created_at"]).isoformat(), row["previous_hash"]))
+            expected = hmac.new(self.audit_integrity_key, canonical.encode(), hashlib.sha256).hexdigest()
+            if not hmac.compare_digest(expected, row["event_hash"]):
+                return {"status": "failed", "checked": len(rows)}
+            previous = row["event_hash"]
+        if rows and (not head or head["event_id"] != rows[-1]["event_id"] or head["event_hash"] != rows[-1]["event_hash"]):
+            return {"status": "failed", "checked": len(rows)}
+        return {"status": "verified" if rows else "empty", "checked": len(rows)}
 
     def list_audit(self, user_id, limit=100, before_event_id=None):
         with self._connect() as connection:
@@ -268,14 +323,18 @@ class SqliteKeyExchangeStore:
 
 
 class PostgresKeyExchangeStore(SqliteKeyExchangeStore):
-    def __init__(self, database_url: str, audit_retention_days: int = 730) -> None:
+    def __init__(self, database_url: str, audit_retention_days: int = 730, audit_integrity_key: str = "") -> None:
         self.database_url = database_url
         self.audit_retention_days = max(30, min(audit_retention_days, 3650))
+        self.audit_integrity_key = audit_integrity_key.encode()
 
     def _connect(self):
         from psycopg import connect
         from psycopg.rows import dict_row
         return connect(self.database_url, row_factory=dict_row)
+
+    def _lock_audit_writer(self, connection, user_id) -> None:
+        connection.execute("SELECT pg_advisory_xact_lock(hashtext(?))", (user_id,))
 
     # PostgreSQL uses the same logical schema, but placeholder syntax differs. Keep deployment safe
     # by failing explicitly until its migration-backed implementation is enabled.
@@ -301,7 +360,11 @@ class PostgresKeyExchangeStore(SqliteKeyExchangeStore):
             """, """
                 CREATE TABLE IF NOT EXISTS security_audit_events (
                   event_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, device_id TEXT NOT NULL,
-                  event_type TEXT NOT NULL, details_json TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL)
+                  event_type TEXT NOT NULL, details_json TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL,
+                  previous_hash TEXT, event_hash TEXT)
+            """, """
+                CREATE TABLE IF NOT EXISTS security_audit_heads (
+                  user_id TEXT PRIMARY KEY, event_id TEXT NOT NULL, event_hash TEXT NOT NULL)
             """, """
                 CREATE TABLE IF NOT EXISTS identity_key_migrations (
                   user_id TEXT PRIMARY KEY, enabled INTEGER NOT NULL, created_at TIMESTAMPTZ NOT NULL,
@@ -320,6 +383,8 @@ class PostgresKeyExchangeStore(SqliteKeyExchangeStore):
             connection.execute("ALTER TABLE device_public_keys ALTER COLUMN public_key_jwk TYPE TEXT USING public_key_jwk::text")
             connection.execute("ALTER TABLE device_key_challenges ALTER COLUMN public_key_jwk TYPE TEXT USING public_key_jwk::text")
             connection.execute("ALTER TABLE device_key_transfers ALTER COLUMN envelope_json TYPE TEXT USING envelope_json::text")
+            connection.execute("ALTER TABLE security_audit_events ADD COLUMN IF NOT EXISTS previous_hash TEXT")
+            connection.execute("ALTER TABLE security_audit_events ADD COLUMN IF NOT EXISTS event_hash TEXT")
             connection.commit()
 
     def get_migration(self, user_id):
@@ -372,9 +437,9 @@ class PostgresKeyExchangeStore(SqliteKeyExchangeStore):
             raw.close()
 
 
-def create_key_exchange_store(*, database_url: str | None, database_path: str, audit_retention_days: int = 730):
+def create_key_exchange_store(*, database_url: str | None, database_path: str, audit_retention_days: int = 730, audit_integrity_key: str = ""):
     if database_url and database_url.startswith(("postgresql://", "postgres://")):
-        return PostgresKeyExchangeStore(database_url, audit_retention_days)
+        return PostgresKeyExchangeStore(database_url, audit_retention_days, audit_integrity_key)
     if database_url and database_url.startswith("sqlite:///"):
         database_path = database_url.removeprefix("sqlite:///")
-    return SqliteKeyExchangeStore(database_path, audit_retention_days)
+    return SqliteKeyExchangeStore(database_path, audit_retention_days, audit_integrity_key)

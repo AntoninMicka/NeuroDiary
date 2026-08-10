@@ -133,7 +133,9 @@ def test_recording_audit_event_removes_items_past_retention(tmp_path):
     expired_at = datetime.now(UTC) - timedelta(days=31)
     with store._connect() as connection:
         connection.execute(
-            "INSERT INTO security_audit_events VALUES (?, ?, ?, ?, ?, ?)",
+            """INSERT INTO security_audit_events
+               (event_id, user_id, device_id, event_type, details_json, created_at)
+               VALUES (?, ?, ?, ?, ?, ?)""",
             ("expired", "user", "device", "sync_state_reset", "{}", expired_at.isoformat()),
         )
         connection.commit()
@@ -141,3 +143,32 @@ def test_recording_audit_event_removes_items_past_retention(tmp_path):
     store.record_audit("current", "user", "device", "sync_state_reset", "{}")
 
     assert [event["event_id"] for event in store.list_audit("user")] == ["current"]
+
+
+def test_audit_integrity_detects_modified_event(tmp_path):
+    store = SqliteKeyExchangeStore(str(tmp_path / "integrity.db"), audit_integrity_key="test-integrity-key")
+    store.initialize()
+    store.record_audit("first", "user", "device", "sync_state_reset", "{}")
+    store.record_audit("second", "user", "device", "device_revoked", '{"revokedDeviceId":"old"}')
+    assert store.verify_audit("user") == {"status": "verified", "checked": 2}
+
+    with store._connect() as connection:
+        connection.execute(
+            "UPDATE security_audit_events SET details_json = ? WHERE event_id = ?",
+            ('{"revokedDeviceId":"changed"}', "second"),
+        )
+        connection.commit()
+
+    assert store.verify_audit("user")["status"] == "failed"
+
+
+def test_audit_integrity_detects_deleted_tail_event(tmp_path):
+    store = SqliteKeyExchangeStore(str(tmp_path / "deleted.db"), audit_integrity_key="test-integrity-key")
+    store.initialize()
+    store.record_audit("first", "user", "device", "sync_state_reset", "{}")
+    store.record_audit("second", "user", "device", "sync_state_reset", "{}")
+    with store._connect() as connection:
+        connection.execute("DELETE FROM security_audit_events WHERE event_id = ?", ("second",))
+        connection.commit()
+
+    assert store.verify_audit("user")["status"] == "failed"
