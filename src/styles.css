@@ -243,6 +243,19 @@ textarea {
   line-height: 0.95;
 }
 
+.project-closure-notice {
+  margin: 0.9rem 0 0;
+  padding: 0.8rem 1rem;
+  border-left: 4px solid var(--accent-strong);
+  border-radius: 0 12px 12px 0;
+  background: rgba(31, 122, 140, 0.1);
+  font-weight: 700;
+}
+
+.project-closure-notice a {
+  color: var(--accent-strong);
+}
+
 .lede {
   max-width: 42rem;
   font-size: 1.05rem;

@@ -3076,6 +3076,10 @@ function syncFloatingMenuHeight() {
         <div class="hero-copy">
           <p class="eyebrow">Zdravotní deník</p>
           <h1>NeuroDiary</h1>
+          <p class="project-closure-notice">
+            Projekt ukončen, náhrada zde:
+            <a href="https://parkinsoncz.cz/" target="_blank" rel="noopener noreferrer">https://parkinsoncz.cz/</a>
+          </p>
           <p class="lede">
             Přehledný offline deník pro každodenní sledování příznaků, užívání léků a rychlé
             vyhodnocení vývoje.
