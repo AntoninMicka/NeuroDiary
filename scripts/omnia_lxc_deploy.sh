@@ -33,7 +33,7 @@ fi
 SSH_REMOTE=(ssh -S "${SSH_CONTROL_PATH}" "${OMNIA_HOST}")
 RSYNC_SSH="ssh -S ${SSH_CONTROL_PATH}"
 
-NEURODIARY_BASE_PATH=/neurodiary/ npm --prefix "${REPO_ROOT}" run build
+NEURODIARY_BASE_PATH=/neurodiary/ NEURODIARY_CA_CERT_URL=/neurodiary/ca.crt npm --prefix "${REPO_ROOT}" run build
 "${SSH_REMOTE[@]}" "mkdir -p '${REMOTE_DIR}/source/scripts' '${REMOTE_DIR}/lxc-bundle/backend' '${REMOTE_DIR}/lxc-bundle/frontend-dist'"
 rsync -e "${RSYNC_SSH}" -az --delete "${REPO_ROOT}/backend/" "${OMNIA_HOST}:${REMOTE_DIR}/lxc-bundle/backend/"
 rsync -e "${RSYNC_SSH}" -az --delete "${REPO_ROOT}/dist/" "${OMNIA_HOST}:${REMOTE_DIR}/lxc-bundle/frontend-dist/"

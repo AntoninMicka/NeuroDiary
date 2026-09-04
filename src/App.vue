@@ -522,6 +522,7 @@ const canStartManualSync = computed(
 );
 const medicationNotificationsSupported = computed(() => canUseMedicationNotifications());
 const buildInfo = __APP_BUILD_INFO__;
+const caCertificateUrl = __NEURODIARY_CA_CERT_URL__;
 const buildTimestampLabel = computed(() => {
   if (!buildInfo?.builtAt) {
     return "nezname";
@@ -3794,6 +3795,18 @@ function syncFloatingMenuHeight() {
               >
                 Použít adresu této instalace
               </button>
+
+              <div v-if="caCertificateUrl" class="ca-certificate-download">
+                <div>
+                  <strong>Certifikát místní autority</strong>
+                  <p class="panel-tip">Nainstalujte jej jako důvěryhodnou kořenovou autoritu pouze na vlastních zařízeních.</p>
+                </div>
+                <a
+                  class="ghost-button ca-download-link"
+                  :href="caCertificateUrl"
+                  download="neurodiary-ca.crt"
+                >Stáhnout certifikát autority</a>
+              </div>
 
               <label v-if="showLegacyApiTokenField">
                 <span>API token</span>

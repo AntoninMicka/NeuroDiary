@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 const buildTimestampIso = new Date().toISOString();
 const buildCommit = process.env.GITHUB_SHA?.slice(0, 7) ?? "";
 const packageJson = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8"));
+const caCertificateUrl = process.env.NEURODIARY_CA_CERT_URL || "";
 
 export default defineConfig({
   base: process.env.NEURODIARY_BASE_PATH || "/",
@@ -15,5 +16,6 @@ export default defineConfig({
       commit: buildCommit,
       version: packageJson.version ?? "0.0.0",
     }),
+    __NEURODIARY_CA_CERT_URL__: JSON.stringify(caCertificateUrl),
   },
 });

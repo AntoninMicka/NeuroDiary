@@ -1443,6 +1443,24 @@ textarea {
   color: var(--accent-strong);
 }
 
+.ca-certificate-download {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.ca-certificate-download p {
+  margin: 0.25rem 0 0;
+}
+
+.ca-download-link {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
 .list {
   list-style: none;
   padding: 0;
