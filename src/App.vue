@@ -527,6 +527,9 @@ const hasSyncIdentity = computed(() =>
 const isQuickSyncAvailable = computed(
   () => isOnline.value && Boolean(effectiveSyncEndpoint.value) && hasSyncIdentity.value && hasSyncMasterKeyStored.value,
 );
+const canStartManualSync = computed(
+  () => isOnline.value && Boolean(effectiveSyncEndpoint.value) && hasSyncIdentity.value,
+);
 const medicationNotificationsSupported = computed(() => canUseMedicationNotifications());
 const buildInfo = __APP_BUILD_INFO__;
 const buildTimestampLabel = computed(() => {
@@ -827,6 +830,11 @@ function updateBirthYear(value) {
 function updateSyncSetting(field, value) {
   syncSettings[field] = value;
   Object.assign(syncSettings, saveSyncSettings(syncSettings));
+}
+
+function useCurrentInstallationForSync() {
+  updateSyncSetting("endpoint", "");
+  storageMessage.value = `Synchronizace nyní používá adresu této instalace: ${deriveSyncEndpoint()}.`;
 }
 
 function refreshQuickCaptureClock() {
@@ -2743,7 +2751,7 @@ async function importRecoveryQr(event) {
 
 async function initializeSync() {
   if (!ensureSyncIdentity()) {
-    return;
+    return false;
   }
 
   isSyncBusy.value = true;
@@ -2772,6 +2780,7 @@ async function initializeSync() {
     storageMessage.value = result.generatedRecoverySecret
       ? "Cloudová synchronizace byla inicializována. Uložte si obnovovací kód."
       : "Cloudová synchronizace byla inicializována.";
+    return true;
   } catch (error) {
     console.error("Sync initialization failed", error);
     Object.assign(syncSettings, saveSyncSettings({
@@ -2780,6 +2789,7 @@ async function initializeSync() {
       lastSyncMessage: error.message,
     }));
     storageMessage.value = `Inicializace syncu selhala: ${error.message}`;
+    return false;
   } finally {
     isSyncBusy.value = false;
   }
@@ -2955,11 +2965,16 @@ async function runAutomaticSynchronization() {
 
 async function quickSync(options = {}) {
   const automatic = options?.automatic === true;
-  if (isSyncBusy.value || !isQuickSyncAvailable.value) {
+  if (isSyncBusy.value || (automatic ? !isQuickSyncAvailable.value : !canStartManualSync.value)) {
     if (!automatic && !isOnline.value) {
       storageMessage.value = "Rychlou synchronizaci nelze spustit bez pripojeni k internetu.";
     }
     return false;
+  }
+
+  if (!hasSyncMasterKeyStored.value) {
+    storageMessage.value = "Na tomto přístupu zatím chybí šifrovací klíč. Inicializuji synchronizaci.";
+    return initializeSync();
   }
 
   storageMessage.value = automatic
@@ -3189,8 +3204,8 @@ function syncFloatingMenuHeight() {
           <button
             class="primary-button quick-sync-button"
             type="button"
-            :disabled="isSyncBusy || !isQuickSyncAvailable"
-            :title="isQuickSyncAvailable ? 'Stahnout, sloucit a odeslat data' : 'Synchronizace neni dostupna nebo nastavena'"
+            :disabled="isSyncBusy || !canStartManualSync"
+            :title="canStartManualSync ? (hasSyncMasterKeyStored ? 'Stáhnout, sloučit a odeslat data' : 'Inicializovat šifrovanou synchronizaci') : 'Synchronizace není dostupná nebo nejste přihlášeni'"
             @click="quickSync"
           >
             {{ isSyncBusy ? "Synchronizuji…" : "Synchronizovat" }}
@@ -3821,6 +3836,14 @@ function syncFloatingMenuHeight() {
                   readonly
                 />
               </label>
+              <button
+                v-if="syncSettings.endpoint"
+                class="ghost-button"
+                type="button"
+                @click="useCurrentInstallationForSync"
+              >
+                Použít adresu této instalace
+              </button>
 
               <label v-if="showLegacyApiTokenField">
                 <span>API token</span>
