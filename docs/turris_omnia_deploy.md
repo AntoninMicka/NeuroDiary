@@ -39,6 +39,8 @@ aktualizace je stále vhodnější nastavit přihlášení SSH klíčem.
 Pokud průvodce najde `lxc-attach`, nabídne režim `lxc`. Nejprve v reForis/LuCI vytvořte Debian
 LXC kontejner připojený k `br-lan`, spusťte jej a poznamenejte si jeho název. Průvodce sestaví
 frontend na počítači, do LXC nahraje backend a spustí jej jako omezenou systemd službu.
+Na 32bit ARM automaticky doinstaluje také `libatomic1`, kompilátor C/C++ a Rust toolchain;
+ty jsou potřeba, pokud pro Python daného LXC není dostupný hotový balíček `pydantic-core`.
 
 V LAN se používá přímo IP adresa LXC a port `8080`. Pro přístup ze ZeroTier přidejte v síti
 ZeroTier managed route pro LAN subnet (například `192.168.100.0/24`) přes ZeroTier adresu Omnie
