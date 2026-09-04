@@ -25,7 +25,7 @@ lxc-attach -n "${LXC_NAME}" -- systemctl daemon-reload
 lxc-attach -n "${LXC_NAME}" -- systemctl enable --now neurodiary.service
 lxc-attach -n "${LXC_NAME}" -- systemctl restart neurodiary.service
 lxc-attach -n "${LXC_NAME}" -- sh -c \
-  'for i in 1 2 3 4 5 6 7 8 9 10; do curl -fsS http://127.0.0.1:8080/readyz && exit 0; sleep 1; done; journalctl -u neurodiary.service -n 30 --no-pager; exit 1'
+  'for i in 1 2 3 4 5 6 7 8 9 10; do curl -fsS http://127.0.0.1:8000/readyz && exit 0; sleep 1; done; journalctl -u neurodiary.service -n 30 --no-pager; exit 1'
 
 LXC_ADDRESS="$(lxc-info -n "${LXC_NAME}" -iH | awk 'index($0, ":") == 0 {print; exit}')"
-echo "NeuroDiary v LXC běží na http://${LXC_ADDRESS}:8080"
+echo "Backend NeuroDiary v LXC běží interně na 127.0.0.1:8000; proxy bude na ${LXC_ADDRESS}:8080/443."

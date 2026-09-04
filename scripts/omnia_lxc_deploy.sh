@@ -8,6 +8,11 @@ ENV_FILE="${1:-${SCRIPT_DIR}/omnia.env}"
 source "${ENV_FILE}"
 : "${OMNIA_HOST:?}" "${REMOTE_DIR:?}" "${LXC_NAME:?}"
 command -v npm >/dev/null || { echo "Lokálně chybí npm."; exit 1; }
+: "${LXC_ZEROTIER_IP:?V omnia.env chybí LXC_ZEROTIER_IP}"
+TLS_DIR="${REPO_ROOT}/secrets/tls"
+if [[ ! -s "${TLS_DIR}/neurodiary-ca.crt" || ! -s "${TLS_DIR}/neurodiary-server.crt" || ! -s "${TLS_DIR}/neurodiary-server.key" ]]; then
+  bash "${SCRIPT_DIR}/generate_local_ca.sh" "${ENV_FILE}"
+fi
 
 # Jedna sdílená SSH relace zabrání opakovanému dotazu na heslo pro každý rsync/ssh krok.
 OWNS_SSH_SESSION=false
@@ -35,8 +40,12 @@ NEURODIARY_BASE_PATH=/neurodiary/ npm --prefix "${REPO_ROOT}" run build
 rsync -e "${RSYNC_SSH}" -az --delete "${REPO_ROOT}/backend/" "${OMNIA_HOST}:${REMOTE_DIR}/lxc-bundle/backend/"
 rsync -e "${RSYNC_SSH}" -az --delete "${REPO_ROOT}/dist/" "${OMNIA_HOST}:${REMOTE_DIR}/lxc-bundle/frontend-dist/"
 rsync -e "${RSYNC_SSH}" -az "${REPO_ROOT}/deploy/" "${OMNIA_HOST}:${REMOTE_DIR}/source/deploy/"
-rsync -e "${RSYNC_SSH}" -az "${SCRIPT_DIR}/omnia_lxc_remote_deploy.sh" "${SCRIPT_DIR}/omnia_install_webapp.sh" "${OMNIA_HOST}:${REMOTE_DIR}/source/scripts/"
+rsync -e "${RSYNC_SSH}" -az "${SCRIPT_DIR}/omnia_lxc_remote_deploy.sh" "${SCRIPT_DIR}/omnia_install_webapp.sh" "${SCRIPT_DIR}/omnia_install_lxc_https.sh" "${OMNIA_HOST}:${REMOTE_DIR}/source/scripts/"
+"${SSH_REMOTE[@]}" "rm -rf '${REMOTE_DIR}/tls-stage' && mkdir -p '${REMOTE_DIR}/tls-stage' && chmod 700 '${REMOTE_DIR}/tls-stage'"
+rsync -e "${RSYNC_SSH}" -az "${TLS_DIR}/neurodiary-ca.crt" "${TLS_DIR}/neurodiary-server.crt" "${TLS_DIR}/neurodiary-server.key" "${OMNIA_HOST}:${REMOTE_DIR}/tls-stage/"
 "${SSH_REMOTE[@]}" env REMOTE_DIR="${REMOTE_DIR}" LXC_NAME="${LXC_NAME}" \
   bash "${REMOTE_DIR}/source/scripts/omnia_lxc_remote_deploy.sh"
+"${SSH_REMOTE[@]}" env REMOTE_DIR="${REMOTE_DIR}" LXC_NAME="${LXC_NAME}" LXC_ZEROTIER_IP="${LXC_ZEROTIER_IP}" \
+  bash "${REMOTE_DIR}/source/scripts/omnia_install_lxc_https.sh"
 "${SSH_REMOTE[@]}" env REMOTE_DIR="${REMOTE_DIR}" LXC_NAME="${LXC_NAME}" LXC_IP="${LXC_IP:-}" \
   sh "${REMOTE_DIR}/source/scripts/omnia_install_webapp.sh"

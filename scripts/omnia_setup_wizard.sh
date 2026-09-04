@@ -78,7 +78,7 @@ while true; do
   echo "Podporované hodnoty: podman, docker, lxc."
 done
 
-LXC_NAME="${LXC_NAME:-neurodiary}"
+LXC_NAME="${LXC_NAME:-neurodiary}"; LXC_IP="${LXC_IP:-}"; LXC_ZEROTIER_IP="${LXC_ZEROTIER_IP:-}"
 if [[ "$CONTAINER_RUNTIME" == lxc ]]; then
   LXC_LINE="$(sed -n 's/^LXC=//p' <<<"$REMOTE_FACTS" | head -n1)"; IFS=, read -r -a LXC_OPTIONS <<<"$LXC_LINE"
   while true; do
@@ -95,6 +95,12 @@ if [[ "$CONTAINER_RUNTIME" == lxc ]]; then
     echo "LXC $LXC_NAME nebyl nalezen. Vytvořte jej nebo vyberte jiný."
     confirm "Zkusit znovu?" a || exit 0
   done
+fi
+
+if [[ "$CONTAINER_RUNTIME" == lxc ]]; then
+  DETECTED_LXC_IP="$(ssh_omnia "lxc-info -n '$LXC_NAME' -iH" 2>/dev/null | awk 'index($0, ":") == 0 {print; exit}')"
+  while true; do prompt LXC_IP "LAN IPv4 adresa LXC" "${LXC_IP:-$DETECTED_LXC_IP}"; valid_ipv4 "$LXC_IP" && break; echo "Neplatná IPv4."; done
+  while true; do prompt LXC_ZEROTIER_IP "ZeroTier IPv4 adresa LXC pro HTTPS" "$LXC_ZEROTIER_IP"; valid_ipv4 "$LXC_ZEROTIER_IP" && break; echo "Neplatná IPv4."; done
 fi
 
 mapfile -t NETWORKS < <(awk '$1~/^[0-9]+:$/ {i=$2; sub(/@.*/,"",i); print i"|"$4}' <<<"$REMOTE_FACTS")
@@ -133,6 +139,7 @@ say "2/5 Uložení konfigurace"; umask 077
   printf 'APP_PORT=%s\n' "$(shell_value "$APP_PORT")"; printf 'CONTAINER_RUNTIME=%s\n' "$(shell_value "$CONTAINER_RUNTIME")"
   printf 'IMAGE_NAME=%s\n' "$(shell_value "$IMAGE_NAME")"; printf 'CONTAINER_NAME=%s\n' "$(shell_value "$CONTAINER_NAME")"
   printf 'LXC_NAME=%s\n' "$(shell_value "$LXC_NAME")"
+  printf 'LXC_IP=%s\n' "$(shell_value "$LXC_IP")"; printf 'LXC_ZEROTIER_IP=%s\n' "$(shell_value "$LXC_ZEROTIER_IP")"
 } >"$ENV_FILE" || fatal "Konfiguraci nelze uložit."
 chmod 600 "$ENV_FILE"; echo "Uloženo: $ENV_FILE"
 

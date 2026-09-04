@@ -80,11 +80,30 @@ integrace Syncthingu. Adresu kontejneru lze uvést v `omnia.env`:
 
 ```ini
 LXC_IP=192.168.100.160
+LXC_ZEROTIER_IP=10.43.192.160
 ```
 
 Bez `LXC_IP` ji skript zjistí přes `lxc-info`. Před reloadem ověří upstream `/readyz` a celou
 konfiguraci příkazem `lighttpd -tt`; při neplatné konfiguraci změny vrátí. Plný deploy i rychlý
 LXC update následně ověří `/neurodiary/` a ikonu přes HTTPS na routeru.
+
+### Vlastní HTTPS pro ZeroTier
+
+LXC deploy při prvním spuštění vytvoří lokální certifikační autoritu a serverový certifikát
+pro LAN i ZeroTier IP. CA vzniká v ignorovaném adresáři `secrets/tls`; její šifrovaný privátní
+klíč se na router ani do LXC nepřenáší. Do LXC se přenese pouze serverový klíč, serverový
+certifikát a veřejný certifikát CA.
+
+Nginx v LXC ukončuje TLS na portu `443`, zatímco routerová WebApps proxy používá HTTP port
+`8080`. Uvicorn naslouchá jen na `127.0.0.1:8000`. Přímá ZeroTier URL je:
+
+```text
+https://10.43.192.160/neurodiary/
+```
+
+Do každého klientského zařízení je potřeba jednorázově nainstalovat jako důvěryhodnou kořenovou
+autoritu soubor `secrets/tls/neurodiary-ca.crt`. Soubor `neurodiary-ca.key` bezpečně zazálohujte;
+nikdy jej nekopírujte na klienty ani na router.
 
 V LAN se používá přímo IP adresa LXC a port `8080`. Pro přístup ze ZeroTier přidejte v síti
 ZeroTier managed route pro LAN subnet (například `192.168.100.0/24`) přes ZeroTier adresu Omnie
