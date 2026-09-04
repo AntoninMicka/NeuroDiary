@@ -24,7 +24,7 @@ fi
 "${CONTAINER_RUNTIME}" run -d --name "${CONTAINER_NAME}" --restart=unless-stopped \
   "${PORT_ARGS[@]}" \
   -v "${REMOTE_DIR}/data:/data" \
-  -v "${USERS_FILE}:/run/secrets/neurodiary-users.json:ro" \
+  -v "${USERS_FILE}:/run/secrets/neurodiary-users.json" \
   -e NEURODIARY_LOCAL_USERS_FILE=/run/secrets/neurodiary-users.json \
   -e NEURODIARY_SESSION_SECRET="${SESSION_SECRET}" \
   -e NEURODIARY_CORS_ORIGINS="http://${LAN_IP}:${APP_PORT}${ZEROTIER_IP:+,http://${ZEROTIER_IP}:${APP_PORT}}" \

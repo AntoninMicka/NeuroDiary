@@ -80,6 +80,10 @@ export function loadStoredAuthSession() {
     if (!session?.accessToken || !session?.user) {
       return null;
     }
+    if (session.expiresAt && new Date(session.expiresAt).getTime() <= Date.now()) {
+      localStorage.removeItem(AUTH_SESSION_STORAGE_KEY);
+      return null;
+    }
 
     return session;
   } catch {

@@ -309,6 +309,14 @@ class LocalLoginRequestModel(BaseModel):
     password: str = Field(min_length=1, max_length=1024)
 
 
+class LocalUserCreateModel(BaseModel):
+    username: str = Field(pattern=r"^[A-Za-z0-9._-]{1,64}$")
+    password: str = Field(min_length=12, max_length=1024)
+    name: str = Field(default="", max_length=120)
+    email: str = Field(default="", max_length=254)
+    roles: list[UserRoleKey] = Field(min_length=1, max_length=4)
+
+
 class IdentityProfileModel(BaseModel):
     email: str = ""
     firstName: str = ""

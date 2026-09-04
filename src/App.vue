@@ -117,7 +117,7 @@ import {
   respondToDiaryShareInvitation,
   revokeDiaryShare,
 } from "./services/diarySharing.js";
-import { createCloudBackup, deleteCloudBackup, fetchAdminStatus, fetchAdminUsers, updateAdminUserRoles } from "./services/adminService.js";
+import { createCloudBackup, createLocalUser, deleteCloudBackup, deleteLocalUser, fetchAdminStatus, fetchAdminUsers, updateAdminUserRoles } from "./services/adminService.js";
 import { fetchCurrentRoles, updateCurrentDeviceRoles, updateSelfAssignableRoles } from "./services/roleService.js";
 import { CAREGIVER_PANEL_ITEMS, canAccessClinicalAnalyses, isCaregiverOnlyRoleSet } from "./services/roleUi.js";
 import { generateRecoverySecret } from "./services/e2eCrypto.js";
@@ -268,6 +268,7 @@ const adminRoleDefinitions = ref({});
 const selectedAdminUserId = ref("");
 const adminUserSearch = ref("");
 const adminRoleDraft = ref([]);
+const localUserDraft = reactive({ username: "", password: "", name: "", email: "", roles: ["patient"] });
 const adminError = ref("");
 const isAdminBusy = ref(false);
 const accountRoles = reactive({ assignedRoles: [], activeRoles: [], definitions: {} });
@@ -414,6 +415,8 @@ const PANEL_ITEMS = [
   { id: "sekce-prehled", label: "Denní zápis" },
   { id: "sekce-leky", label: "Léčba" },
   { id: "sekce-souhrn", label: "Souhrn" },
+  { id: "sekce-trendy", label: "Trendy" },
+  { id: "sekce-udaje", label: "Údaje" },
   { id: "sekce-manualy", label: "Manuály" },
   { id: "sekce-report", label: "Report pro lékaře" },
   { id: "sekce-sdileni", label: "Sdílení dat" },
@@ -421,7 +424,7 @@ const PANEL_ITEMS = [
   { id: "sekce-kontakty", label: "Kontakty" },
   { id: "sekce-admin", label: "Administrace" },
 ];
-const PATIENT_PRIMARY_PANEL_ITEMS = PANEL_ITEMS.filter((item) => !["sekce-matice", "sekce-report", "sekce-sdileni", "sekce-kartoteka", "sekce-kontakty", "sekce-admin"].includes(item.id));
+const PATIENT_PRIMARY_PANEL_ITEMS = PANEL_ITEMS.filter((item) => !["sekce-matice", "sekce-trendy", "sekce-udaje", "sekce-report", "sekce-sdileni", "sekce-kartoteka", "sekce-kontakty", "sekce-admin"].includes(item.id));
 const isCaregiverOnlyMode = computed(() => isCaregiverOnlyRoleSet(accountRoles.activeRoles));
 const caregiverPanelItems = computed(() => CAREGIVER_PANEL_ITEMS.filter(
   (item) => item.id !== "sekce-navrhy" || accountRoles.activeRoles.includes("doctor"),
@@ -2428,6 +2431,34 @@ async function saveAdminUserRoles() {
   }
 }
 
+async function addLocalUser() {
+  isAdminBusy.value = true;
+  try {
+    await createLocalUser({ ...localUserDraft, roles: [...localUserDraft.roles] });
+    Object.assign(localUserDraft, { username: "", password: "", name: "", email: "", roles: ["patient"] });
+    await refreshAdminConsole({ silent: true });
+    storageMessage.value = "Lokální uživatel byl vytvořen.";
+  } catch (error) {
+    adminError.value = error.message;
+  } finally {
+    isAdminBusy.value = false;
+  }
+}
+
+async function removeLocalUser(user) {
+  if (!globalThis.confirm(`Odstranit lokální účet ${user.name || user.userId}?`)) return;
+  isAdminBusy.value = true;
+  try {
+    await deleteLocalUser(user.userId);
+    await refreshAdminConsole({ silent: true });
+    storageMessage.value = "Lokální uživatel byl odstraněn.";
+  } catch (error) {
+    adminError.value = error.message;
+  } finally {
+    isAdminBusy.value = false;
+  }
+}
+
 async function refreshAccountRoles() {
   if (!authSession.value?.user || !hasSyncIdentity.value) return;
   try {
@@ -3093,7 +3124,7 @@ function syncFloatingMenuHeight() {
       <p v-if="storageMessage" class="boot-detail boot-detail-warning">{{ storageMessage }}</p>
     </div>
 
-    <template v-else>
+    <template v-else-if="!authConfig.localAuthEnabled || authSession?.user">
       <header class="hero">
         <div class="hero-copy">
           <p class="eyebrow">Zdravotní deník</p>
@@ -4088,9 +4119,23 @@ function syncFloatingMenuHeight() {
                     </label>
                   </fieldset>
                   <button class="primary-button" type="button" :disabled="isAdminBusy || !adminRoleDraft.length" @click="saveAdminUserRoles">Uložit role</button>
+                  <button v-if="selectedAdminUser.userId.startsWith('local:') && selectedAdminUser.userId !== authSession?.user?.userId" class="ghost-button utility-menu-item-danger" type="button" :disabled="isAdminBusy" @click="removeLocalUser(selectedAdminUser)">Odstranit účet</button>
                 </div>
               </div>
               <p v-else class="panel-tip">Zatím nejsou evidované žádné uživatelské účty.</p>
+
+              <form class="stack-form" @submit.prevent="addLocalUser">
+                <h4>Nový lokální uživatel</h4>
+                <label><span>Uživatelské jméno</span><input v-model="localUserDraft.username" pattern="[A-Za-z0-9._-]{1,64}" autocomplete="off" required /></label>
+                <label><span>Zobrazované jméno</span><input v-model="localUserDraft.name" maxlength="120" /></label>
+                <label><span>E-mail (volitelný)</span><input v-model="localUserDraft.email" type="email" maxlength="254" /></label>
+                <label><span>Počáteční heslo</span><input v-model="localUserDraft.password" type="password" minlength="12" autocomplete="new-password" required /></label>
+                <fieldset class="contact-keyring">
+                  <legend>Role</legend>
+                  <label v-for="(definition, role) in adminRoleDefinitions" :key="`new-${role}`"><input v-model="localUserDraft.roles" type="checkbox" :value="role" /><span>{{ definition.label }}</span></label>
+                </fieldset>
+                <button class="primary-button" type="submit" :disabled="isAdminBusy || !localUserDraft.roles.length">Vytvořit uživatele</button>
+              </form>
             </section>
 
             <section class="sync-settings-card">
@@ -4574,5 +4619,16 @@ function syncFloatingMenuHeight() {
         </section>
       </div>
     </template>
+    <div v-else class="boot-card auth-panel">
+      <p class="section-kicker">NeuroDiary</p>
+      <h2>Přihlášení je povinné</h2>
+      <p class="panel-tip">Tato instalace používá lokální účty uložené na Turris Omnia.</p>
+      <form class="stack-form" @submit.prevent="signInWithLocalAccount">
+        <label><span>Uživatelské jméno</span><input v-model="localUsername" autocomplete="username" autofocus required /></label>
+        <label><span>Heslo</span><input v-model="localPassword" type="password" autocomplete="current-password" required /></label>
+        <button class="primary-button" type="submit" :disabled="isAuthBusy">{{ isAuthBusy ? "Přihlašuji…" : "Přihlásit" }}</button>
+      </form>
+      <p v-if="storageMessage" class="storage-message">{{ storageMessage }}</p>
+    </div>
   </div>
 </template>

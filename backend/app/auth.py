@@ -6,6 +6,7 @@ import hashlib
 import hmac
 import json
 from pathlib import Path
+from threading import Lock
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from functools import cached_property
@@ -51,6 +52,7 @@ class AuthManager:
         )
         self.apple_redirect_path = os.getenv("NEURODIARY_APPLE_REDIRECT_PATH", "/auth/apple/callback").strip()
         self.local_users_file = os.getenv("NEURODIARY_LOCAL_USERS_FILE", "").strip()
+        self._local_users_lock = Lock()
 
     @property
     def local_auth_enabled(self) -> bool:
@@ -193,6 +195,89 @@ class AuthManager:
         )
         token, expires_at = self.build_session_token(user)
         return user, token, expires_at
+
+    def _read_local_users(self) -> dict[str, Any]:
+        try:
+            document = json.loads(Path(self.local_users_file).read_text(encoding="utf-8"))
+            if not isinstance(document.get("users"), list):
+                raise ValueError("users must be a list")
+            return document
+        except (OSError, ValueError, AttributeError) as error:
+            raise HTTPException(status_code=503, detail="Local user file is unavailable.") from error
+
+    @staticmethod
+    def _record_roles(record: dict[str, Any], index: int) -> list[str]:
+        roles = record.get("roles")
+        if isinstance(roles, list) and roles:
+            return [str(role) for role in roles]
+        return ["admin", "patient"] if index == 0 else ["patient"]
+
+    def local_user_roles(self, user_id: str) -> list[str]:
+        local_id = user_id.removeprefix("local:")
+        for index, record in enumerate(self._read_local_users()["users"]):
+            if str(record.get("userId") or record.get("username")) == local_id:
+                return self._record_roles(record, index)
+        return []
+
+    def list_local_users(self) -> list[dict[str, Any]]:
+        return [{
+            "username": str(record.get("username") or ""),
+            "userId": f"local:{record.get('userId') or record.get('username')}",
+            "name": str(record.get("name") or record.get("username") or ""),
+            "email": str(record.get("email") or ""),
+            "roles": self._record_roles(record, index),
+        } for index, record in enumerate(self._read_local_users()["users"])]
+
+    def save_local_user(self, *, username: str, password: str, name: str, email: str, roles: list[str]) -> None:
+        with self._local_users_lock:
+            document = self._read_local_users()
+            if any(str(item.get("username", "")).casefold() == username.casefold() for item in document["users"]):
+                raise HTTPException(status_code=409, detail="Uživatelské jméno už existuje.")
+            salt = os.urandom(16)
+            digest = hashlib.scrypt(password.encode(), salt=salt, n=16384, r=8, p=1, dklen=32)
+            document["users"].append({
+                "username": username, "userId": username, "name": name or username,
+                "email": email, "roles": roles,
+                "password": {"algorithm": "scrypt", "n": 16384, "r": 8, "p": 1,
+                             "salt": base64.b64encode(salt).decode(), "hash": base64.b64encode(digest).decode()},
+            })
+            self._write_local_users(document)
+
+    def delete_local_user(self, user_id: str) -> None:
+        local_id = user_id.removeprefix("local:")
+        with self._local_users_lock:
+            document = self._read_local_users()
+            remaining = [item for item in document["users"] if str(item.get("userId") or item.get("username")) != local_id]
+            if len(remaining) == len(document["users"]):
+                raise HTTPException(status_code=404, detail="Lokální účet nebyl nalezen.")
+            admin_count = sum("admin" in self._record_roles(item, index) for index, item in enumerate(remaining))
+            if admin_count == 0:
+                raise HTTPException(status_code=400, detail="Posledního administrátora nelze odstranit.")
+            document["users"] = remaining
+            self._write_local_users(document)
+
+    def set_local_user_roles(self, user_id: str, roles: list[str]) -> None:
+        local_id = user_id.removeprefix("local:")
+        with self._local_users_lock:
+            document = self._read_local_users()
+            found = False
+            for record in document["users"]:
+                if str(record.get("userId") or record.get("username")) == local_id:
+                    record["roles"] = roles
+                    found = True
+                    break
+            if not found:
+                raise HTTPException(status_code=404, detail="Lokální účet nebyl nalezen.")
+            if not any("admin" in self._record_roles(item, index) for index, item in enumerate(document["users"])):
+                raise HTTPException(status_code=400, detail="Musí zůstat alespoň jeden administrátor.")
+            self._write_local_users(document)
+
+    def _write_local_users(self, document: dict[str, Any]) -> None:
+        path = Path(self.local_users_file)
+        temporary = path.with_suffix(path.suffix + ".tmp")
+        temporary.write_text(json.dumps(document, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        os.chmod(temporary, 0o600)
+        temporary.replace(path)
 
     def verify_google_identity_token(self, token: str) -> AuthenticatedUser:
         if not self.google_client_ids:

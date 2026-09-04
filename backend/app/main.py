@@ -33,6 +33,7 @@ from .models import (
     AuthenticatedUserModel,
     IdentityExchangeRequestModel,
     LocalLoginRequestModel,
+    LocalUserCreateModel,
     SyncPullResponseModel,
     SyncPushRequestModel,
     SyncPushResponseModel,
@@ -214,6 +215,12 @@ def verify_admin(
     authorization: Annotated[str | None, Header()] = None,
 ) -> AuthenticatedUser:
     user = auth_manager.resolve_authenticated_user(authorization)
+    if user.provider == "local":
+        if "admin" not in auth_manager.local_user_roles(user.user_id):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Administrátorský přístup byl zamítnut.")
+        share_store.register_identity(user.user_id, user.email, user.name)
+        share_store.set_roles(user.user_id, auth_manager.local_user_roles(user.user_id))
+        return user
     if user.email:
         share_store.register_identity(user.user_id, user.email, user.name)
     if user.email and user.email.lower() in ADMIN_EMAILS:
@@ -320,13 +327,22 @@ def admin_status(admin: Annotated[AuthenticatedUser, Depends(verify_admin)]) -> 
 
 @app.get("/api/v1/admin/users")
 def admin_list_users(admin: Annotated[AuthenticatedUser, Depends(verify_admin)]) -> dict[str, object]:
-    return {"roles": ROLE_DEFINITIONS, "users": [
+    users = [
         {
             "userId": item["user_id"], "email": item["email"], "name": item["display_name"],
             "roles": item["roles"], "updatedAt": item["updated_at"],
         }
         for item in share_store.list_users()
-    ]}
+    ]
+    known_ids = {item["userId"] for item in users}
+    if auth_manager.local_auth_enabled:
+        for item in auth_manager.list_local_users():
+            local_view = {**item, "updatedAt": None}
+            if item["userId"] in known_ids:
+                users = [local_view if existing["userId"] == item["userId"] else existing for existing in users]
+            else:
+                users.append(local_view)
+    return {"roles": ROLE_DEFINITIONS, "users": users}
 
 
 @app.patch("/api/v1/admin/users/{target_user_id}/roles")
@@ -336,6 +352,10 @@ def admin_update_user_roles(
     admin: Annotated[AuthenticatedUser, Depends(verify_admin)],
 ) -> dict[str, object]:
     roles = list(dict.fromkeys(payload.roles))
+    if target_user_id.startswith("local:"):
+        auth_manager.set_local_user_roles(target_user_id, roles)
+        local_user = next(item for item in auth_manager.list_local_users() if item["userId"] == target_user_id)
+        share_store.register_identity(target_user_id, local_user["email"], local_user["name"])
     if not share_store.set_roles(target_user_id, roles):
         raise HTTPException(status_code=404, detail="Uživatelský účet nebyl nalezen.")
     audit_security(admin.user_id, "admin-console", AuditEventType.ACCOUNT_ROLES_CHANGED, targetUserId=target_user_id, roles=roles)
@@ -581,6 +601,7 @@ def exchange_identity_token(payload: IdentityExchangeRequestModel) -> AuthSessio
 def login_local_user(payload: LocalLoginRequestModel) -> AuthSessionResponseModel:
     user, access_token, expires_at = auth_manager.authenticate_local_user(payload.username, payload.password)
     share_store.register_identity(user.user_id, user.email, user.name)
+    share_store.set_roles(user.user_id, auth_manager.local_user_roles(user.user_id))
     audit_security(user.user_id, "authentication", AuditEventType.AUTH_SESSION_CREATED, provider=user.provider)
     return AuthSessionResponseModel(
         accessToken=access_token,
@@ -589,6 +610,35 @@ def login_local_user(payload: LocalLoginRequestModel) -> AuthSessionResponseMode
             provider=user.provider, userId=user.user_id, email=user.email, name=user.name,
         ),
     )
+
+
+@app.get("/api/v1/admin/local-users")
+def admin_list_local_users(admin: Annotated[AuthenticatedUser, Depends(verify_admin)]) -> dict[str, object]:
+    return {"users": auth_manager.list_local_users()}
+
+
+@app.post("/api/v1/admin/local-users", status_code=201)
+def admin_create_local_user(
+    payload: LocalUserCreateModel,
+    admin: Annotated[AuthenticatedUser, Depends(verify_admin)],
+) -> dict[str, str]:
+    auth_manager.save_local_user(
+        username=payload.username, password=payload.password, name=payload.name,
+        email=payload.email.strip().lower(), roles=list(dict.fromkeys(payload.roles)),
+    )
+    return {"status": "created", "userId": f"local:{payload.username}"}
+
+
+@app.delete("/api/v1/admin/local-users/{target_user_id}")
+def admin_delete_local_user(
+    target_user_id: str,
+    admin: Annotated[AuthenticatedUser, Depends(verify_admin)],
+) -> dict[str, str]:
+    decoded_id = target_user_id.removeprefix("local:")
+    if f"local:{decoded_id}" == admin.user_id:
+        raise HTTPException(status_code=400, detail="Právě přihlášený účet nelze odstranit.")
+    auth_manager.delete_local_user(decoded_id)
+    return {"status": "deleted", "userId": f"local:{decoded_id}"}
 def resolve_frontend_path(path: str) -> Path:
     base_dir = FRONTEND_DIST.resolve()
     candidate = (base_dir / path).resolve()

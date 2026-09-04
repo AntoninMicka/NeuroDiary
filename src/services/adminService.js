@@ -50,3 +50,11 @@ export function updateAdminUserRoles(userId, roles) {
     body: JSON.stringify({ roles }),
   });
 }
+
+export function createLocalUser(user) {
+  return request("/api/v1/admin/local-users", { method: "POST", body: JSON.stringify(user) });
+}
+
+export function deleteLocalUser(userId) {
+  return request(`/api/v1/admin/local-users/${encodeURIComponent(userId)}`, { method: "DELETE" });
+}

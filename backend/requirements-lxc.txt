@@ -1,0 +1,10 @@
+# Turris Omnia používá persistentní SQLite. psycopg[binary] je záměrně vynechaný,
+# protože pro 32bit ARM není distribuovaný psycopg-binary wheel.
+fastapi==0.116.1
+# Základní Uvicorn používá h11. Varianta [standard] by na ARM32 zbytečně
+# kompilovala uvloop a httptools.
+uvicorn==0.35.0
+pydantic==2.12.5
+google-auth[requests]==2.55.1
+PyJWT[crypto]==2.10.1
+pywebpush==2.3.0

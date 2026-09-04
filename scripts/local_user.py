@@ -27,11 +27,15 @@ def main() -> None:
         document = json.loads(args.file.read_text(encoding="utf-8"))
     salt = os.urandom(16)
     digest = hashlib.scrypt(password.encode(), salt=salt, n=16384, r=8, p=1, dklen=32)
+    existing_users = document.get("users", [])
+    existing_record = next((u for u in existing_users if str(u.get("username", "")).casefold() == args.username.casefold()), None)
+    roles = existing_record.get("roles", []) if existing_record else (["admin", "patient"] if not existing_users else ["patient"])
     record = {
         "username": args.username,
         "userId": args.username,
         "name": args.name or args.username,
         "email": args.email,
+        "roles": roles,
         "password": {
             "algorithm": "scrypt", "n": 16384, "r": 8, "p": 1,
             "salt": base64.b64encode(salt).decode(),

@@ -26,10 +26,20 @@ default_gateway() {
   valid_ipv4 "$gateway" && printf '%s' "$gateway"
 }
 remote_facts() {
-  ssh -o ConnectTimeout=10 "$OMNIA_HOST" 'r=""; command -v podman >/dev/null && r="podman"; command -v docker >/dev/null && r="${r}${r:+,}docker"; command -v lxc-attach >/dev/null && r="${r}${r:+,}lxc"; echo "RUNTIMES=$r"; ip -4 -o addr show scope global 2>/dev/null; if command -v lxc-ls >/dev/null; then printf "LXC="; lxc-ls | tr " " ","; echo; fi'
+  ssh -S "$SSH_CONTROL_PATH" -o ControlMaster=auto -o ControlPersist=15m -o ConnectTimeout=10 "$OMNIA_HOST" 'r=""; command -v podman >/dev/null && r="podman"; command -v docker >/dev/null && r="${r}${r:+,}docker"; command -v lxc-attach >/dev/null && r="${r}${r:+,}lxc"; echo "RUNTIMES=$r"; ip -4 -o addr show scope global 2>/dev/null; if command -v lxc-ls >/dev/null; then printf "LXC="; lxc-ls | tr " " ","; echo; fi'
 }
+ssh_omnia() { ssh -S "$SSH_CONTROL_PATH" -o ControlMaster=auto -o ControlPersist=15m "$OMNIA_HOST" "$@"; }
+scp_omnia() { scp -o "ControlPath=$SSH_CONTROL_PATH" -o ControlMaster=auto -o ControlPersist=15m "$@"; }
 
 for cmd in ssh scp rsync python3; do command -v "$cmd" >/dev/null || fatal "V počítači chybí $cmd."; done
+SESSION_DIR="$(mktemp -d)" || fatal "Nelze vytvořit dočasný adresář."
+SSH_CONTROL_PATH="$SESSION_DIR/ssh.socket"
+cleanup() {
+  [[ -n "${OMNIA_HOST:-}" ]] && ssh -S "$SSH_CONTROL_PATH" -O exit "$OMNIA_HOST" >/dev/null 2>&1 || true
+  rm -rf "$SESSION_DIR"
+}
+trap cleanup EXIT
+export SSH_CONTROL_PATH
 say "NeuroDiary – průvodce instalací na Turris Omnia"
 echo "Síť i runtime vždy vybíráte; průvodce sám nepoužije síť pro hosty."
 
@@ -81,7 +91,7 @@ if [[ "$CONTAINER_RUNTIME" == lxc ]]; then
       seen=0; for item in "${LXC_OPTIONS[@]}"; do [[ -z "$item" ]] && continue; seen=$((seen+1)); [[ $seen == "$choice" ]] && LXC_NAME="$item" && break; done
     elif [[ -n "$choice" ]]; then echo "Neplatná volba."; continue; fi
     [[ "$LXC_NAME" =~ ^[A-Za-z0-9_.-]+$ ]] || { echo "Neplatný název."; continue; }
-    ssh "$OMNIA_HOST" "lxc-info -n '$LXC_NAME'" >/dev/null 2>&1 && break
+    ssh_omnia "lxc-info -n '$LXC_NAME'" >/dev/null 2>&1 && break
     echo "LXC $LXC_NAME nebyl nalezen. Vytvořte jej nebo vyberte jiný."
     confirm "Zkusit znovu?" a || exit 0
   done
@@ -127,16 +137,16 @@ say "2/5 Uložení konfigurace"; umask 077
 chmod 600 "$ENV_FILE"; echo "Uloženo: $ENV_FILE"
 
 say "3/5 Lokální účet"
-until ssh "$OMNIA_HOST" "mkdir -p '$REMOTE_DIR/config' && chmod 700 '$REMOTE_DIR/config'"; do echo "Příprava adresáře selhala."; confirm "Zkusit znovu?" a || exit 0; done
-TEMP_DIR="$(mktemp -d)" || fatal "Nelze vytvořit dočasný adresář."; trap 'rm -rf "$TEMP_DIR"' EXIT; LOCAL_USERS="$TEMP_DIR/users.json"
-if ssh "$OMNIA_HOST" "test -f '$REMOTE_DIR/config/users.json'"; then
-  until scp "$OMNIA_HOST:$REMOTE_DIR/config/users.json" "$LOCAL_USERS"; do echo "Stažení účtů selhalo."; confirm "Zkusit znovu?" a || exit 0; done
+until ssh_omnia "mkdir -p '$REMOTE_DIR/config' && chmod 700 '$REMOTE_DIR/config'"; do echo "Příprava adresáře selhala."; confirm "Zkusit znovu?" a || exit 0; done
+LOCAL_USERS="$SESSION_DIR/users.json"
+if ssh_omnia "test -f '$REMOTE_DIR/config/users.json'"; then
+  until scp_omnia "$OMNIA_HOST:$REMOTE_DIR/config/users.json" "$LOCAL_USERS"; do echo "Stažení účtů selhalo."; confirm "Zkusit znovu?" a || exit 0; done
   chmod 600 "$LOCAL_USERS"
 fi
 if [[ ! -f "$LOCAL_USERS" ]] || confirm "Založit nebo změnit lokální účet?" a; then
   while true; do prompt LOCAL_USERNAME "Uživatelské jméno" admin; [[ "$LOCAL_USERNAME" =~ ^[A-Za-z0-9._-]{1,64}$ ]] && break; echo "Neplatné jméno."; done
   until python3 "$SCRIPT_DIR/local_user.py" "$LOCAL_USERS" "$LOCAL_USERNAME"; do echo "Vytvoření účtu selhalo."; confirm "Zkusit znovu?" a || exit 0; done
-  until scp "$LOCAL_USERS" "$OMNIA_HOST:$REMOTE_DIR/config/users.json" && ssh "$OMNIA_HOST" "chmod 600 '$REMOTE_DIR/config/users.json'"; do echo "Nahrání účtu selhalo."; confirm "Zkusit znovu?" a || exit 0; done
+  until scp_omnia "$LOCAL_USERS" "$OMNIA_HOST:$REMOTE_DIR/config/users.json" && ssh_omnia "chmod 600 '$REMOTE_DIR/config/users.json'"; do echo "Nahrání účtu selhalo."; confirm "Zkusit znovu?" a || exit 0; done
 fi
 
 say "4/5 Rekapitulace"
@@ -151,3 +161,4 @@ if confirm "Spustit nasazení?" a; then
 fi
 say "Hotovo"
 echo "Konfiguraci lze kdykoliv změnit opětovným spuštěním průvodce."
+bash "$SCRIPT_DIR/omnia_status.sh" "$ENV_FILE" || true

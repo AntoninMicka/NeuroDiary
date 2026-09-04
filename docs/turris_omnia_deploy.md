@@ -4,6 +4,12 @@ Nasazení používá existující multi-stage `backend/Dockerfile`, persistentn�
 soubor uživatelů. Google ani Apple ID nejsou nakonfigurované a aplikace při přihlášení nekontaktuje
 globálního poskytovatele identity.
 
+V lokálním režimu je přihlášení povinné; bez platné session se deník ani ostatní panely
+nezobrazí. První účet vytvořený průvodcem dostane role `admin` a `patient`. Administrátor může
+v panelu Administrace vytvářet a odstraňovat lokální účty a měnit jejich role. Backend nedovolí
+odstranit právě přihlášený účet ani odebrat posledního administrátora. Hesla jsou v souboru
+uložena pouze jako scrypt hash.
+
 ## Předpoklady
 
 - na Omnii běží ZeroTier a `podman`, `docker`, nebo již vytvořený Debian LXC kontejner
@@ -31,8 +37,30 @@ SSH adresu Omnie průvodce předvyplní jako `root@VÝCHOZÍ_BRÁNA` podle routo
 Jde pouze o návrh, který lze změnit; existující hodnota v `scripts/omnia.env` má přednost.
 
 Samotný deploy používá multiplexovanou SSH relaci. I když sestává z několika přenosů přes `rsync`
-a vzdálených příkazů, heslo k Omnii si během deploye vyžádá nejvýše jednou. Pro pravidelné
+a vzdálených příkazů, celý průchod průvodcem si heslo k Omnii vyžádá nejvýše jednou. Pro pravidelné
 aktualizace je stále vhodnější nastavit přihlášení SSH klíčem.
+
+Aktuální stav lze kdykoliv vypsat samostatně:
+
+```bash
+bash scripts/omnia_status.sh
+```
+
+Výpis obsahuje síť routeru, disk, stav a IP LXC, stav systemd služby, healthcheck, paměť,
+disk LXC a poslední varování NeuroDiary. Průvodce stejnou diagnostiku spustí po dokončení.
+
+## Rychlá aktualizace aplikace
+
+Po úspěšném prvním plném deployi lze další změny aplikace nasazovat bez `apt` a `pip`:
+
+```bash
+bash scripts/omnia_lxc_update.sh
+```
+
+Skript sestaví frontend, přenese pouze backend a statický frontend, restartuje službu a spustí
+diagnostiku. Databáze, uživatelé, session klíč, Python prostředí ani systémové balíčky se nemění.
+Předchozí aplikaci drží do úspěšného healthchecku a při chybě ji automaticky obnoví. Pokud se
+změní `backend/requirements-lxc.txt`, je nutné místo něj znovu použít plný deploy.
 
 ### Varianta LXC
 
@@ -40,7 +68,11 @@ Pokud průvodce najde `lxc-attach`, nabídne režim `lxc`. Nejprve v reForis/LuC
 LXC kontejner připojený k `br-lan`, spusťte jej a poznamenejte si jeho název. Průvodce sestaví
 frontend na počítači, do LXC nahraje backend a spustí jej jako omezenou systemd službu.
 Na 32bit ARM automaticky doinstaluje také `libatomic1`, kompilátor C/C++ a Rust toolchain;
-ty jsou potřeba, pokud pro Python daného LXC není dostupný hotový balíček `pydantic-core`.
+vývojové hlavičky Pythonu a knihoven. Ty jsou potřeba, pokud pro Python daného LXC není dostupný
+hotový binární balíček. Uvicorn je použitý bez volitelných `uvloop` a `httptools`, aby se na
+routeru zbytečně nekompilovaly.
+LXC používá samostatný `backend/requirements-lxc.txt` bez PostgreSQL ovladače
+`psycopg-binary`, který pro 32bit ARM nemá distribuovaný balíček a při SQLite není potřeba.
 
 V LAN se používá přímo IP adresa LXC a port `8080`. Pro přístup ze ZeroTier přidejte v síti
 ZeroTier managed route pro LAN subnet (například `192.168.100.0/24`) přes ZeroTier adresu Omnie

@@ -9,15 +9,23 @@ ENV_FILE="${1:-${SCRIPT_DIR}/omnia.env}"
 source "${ENV_FILE}"
 : "${OMNIA_HOST:?}" "${REMOTE_DIR:?}" "${LAN_IP:?}" "${APP_PORT:?}"
 
-SSH_CONTROL_DIR="$(mktemp -d)"
-SSH_CONTROL_PATH="${SSH_CONTROL_DIR}/socket"
+OWNS_SSH_SESSION=false
+if [[ -z "${SSH_CONTROL_PATH:-}" || ! -S "${SSH_CONTROL_PATH}" ]]; then
+  SSH_CONTROL_DIR="$(mktemp -d)"
+  SSH_CONTROL_PATH="${SSH_CONTROL_DIR}/socket"
+  OWNS_SSH_SESSION=true
+fi
 cleanup_ssh() {
-  ssh -S "${SSH_CONTROL_PATH}" -O exit "${OMNIA_HOST}" >/dev/null 2>&1 || true
-  rm -rf "${SSH_CONTROL_DIR}"
+  if [[ "${OWNS_SSH_SESSION}" == true ]]; then
+    ssh -S "${SSH_CONTROL_PATH}" -O exit "${OMNIA_HOST}" >/dev/null 2>&1 || true
+    rm -rf "${SSH_CONTROL_DIR}"
+  fi
 }
 trap cleanup_ssh EXIT
-echo "Navazuji sdílené SSH spojení (heslo bude vyžádáno nejvýše jednou)..."
-ssh -M -S "${SSH_CONTROL_PATH}" -o ControlPersist=10m -o ConnectTimeout=10 -fN "${OMNIA_HOST}"
+if [[ "${OWNS_SSH_SESSION}" == true ]]; then
+  echo "Navazuji sdílené SSH spojení (heslo bude vyžádáno nejvýše jednou)..."
+  ssh -M -S "${SSH_CONTROL_PATH}" -o ControlPersist=10m -o ConnectTimeout=10 -fN "${OMNIA_HOST}"
+fi
 SSH_REMOTE=(ssh -S "${SSH_CONTROL_PATH}" "${OMNIA_HOST}")
 RSYNC_SSH="ssh -S ${SSH_CONTROL_PATH}"
 

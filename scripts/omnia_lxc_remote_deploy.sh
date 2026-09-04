@@ -13,7 +13,7 @@ cat "${REMOTE_DIR}/config/users.json" | lxc-attach -n "${LXC_NAME}" -- sh -c \
   'umask 077; cat > /etc/neurodiary/users.json'
 
 lxc-attach -n "${LXC_NAME}" -- sh -c \
-  'export DEBIAN_FRONTEND=noninteractive; apt-get update; apt-get install -y python3 python3-venv python3-pip ca-certificates curl libatomic1 build-essential cargo rustc pkg-config libssl-dev libffi-dev; python3 -m venv /opt/neurodiary/.venv; /opt/neurodiary/.venv/bin/pip install --upgrade pip setuptools wheel; /opt/neurodiary/.venv/bin/pip install --no-cache-dir -r /opt/neurodiary/backend/requirements.txt'
+  'set -eu; echo "Používám LXC závislosti:"; sed -n "1,80p" /opt/neurodiary/backend/requirements-lxc.txt; if grep -q "uvicorn\[standard\]" /opt/neurodiary/backend/requirements-lxc.txt; then echo "Chyba: byl nahrán starý requirements-lxc.txt." >&2; exit 1; fi; export DEBIAN_FRONTEND=noninteractive; apt-get update; apt-get install -y python3 python3-dev python3-venv python3-pip ca-certificates curl libatomic1 build-essential cargo rustc pkg-config libssl-dev libffi-dev; python3 -m venv --clear /opt/neurodiary/.venv; /opt/neurodiary/.venv/bin/pip install --upgrade pip setuptools wheel; /opt/neurodiary/.venv/bin/pip install --no-cache-dir -r /opt/neurodiary/backend/requirements-lxc.txt'
 
 if ! lxc-attach -n "${LXC_NAME}" -- test -s /etc/neurodiary/session-secret; then
   head -c 48 /dev/urandom | base64 | lxc-attach -n "${LXC_NAME}" -- sh -c \
