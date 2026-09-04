@@ -1,0 +1,23 @@
+[Unit]
+Description=NeuroDiary
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/neurodiary
+Environment=NEURODIARY_DATABASE_PATH=/var/lib/neurodiary/neurodiary.db
+Environment=NEURODIARY_FRONTEND_DIST=/opt/neurodiary/frontend-dist
+Environment=NEURODIARY_LOCAL_USERS_FILE=/etc/neurodiary/users.json
+ExecStart=/bin/sh -c 'NEURODIARY_SESSION_SECRET=$(cat /etc/neurodiary/session-secret) exec /opt/neurodiary/.venv/bin/uvicorn backend.app.main:app --host 0.0.0.0 --port 8080'
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/neurodiary
+
+[Install]
+WantedBy=multi-user.target
