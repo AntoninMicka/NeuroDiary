@@ -4,11 +4,12 @@ import { getAuthorizationHeaderValue, loadStoredAuthSession } from "./authServic
 import { getCurrentDeviceId } from "./trustedDevices.js";
 import { loadSyncKeyMaterial } from "./syncService.js";
 import { deleteTreatmentDraft, listTreatmentDrafts, loadTreatmentDraft, saveTreatmentDraft } from "./treatmentDraftStore.js";
+import { getAppOrigin } from "./appUrl.js";
 
 const draftScope = () => loadStoredAuthSession()?.user?.userId || "guest";
 
 function endpoint(settings, path) {
-  const base = (settings.endpoint || globalThis.location?.origin || "").replace(/\/+$/, "");
+  const base = (settings.endpoint || getAppOrigin()).replace(/\/+$/, "");
   return `${base}${path}`;
 }
 

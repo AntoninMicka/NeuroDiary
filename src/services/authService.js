@@ -46,7 +46,7 @@ function loadScript(src, globalKey) {
 }
 
 async function fetchJson(url, options = {}) {
-  const response = await fetch(url, options);
+  const response = await fetch(appUrl(url), options);
   const payload = await response.json().catch(() => null);
 
   if (!response.ok) {
@@ -243,3 +243,4 @@ export async function startAppleSignIn({ clientId, redirectPath }) {
       : null,
   };
 }
+import { appUrl } from "./appUrl.js";

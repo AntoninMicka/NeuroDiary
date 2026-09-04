@@ -1,4 +1,5 @@
 import { getAuthorizationHeaderValue } from "./authService.js";
+import { getAppOrigin } from "./appUrl.js";
 
 const DEVICE_ID_KEY = "neurodiary-device-id-v1";
 
@@ -27,7 +28,7 @@ export function getDefaultDeviceName() {
 }
 
 function endpoint(settings, path) {
-  const base = (settings.endpoint || globalThis.location?.origin || "").replace(/\/+$/, "");
+  const base = (settings.endpoint || getAppOrigin()).replace(/\/+$/, "");
   return `${base}${path}`;
 }
 

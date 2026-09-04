@@ -7,6 +7,7 @@ const buildCommit = process.env.GITHUB_SHA?.slice(0, 7) ?? "";
 const packageJson = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8"));
 
 export default defineConfig({
+  base: process.env.NEURODIARY_BASE_PATH || "/",
   plugins: [vue()],
   define: {
     __APP_BUILD_INFO__: JSON.stringify({

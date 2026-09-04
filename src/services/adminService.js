@@ -1,9 +1,10 @@
 import { getAuthorizationHeaderValue } from "./authService.js";
+import { appUrl } from "./appUrl.js";
 
 async function request(path, options = {}) {
   const authorization = getAuthorizationHeaderValue();
   if (!authorization) throw new Error("Pro administraci je nutné přihlášení.");
-  const response = await fetch(path, {
+  const response = await fetch(appUrl(path), {
     ...options,
     headers: {
       Authorization: authorization,

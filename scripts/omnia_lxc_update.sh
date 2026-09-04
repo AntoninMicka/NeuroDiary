@@ -27,7 +27,7 @@ REMOTE=(ssh -S "$SSH_CONTROL_PATH" "$OMNIA_HOST")
 RSYNC_SSH="ssh -S $SSH_CONTROL_PATH"
 
 echo "Sestavuji frontend..."
-npm --prefix "$REPO_ROOT" run build
+NEURODIARY_BASE_PATH=/neurodiary/ npm --prefix "$REPO_ROOT" run build
 "${REMOTE[@]}" "mkdir -p '$REMOTE_DIR/lxc-update-bundle/backend' '$REMOTE_DIR/lxc-update-bundle/frontend-dist' '$REMOTE_DIR/source/scripts'"
 rsync -e "$RSYNC_SSH" -az --delete --exclude='__pycache__' --exclude='*.pyc' \
   "$REPO_ROOT/backend/" "$OMNIA_HOST:$REMOTE_DIR/lxc-update-bundle/backend/"
@@ -35,7 +35,12 @@ rsync -e "$RSYNC_SSH" -az --delete "$REPO_ROOT/dist/" \
   "$OMNIA_HOST:$REMOTE_DIR/lxc-update-bundle/frontend-dist/"
 rsync -e "$RSYNC_SSH" -az "$SCRIPT_DIR/omnia_lxc_update_remote.sh" \
   "$OMNIA_HOST:$REMOTE_DIR/source/scripts/"
+rsync -e "$RSYNC_SSH" -az "$REPO_ROOT/deploy/" "$OMNIA_HOST:$REMOTE_DIR/source/deploy/"
+rsync -e "$RSYNC_SSH" -az "$SCRIPT_DIR/omnia_install_webapp.sh" \
+  "$OMNIA_HOST:$REMOTE_DIR/source/scripts/"
 "${REMOTE[@]}" env REMOTE_DIR="$REMOTE_DIR" LXC_NAME="$LXC_NAME" \
   bash "$REMOTE_DIR/source/scripts/omnia_lxc_update_remote.sh"
+"${REMOTE[@]}" env REMOTE_DIR="$REMOTE_DIR" LXC_NAME="$LXC_NAME" LXC_IP="${LXC_IP:-}" \
+  sh "$REMOTE_DIR/source/scripts/omnia_install_webapp.sh"
 
 SSH_CONTROL_PATH="$SSH_CONTROL_PATH" bash "$SCRIPT_DIR/omnia_status.sh" "$ENV_FILE"

@@ -1,0 +1,10 @@
+{
+  "id": "NeuroDiary",
+  "title": "NeuroDiary",
+  "url": "/neurodiary/",
+  "icon": "/icons/neurodiary.svg",
+  "description": {
+    "en": "Patient status and symptom diary.",
+    "cs": "Deník stavu pacienta a příznaků."
+  }
+}

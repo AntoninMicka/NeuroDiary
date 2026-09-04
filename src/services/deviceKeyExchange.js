@@ -1,5 +1,6 @@
 import { getAuthorizationHeaderValue } from "./authService.js";
 import { getCurrentDeviceId } from "./trustedDevices.js";
+import { getAppOrigin } from "./appUrl.js";
 
 const STORAGE_KEY = "neurodiary-device-exchange-key-v1";
 const KEY_DATABASE = "neurodiary-device-keys-v1";
@@ -25,7 +26,7 @@ function bytesToBase64(bytes) {
 }
 
 function endpoint(settings, path) {
-  const base = (settings.endpoint || globalThis.location?.origin || "").replace(/\/+$/, "");
+  const base = (settings.endpoint || getAppOrigin()).replace(/\/+$/, "");
   return `${base}${path}`;
 }
 

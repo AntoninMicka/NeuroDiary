@@ -1,5 +1,7 @@
-const CACHE_NAME = "neurodiary-shell-v3";
-const APP_SHELL = ["/", "/index.html", "/manifest.webmanifest", "/icons/icon-192.svg", "/icons/icon-512.svg"];
+const CACHE_NAME = "neurodiary-shell-v4";
+const BASE_PATH = new URL("./", self.location.href).pathname;
+const appPath = (path = "") => `${BASE_PATH}${path.replace(/^\//, "")}`;
+const APP_SHELL = [appPath(), appPath("index.html"), appPath("manifest.webmanifest"), appPath("icons/icon-192.svg"), appPath("icons/icon-512.svg")];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -46,7 +48,7 @@ self.addEventListener("message", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const targetUrl = new URL(event.notification.data?.url ?? "/", self.location.origin).href;
+  const targetUrl = new URL(event.notification.data?.url ?? BASE_PATH, self.location.origin).href;
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(async (clients) => {
       const existingClient = clients.find((client) => new URL(client.url).origin === self.location.origin);
@@ -69,12 +71,12 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     self.registration.showNotification(payload.title ?? "NeuroDiary", {
       body: payload.body ?? "Mate naplanovanou pripominku.",
-      icon: "/icons/icon-192.svg",
-      badge: "/icons/icon-192.svg",
+      icon: appPath("icons/icon-192.svg"),
+      badge: appPath("icons/icon-192.svg"),
       tag: `push-${payload.type ?? "reminder"}`,
       renotify: true,
       data: {
-        url: payload.url ?? "/",
+        url: payload.url ?? BASE_PATH,
         type: payload.type ?? "reminder",
       },
     }),
@@ -95,11 +97,11 @@ async function handleNavigation(request) {
   try {
     const networkResponse = await fetch(request);
     const cache = await caches.open(CACHE_NAME);
-    cache.put("/index.html", networkResponse.clone());
+    cache.put(appPath("index.html"), networkResponse.clone());
     return networkResponse;
   } catch (error) {
     const cachedResponse = await caches.match(request);
-    return cachedResponse || caches.match("/index.html");
+    return cachedResponse || caches.match(appPath("index.html"));
   }
 }
 

@@ -3,6 +3,7 @@ import { decryptDiaryState, encryptDiaryState, exportAccountMasterKey, generateA
 import { getAuthorizationHeaderValue } from "./authService.js";
 import { getCurrentDeviceId } from "./trustedDevices.js";
 import { prepareRotationTransfers } from "./deviceKeyExchange.js";
+import { getAppOrigin } from "./appUrl.js";
 
 const SYNC_SETTINGS_STORAGE_KEY = "neurodiary-sync-settings-v1";
 const SYNC_KEY_MATERIAL_STORAGE_KEY = "neurodiary-sync-key-material-v1";
@@ -47,8 +48,7 @@ function normalizeSyncMessage(value) {
 }
 
 export function deriveSyncEndpoint() {
-  const origin = globalThis.location?.origin ?? "";
-  return trimTrailingSlash(origin);
+  return trimTrailingSlash(getAppOrigin());
 }
 
 function buildHeaders(settings) {

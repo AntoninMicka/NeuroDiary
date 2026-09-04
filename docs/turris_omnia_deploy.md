@@ -74,6 +74,18 @@ routeru zbytečně nekompilovaly.
 LXC používá samostatný `backend/requirements-lxc.txt` bez PostgreSQL ovladače
 `psycopg-binary`, který pro 32bit ARM nemá distribuovaný balíček a při SQLite není potřeba.
 
+LXC deploy sestaví frontend s prefixem `/neurodiary/` a nainstaluje také integraci do Turris
+WebApps. Dlaždice, ikona a lighttpd reverse proxy používají stejný mechanismus jako oficiální
+integrace Syncthingu. Adresu kontejneru lze uvést v `omnia.env`:
+
+```ini
+LXC_IP=192.168.100.160
+```
+
+Bez `LXC_IP` ji skript zjistí přes `lxc-info`. Před reloadem ověří upstream `/readyz` a celou
+konfiguraci příkazem `lighttpd -tt`; při neplatné konfiguraci změny vrátí. Plný deploy i rychlý
+LXC update následně ověří `/neurodiary/` a ikonu přes HTTPS na routeru.
+
 V LAN se používá přímo IP adresa LXC a port `8080`. Pro přístup ze ZeroTier přidejte v síti
 ZeroTier managed route pro LAN subnet (například `192.168.100.0/24`) přes ZeroTier adresu Omnie
 a ve firewallu Turrisu povolte forwarding ze zóny ZeroTier pouze na IP LXC a TCP port 8080.

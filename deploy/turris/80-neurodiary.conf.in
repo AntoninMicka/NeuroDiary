@@ -1,0 +1,10 @@
+$HTTP["url"] =~ "^/neurodiary" {
+  fastcgi.server = ( "/" => ( turris_auth_scriptname => turris_auth ))
+  proxy.header = (
+    "map-host-request" => ( "-" => "@LXC_IP@" ),
+    "map-urlpath" => ( "/neurodiary" => "", "/neurodiary/" => "/" ),
+    "https-remap" => "enable"
+  )
+  proxy.server = ( "" => ( ( "host" => "@LXC_IP@", "port" => "8080") ) )
+  setenv.add-response-header = ("Cache-Control" => "must-revalidate, proxy-revalidate, max-age=0")
+}

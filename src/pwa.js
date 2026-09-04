@@ -1,4 +1,6 @@
-const SERVICE_WORKER_URL = "/sw.js";
+import { appUrl } from "./services/appUrl.js";
+
+const SERVICE_WORKER_URL = appUrl("/sw.js");
 const UPDATE_READY_EVENT = "pwa:update-ready";
 const OFFLINE_READY_EVENT = "pwa:offline-ready";
 

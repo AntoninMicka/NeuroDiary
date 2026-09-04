@@ -1,9 +1,10 @@
 import { getAuthorizationHeaderValue } from "./authService.js";
 import { getCurrentDeviceId } from "./trustedDevices.js";
+import { appUrl } from "./appUrl.js";
 
 async function request(path, options = {}) {
   const authorization = getAuthorizationHeaderValue();
-  const response = await fetch(path, {
+  const response = await fetch(appUrl(path), {
     ...options,
     headers: { "Content-Type": "application/json", Authorization: authorization, "X-Device-ID": getCurrentDeviceId() },
   });
