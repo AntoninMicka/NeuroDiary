@@ -19,3 +19,7 @@ export function getDefaultPanelForRoles(activeRoles = []) {
 export function canAccessClinicalAnalyses(activeRoles = []) {
   return new Set(activeRoles).has("doctor");
 }
+
+export function canPersistPatientData(assignedRoles = []) {
+  return new Set(assignedRoles).has("patient");
+}

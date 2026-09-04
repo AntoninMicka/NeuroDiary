@@ -119,7 +119,7 @@ import {
 } from "./services/diarySharing.js";
 import { createCloudBackup, createLocalUser, deleteCloudBackup, deleteLocalUser, fetchAdminStatus, fetchAdminUsers, updateAdminUserRoles } from "./services/adminService.js";
 import { fetchCurrentRoles, updateCurrentDeviceRoles, updateSelfAssignableRoles } from "./services/roleService.js";
-import { CAREGIVER_PANEL_ITEMS, canAccessClinicalAnalyses, isCaregiverOnlyRoleSet } from "./services/roleUi.js";
+import { CAREGIVER_PANEL_ITEMS, canAccessClinicalAnalyses, canPersistPatientData, isCaregiverOnlyRoleSet } from "./services/roleUi.js";
 import { generateRecoverySecret } from "./services/e2eCrypto.js";
 import { compareTreatmentPlans, TREATMENT_FIELD_LABELS } from "./services/treatmentProposal.js";
 import {
@@ -354,6 +354,7 @@ const pendingShareInvitationCount = computed(() =>
 );
 const isDoctorRoleActive = computed(() => accountRoles.activeRoles.includes("doctor"));
 const canUseClinicalAnalyses = computed(() => canAccessClinicalAnalyses(accountRoles.activeRoles));
+const canPersistDiaryLocally = computed(() => canPersistPatientData(accountRoles.assignedRoles));
 const filteredTreatmentProposals = computed(() => treatmentProposals.value.filter((proposal) =>
   treatmentProposalFilter.value === "all" || proposal.status === treatmentProposalFilter.value,
 ));
@@ -628,7 +629,7 @@ watch(
       return;
     }
     diaryRepository.value.saveState(state);
-    scheduleAutomaticLocalBackup();
+    if (canPersistDiaryLocally.value) scheduleAutomaticLocalBackup();
   },
   { deep: true },
 );
@@ -643,6 +644,10 @@ watch(canUseClinicalAnalyses, (allowed) => {
     selectPanel(isCaregiverOnlyMode.value ? "sekce-kartoteka" : "sekce-home");
   }
   if (!allowed && selectedSharedSection.value === "summary") selectedSharedSection.value = "timeline";
+});
+
+watch(canPersistDiaryLocally, (allowed, wasAllowed) => {
+  if (isReady.value && allowed !== wasAllowed) globalThis.location?.reload?.();
 });
 
 watch(
@@ -690,8 +695,13 @@ onMounted(async () => {
   }
 
   setBootstrapStatus("Inicializuji místní úložiště.");
+  if (authSession.value?.user && hasSyncIdentity.value) {
+    await ensureCurrentDeviceRegistered();
+    await refreshAccountRoles();
+  }
   const repository = await createDiaryRepository({
     namespace: authSession.value?.user?.userId || "guest",
+    persistent: canPersistDiaryLocally.value,
     onProgress(message) {
       setBootstrapStatus(message);
     },
@@ -713,8 +723,10 @@ onMounted(async () => {
   setBootstrapStatus("Inicializace byla dokončena.");
   isReady.value = true;
   void refreshAdminConsole({ silent: true });
-  await refreshLocalBackups();
-  await createAutomaticLocalBackupIfDue();
+  if (canPersistDiaryLocally.value) {
+    await refreshLocalBackups();
+    await createAutomaticLocalBackupIfDue();
+  }
   await checkDueMedicationReminders();
   if (medicationReminderSettings.enabled) {
     void refreshWebPushRegistration();
@@ -2383,7 +2395,7 @@ async function signOut() {
   if (activePanelId.value === "sekce-admin") activePanelId.value = "sekce-home";
   webPushStatus.value = "needs-auth";
   applyAuthenticatedAccount(null);
-  storageMessage.value = "Prihlaseni bylo odpojeno. Lokalni data zustala zachovana.";
+  storageMessage.value = "Přihlášení bylo odpojeno.";
 }
 
 async function refreshAdminConsole({ silent = false } = {}) {
@@ -3251,6 +3263,9 @@ function syncFloatingMenuHeight() {
                 <button v-if="adminStatus" class="utility-menu-item" type="button" role="menuitem" @click="handleUtilityAction(() => selectPanel('sekce-admin'))">
                   Administrace cloudu
                 </button>
+                <button v-if="authSession?.user" class="utility-menu-item utility-menu-item-danger" type="button" role="menuitem" :disabled="isAuthBusy" @click="handleUtilityAction(signOut)">
+                  Odhlásit
+                </button>
                 <button class="utility-menu-item" type="button" role="menuitem" @click="openBootstrapLogPanel">
                   Diagnostika startu
                 </button>
@@ -3847,7 +3862,7 @@ function syncFloatingMenuHeight() {
                     :disabled="isAuthBusy"
                     @click="signOut"
                   >
-                    Odhlasit
+                    Odhlásit
                   </button>
                 </div>
               </div>

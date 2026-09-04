@@ -85,12 +85,36 @@ cp scripts/omnia.env.example scripts/omnia.env
 # upravte OMNIA_HOST, LAN_IP a ZEROTIER_IP
 ssh root@192.168.1.1 'mkdir -p /srv/neurodiary/config'
 scp scripts/local_user.py root@192.168.1.1:/tmp/local_user.py
-ssh -t root@192.168.1.1 'python3 /tmp/local_user.py /srv/neurodiary/config/users.json antonin --name "Antonín"'
+ssh -t root@192.168.1.1 'python3 /tmp/local_user.py /srv/neurodiary/config/users.json add antonin --name "Antonín"'
 bash scripts/omnia_deploy.sh
 ```
 
 Další deploy se provede stejným posledním příkazem. Databáze, účty a podpisový klíč session se
-nepřepisují. Další účet přidáte opět přes `local_user.py`; změna se projeví bez restartu.
+nepřepisují. Změny účtů se projeví bez restartu.
+
+## Správa lokálních uživatelů
+
+Z počítače lze správu provést přes SSH obálku, která používá `OMNIA_HOST` a `REMOTE_DIR`
+ze souboru `scripts/omnia.env`. Hesla se zadávají skrytě až ve vzdáleném terminálu a nejsou
+součástí argumentů ani historie shellu:
+
+```bash
+bash scripts/omnia_users.sh list
+bash scripts/omnia_users.sh add jana --name "Jana" --roles patient
+bash scripts/omnia_users.sh passwd jana
+bash scripts/omnia_users.sh roles jana patient,family
+bash scripts/omnia_users.sh delete jana
+```
+
+Přímo v shellu Turrisu lze použít stejný Python skript:
+
+```bash
+python3 /tmp/local_user.py /srv/neurodiary/config/users.json list
+python3 /tmp/local_user.py /srv/neurodiary/config/users.json passwd jana
+```
+
+Skript zapisuje atomicky s oprávněním `0600`, kontroluje povolené role a nedovolí odebrat
+posledního administrátora. Povolené role jsou `patient`, `family`, `doctor` a `admin`.
 
 Port se publikuje jen na explicitní LAN a ZeroTier IP, nikoli na `0.0.0.0`. Přesto zkontrolujte
 pravidla firewallu Turris a zakažte forward z WAN na `APP_PORT`. Pro PWA, WebCrypto a notifikace

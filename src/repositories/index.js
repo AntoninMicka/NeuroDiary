@@ -1,5 +1,6 @@
 import { LocalStorageDiaryRepository } from "./LocalStorageDiaryRepository.js";
 import { SqliteDiaryRepository } from "./SqliteDiaryRepository.js";
+import { MemoryDiaryRepository } from "./MemoryDiaryRepository.js";
 
 const SQLITE_INIT_TIMEOUT_MS = 4000;
 
@@ -47,7 +48,10 @@ function withTimeout(promise, timeoutMs, message) {
 }
 
 export async function createDiaryRepository(options = {}) {
-  const { onProgress, namespace = "guest" } = options;
+  const { onProgress, namespace = "guest", persistent = true } = options;
+  if (!persistent) {
+    return MemoryDiaryRepository.create(onProgress);
+  }
   const sqliteDecision = shouldSkipSqlite();
 
   if (sqliteDecision.skip) {

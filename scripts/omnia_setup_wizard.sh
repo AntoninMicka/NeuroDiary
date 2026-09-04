@@ -145,7 +145,7 @@ if ssh_omnia "test -f '$REMOTE_DIR/config/users.json'"; then
 fi
 if [[ ! -f "$LOCAL_USERS" ]] || confirm "Založit nebo změnit lokální účet?" a; then
   while true; do prompt LOCAL_USERNAME "Uživatelské jméno" admin; [[ "$LOCAL_USERNAME" =~ ^[A-Za-z0-9._-]{1,64}$ ]] && break; echo "Neplatné jméno."; done
-  until python3 "$SCRIPT_DIR/local_user.py" "$LOCAL_USERS" "$LOCAL_USERNAME"; do echo "Vytvoření účtu selhalo."; confirm "Zkusit znovu?" a || exit 0; done
+  until python3 "$SCRIPT_DIR/local_user.py" "$LOCAL_USERS" upsert "$LOCAL_USERNAME"; do echo "Vytvoření účtu selhalo."; confirm "Zkusit znovu?" a || exit 0; done
   until scp_omnia "$LOCAL_USERS" "$OMNIA_HOST:$REMOTE_DIR/config/users.json" && ssh_omnia "chmod 600 '$REMOTE_DIR/config/users.json'"; do echo "Nahrání účtu selhalo."; confirm "Zkusit znovu?" a || exit 0; done
 fi
 
