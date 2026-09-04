@@ -8,6 +8,7 @@ import DailyTimeline from "./components/DailyTimeline.vue";
 import QuickCaptureTimeline from "./components/QuickCaptureTimeline.vue";
 import LongTermTrends from "./components/LongTermTrends.vue";
 import ManualSection from "./components/ManualSection.vue";
+import DateNavigator from "./components/DateNavigator.vue";
 import {
   HOUR_STATES,
   appendHourStateRecord,
@@ -440,15 +441,6 @@ const primaryPanelItems = computed(() => filterRestrictedPanels(
 const visiblePanelItems = computed(() => filterRestrictedPanels(
   isCaregiverOnlyMode.value ? caregiverPanelItems.value : PANEL_ITEMS,
 ));
-const DATE_NAV_PANEL_IDS = new Set([
-  "sekce-udaje",
-  "sekce-matice",
-  "sekce-osa",
-  "sekce-prehled",
-  "sekce-leky",
-  "sekce-souhrn",
-  "sekce-trendy",
-]);
 const installHelpText = computed(() => {
   if (isInstalledApp.value) {
     return "Aplikace je nainstalovaná a připravená k použití offline.";
@@ -483,8 +475,6 @@ const currentTimeLabel = computed(() =>
 const currentHourRecordCount = computed(() =>
   getHourRecordCount(state.entries[getTodayKey()], currentHourLabel.value),
 );
-const canGoToNextDate = computed(() => state.selectedDate < getTodayKey());
-const showDateSwitcher = computed(() => DATE_NAV_PANEL_IDS.has(activePanelId.value));
 const hasRecoverySecretStored = computed(() => {
   syncKeyMaterialRefreshToken.value;
   return hasStoredRecoverySecret();
@@ -1631,18 +1621,6 @@ function handlePanelTouchEnd(event) {
   }
 
   selectAdjacentPanel(-1);
-}
-
-function goToPreviousDate() {
-  updateSelectedDate(shiftDateKey(state.selectedDate, -1));
-}
-
-function goToNextDate() {
-  if (!canGoToNextDate.value) {
-    return;
-  }
-
-  updateSelectedDate(shiftDateKey(state.selectedDate, 1));
 }
 
 function addMedication(payload, dateKey = state.selectedDate) {
@@ -3303,27 +3281,6 @@ function syncFloatingMenuHeight() {
             </div>
           </div>
 
-          <div v-if="showDateSwitcher" class="date-switcher">
-            <button class="ghost-button" type="button" @click="goToPreviousDate">Předchozí den</button>
-            <label class="date-switcher-picker">
-              <span>Datum</span>
-              <input
-                :value="state.selectedDate"
-                type="date"
-                :max="getTodayKey()"
-                @input="updateSelectedDate($event.target.value)"
-              />
-            </label>
-            <button class="ghost-button" type="button" :disabled="!canGoToNextDate" @click="goToNextDate">
-              Další den
-            </button>
-            <button class="ghost-button" type="button" :disabled="state.selectedDate === getTodayKey()" @click="updateSelectedDate(getTodayKey())">
-              Dnes
-            </button>
-            <button class="ghost-button utility-menu-item-danger" type="button" @click="resetSelectedDateEverywhere">
-              Vynucene smazat tento den
-            </button>
-          </div>
         </div>
 
         <div v-if="!isOnline" class="status-banner status-banner-offline" role="status">
@@ -3366,6 +3323,8 @@ function syncFloatingMenuHeight() {
               <h2>Report pro lékaře</h2>
             </div>
           </div>
+
+          <DateNavigator :selected-date="state.selectedDate" @select-date="updateSelectedDate" />
 
           <div class="report-frame-grid">
             <fieldset class="contact-keyring">
@@ -3715,15 +3674,6 @@ function syncFloatingMenuHeight() {
             </div>
           </div>
           <form class="day-form">
-            <label>
-              <span>Datum</span>
-              <input
-                :value="state.selectedDate"
-                type="date"
-                :max="getTodayKey()"
-                @input="updateSelectedDate($event.target.value)"
-              />
-            </label>
             <label>
               <span>Jmeno pacienta</span>
               <input
@@ -4268,7 +4218,10 @@ function syncFloatingMenuHeight() {
           v-else-if="activePanelId === 'sekce-prehled'"
           class="layout-overview"
           :model-value="selectedEntry"
+          :selected-date="state.selectedDate"
           @patch-entry="updateEntry"
+          @select-date="updateSelectedDate"
+          @delete-date="resetSelectedDateEverywhere"
         />
 
         <MedicationPlan
@@ -4285,6 +4238,7 @@ function syncFloatingMenuHeight() {
           :web-push-available="webPushConfig.enabled && canUseWebPush()"
           :web-push-status="webPushStatus"
           :web-push-message="webPushMessage"
+          @select-date="updateSelectedDate"
           @add-plan-item="addTreatmentPlanItem"
           @end-plan-item="endTreatmentPlanItem"
           @remove-recorded-medication="removeMedication"
@@ -4305,6 +4259,7 @@ function syncFloatingMenuHeight() {
           :entry="selectedEntry"
           :entries="state.entries"
           :selected-date="state.selectedDate"
+          @select-date="updateSelectedDate"
           @open-hour-matrix="activePanelId = 'sekce-matice'"
           @open-daily-overview="activePanelId = 'sekce-prehled'"
         />
@@ -4314,6 +4269,7 @@ function syncFloatingMenuHeight() {
           :entries="state.entries"
           :treatment-plan="sortedTreatmentPlan"
           :selected-date="state.selectedDate"
+          @select-date="updateSelectedDate"
         />
         <ManualSection v-else-if="activePanelId === 'sekce-manualy'" class="layout-manuals" />
         <section v-else class="panel panel-wide home-panel">

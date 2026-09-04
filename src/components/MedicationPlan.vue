@@ -3,6 +3,7 @@ import { computed, reactive, ref, watch } from "vue";
 import { getTodayKey, isTreatmentPlanItemActiveOnDate } from "../domain/diary.js";
 import { analyzeMedicationAdherence } from "../services/adherence.js";
 import { buildMedicationDuplicateKey, validateMedicationInput } from "../services/validation.js";
+import DateNavigator from "./DateNavigator.vue";
 
 const props = defineProps({
   treatmentPlan: {
@@ -57,6 +58,7 @@ const emit = defineEmits([
   "remove-recorded-medication",
   "update-reminder-enabled",
   "update-reminder-lead-minutes",
+  "select-date",
 ]);
 
 const form = reactive({
@@ -156,6 +158,8 @@ function getRecordedMedicationDetail(medication) {
         <h2>Plán medikace</h2>
       </div>
     </div>
+
+    <DateNavigator :selected-date="selectedDate" @select-date="emit('select-date', $event)" />
 
     <form class="stack-form" @submit.prevent="submitForm">
       <label>

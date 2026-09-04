@@ -1,14 +1,19 @@
 <script setup>
 import { UNDEFINED_ENTRY_VALUE } from "../domain/diary.js";
+import DateNavigator from "./DateNavigator.vue";
 
 const props = defineProps({
   modelValue: {
     type: Object,
     required: true,
   },
+  selectedDate: {
+    type: String,
+    required: true,
+  },
 });
 
-const emit = defineEmits(["patch-entry"]);
+const emit = defineEmits(["patch-entry", "select-date", "delete-date"]);
 
 function patchEntry(field, value) {
   emit("patch-entry", {
@@ -25,6 +30,13 @@ function patchEntry(field, value) {
         <h2>Přehled dne</h2>
       </div>
     </div>
+
+    <DateNavigator
+      :selected-date="selectedDate"
+      allow-delete
+      @select-date="emit('select-date', $event)"
+      @delete-date="emit('delete-date')"
+    />
 
     <form class="day-form">
       <label>

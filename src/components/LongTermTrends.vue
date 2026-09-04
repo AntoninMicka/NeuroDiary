@@ -2,6 +2,7 @@
 import { computed, ref } from "vue";
 import { analyzeLongTermTrends } from "../services/statistics.js";
 import WearingOffAnalysis from "./WearingOffAnalysis.vue";
+import DateNavigator from "./DateNavigator.vue";
 
 const props = defineProps({
   entries: {
@@ -17,6 +18,8 @@ const props = defineProps({
     required: true,
   },
 });
+
+const emit = defineEmits(["select-date"]);
 
 const periodDays = ref(90);
 const analysis = computed(() =>
@@ -69,6 +72,8 @@ function formatShortDate(dateKey) {
         </select>
       </label>
     </div>
+
+    <DateNavigator :selected-date="selectedDate" @select-date="emit('select-date', $event)" />
 
     <div class="trend-summary-grid">
       <article>

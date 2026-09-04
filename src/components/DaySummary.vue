@@ -3,6 +3,7 @@ import { computed } from "vue";
 import { HOUR_STATES, formatOverallStatus, formatSleepQuality, getStateDefinition } from "../domain/diary.js";
 import { analyzeEntry, analyzePeriod, buildMetricSeries, buildStateDistribution } from "../services/statistics.js";
 import { evaluateDayQuality } from "../services/dataQuality.js";
+import DateNavigator from "./DateNavigator.vue";
 
 const props = defineProps({
   entry: {
@@ -18,7 +19,7 @@ const props = defineProps({
     required: true,
   },
 });
-const emit = defineEmits(["open-hour-matrix", "open-daily-overview"]);
+const emit = defineEmits(["open-hour-matrix", "open-daily-overview", "select-date"]);
 
 const entryAnalysis = computed(() => analyzeEntry(props.entry));
 const dayQuality = computed(() => evaluateDayQuality(props.entry, props.selectedDate));
@@ -174,6 +175,8 @@ const histogramRows = computed(() => [
         <h2>Rychlý přehled</h2>
       </div>
     </div>
+
+    <DateNavigator :selected-date="selectedDate" @select-date="emit('select-date', $event)" />
 
     <section :class="['data-quality-card', `quality-${dayQuality.key}`]" aria-live="polite">
       <div>
