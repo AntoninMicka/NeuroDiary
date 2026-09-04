@@ -11,9 +11,7 @@ source "$ENV_FILE"
 command -v npm >/dev/null || { echo "Lokálně chybí npm."; exit 1; }
 : "${LXC_ZEROTIER_IP:?V omnia.env chybí LXC_ZEROTIER_IP}"
 TLS_DIR="$REPO_ROOT/secrets/tls"
-if [[ ! -s "$TLS_DIR/neurodiary-ca.crt" || ! -s "$TLS_DIR/neurodiary-server.crt" || ! -s "$TLS_DIR/neurodiary-server.key" ]]; then
-  bash "$SCRIPT_DIR/generate_local_ca.sh" "$ENV_FILE"
-fi
+bash "$SCRIPT_DIR/generate_local_ca.sh" "$ENV_FILE"
 
 OWNS_SSH_SESSION=false
 if [[ -z "${SSH_CONTROL_PATH:-}" || ! -S "$SSH_CONTROL_PATH" ]]; then
@@ -50,7 +48,7 @@ rsync -e "$RSYNC_SSH" -az "$TLS_DIR/neurodiary-ca.crt" "$TLS_DIR/neurodiary-serv
   "$OMNIA_HOST:$REMOTE_DIR/tls-stage/"
 "${REMOTE[@]}" env REMOTE_DIR="$REMOTE_DIR" LXC_NAME="$LXC_NAME" \
   bash "$REMOTE_DIR/source/scripts/omnia_lxc_update_remote.sh"
-"${REMOTE[@]}" env REMOTE_DIR="$REMOTE_DIR" LXC_NAME="$LXC_NAME" LXC_ZEROTIER_IP="$LXC_ZEROTIER_IP" \
+"${REMOTE[@]}" env REMOTE_DIR="$REMOTE_DIR" LXC_NAME="$LXC_NAME" LXC_IP="$LXC_IP" LXC_ZEROTIER_IP="$LXC_ZEROTIER_IP" ZEROTIER_IP="$ZEROTIER_IP" \
   bash "$REMOTE_DIR/source/scripts/omnia_install_lxc_https.sh"
 "${REMOTE[@]}" env REMOTE_DIR="$REMOTE_DIR" LXC_NAME="$LXC_NAME" LXC_IP="${LXC_IP:-}" \
   sh "$REMOTE_DIR/source/scripts/omnia_install_webapp.sh"

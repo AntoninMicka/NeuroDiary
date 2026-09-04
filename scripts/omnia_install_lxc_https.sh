@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-: "${REMOTE_DIR:?}" "${LXC_NAME:?}" "${LXC_ZEROTIER_IP:?}"
+: "${REMOTE_DIR:?}" "${LXC_NAME:?}" "${LXC_IP:?}" "${LXC_ZEROTIER_IP:?}" "${ZEROTIER_IP:?}"
 
 TLS_STAGE="$REMOTE_DIR/tls-stage"
 cleanup() { rm -rf "$TLS_STAGE"; }
@@ -13,10 +13,10 @@ done
 
 lxc-attach -n "$LXC_NAME" -- sh -c '
   set -eu
-  if ! command -v nginx >/dev/null; then
+  if ! command -v nginx >/dev/null || ! command -v openssl >/dev/null; then
     export DEBIAN_FRONTEND=noninteractive
     apt-get update
-    apt-get install -y nginx-light
+    apt-get install -y nginx-light openssl
   fi
   mkdir -p /etc/neurodiary/tls /etc/nginx/conf.d
 '
@@ -35,6 +35,10 @@ lxc-attach -n "$LXC_NAME" -- sh -c '
   chmod 755 /etc/neurodiary/tls
   chmod 644 /etc/neurodiary/tls/ca.crt /etc/neurodiary/tls/server.crt
   chmod 600 /etc/neurodiary/tls/server.key
+  openssl x509 -in /etc/neurodiary/tls/ca.crt -noout >/dev/null
+  openssl x509 -in /etc/neurodiary/tls/server.crt -noout >/dev/null
+  openssl verify -CAfile /etc/neurodiary/tls/ca.crt /etc/neurodiary/tls/server.crt
+  test "$(openssl x509 -in /etc/neurodiary/tls/server.crt -pubkey -noout | openssl sha256)" = "$(openssl pkey -in /etc/neurodiary/tls/server.key -pubout | openssl sha256)"
   rm -f /etc/nginx/sites-enabled/default
   nginx -t
   systemctl daemon-reload
@@ -49,6 +53,13 @@ lxc-attach -n "$LXC_NAME" -- sh -c '
 '
 lxc-attach -n "$LXC_NAME" -- curl -fsS --max-time 10 \
   --cacert /etc/neurodiary/tls/ca.crt \
-  --resolve "$LXC_ZEROTIER_IP:443:127.0.0.1" \
-  "https://$LXC_ZEROTIER_IP/neurodiary/readyz" >/dev/null
-echo "HTTPS NeuroDiary je dostupné na https://$LXC_ZEROTIER_IP/neurodiary/"
+  --resolve "$ZEROTIER_IP:443:127.0.0.1" \
+  "https://$ZEROTIER_IP/neurodiary/readyz" >/dev/null
+lxc-attach -n "$LXC_NAME" -- curl -fsS --max-time 10 \
+  --cacert /etc/neurodiary/tls/ca.crt \
+  --resolve "$ZEROTIER_IP:443:127.0.0.1" \
+  "https://$ZEROTIER_IP/neurodiary/ca.crt" >/dev/null
+echo "HTTPS NeuroDiary je dostupné na https://$ZEROTIER_IP/neurodiary/"
+echo "Veřejný certifikát CA lze stáhnout z https://$ZEROTIER_IP/neurodiary/ca.crt"
+echo "Pro první instalaci bez důvěryhodného TLS také z http://$LXC_IP:8080/neurodiary/ca.crt"
+lxc-attach -n "$LXC_NAME" -- openssl x509 -in /etc/neurodiary/tls/ca.crt -noout -fingerprint -sha256

@@ -89,21 +89,37 @@ LXC update následně ověří `/neurodiary/` a ikonu přes HTTPS na routeru.
 
 ### Vlastní HTTPS pro ZeroTier
 
-LXC deploy při prvním spuštění vytvoří lokální certifikační autoritu a serverový certifikát
-pro LAN i ZeroTier IP. CA vzniká v ignorovaném adresáři `secrets/tls`; její šifrovaný privátní
-klíč se na router ani do LXC nepřenáší. Do LXC se přenese pouze serverový klíč, serverový
-certifikát a veřejný certifikát CA.
+Certifikát existující offline autority vložte do `secrets/tls/neurodiary-ca.crt` a její
+šifrovaný privátní klíč do `secrets/tls/neurodiary-ca.key`. Adresář `secrets` je ignorovaný
+Gitem. Deploy před přenosem ověří řetězec, shodu serverového klíče, dobu platnosti a všechny
+požadované IP/DNS SAN. Pokud serverový certifikát chybí, brzy vyprší nebo neodpovídá aktuálním
+adresám, vystaví z této autority nový certifikát; CA samotnou nepřepisuje. CA klíč se na router
+ani do LXC nepřenáší.
+
+Serverový certifikát vždy zahrnuje `LXC_IP`, `LXC_ZEROTIER_IP`, `LAN_IP` a `ZEROTIER_IP`.
+Volitelné názvy oddělené čárkou lze přidat v `omnia.env`, například:
+
+```text
+TLS_DNS_NAMES=neurodiary.home.arpa
+```
 
 Nginx v LXC ukončuje TLS na portu `443`, zatímco routerová WebApps proxy používá HTTP port
 `8080`. Uvicorn naslouchá jen na `127.0.0.1:8000`. Přímá ZeroTier URL je:
 
 ```text
-https://10.43.192.160/neurodiary/
+https://10.43.192.54/neurodiary/
 ```
 
 Do každého klientského zařízení je potřeba jednorázově nainstalovat jako důvěryhodnou kořenovou
-autoritu soubor `secrets/tls/neurodiary-ca.crt`. Soubor `neurodiary-ca.key` bezpečně zazálohujte;
-nikdy jej nekopírujte na klienty ani na router.
+autoritu soubor `secrets/tls/neurodiary-ca.crt`. Deploy vypíše jeho SHA-256 otisk a zpřístupní
+stejný veřejný certifikát na `/neurodiary/ca.crt`. Pro první stažení v LAN lze použít i
+`http://LXC_IP:8080/neurodiary/ca.crt`; před instalací porovnejte vypsaný otisk. Soubor
+`neurodiary-ca.key` bezpečně zazálohujte a nikdy jej nekopírujte na klienty, router ani do LXC.
+
+Instalaci důvěry nelze bezpečně provést automaticky z webové stránky: certifikát musí uživatel
+potvrdit v úložišti důvěry operačního systému/prohlížeče. V iOS je po instalaci profilu nutné
+ještě zapnout plnou důvěru kořenové autoritě; Firefox lze případně nastavit k použití systémových
+autorit.
 
 V LAN se používá přímo IP adresa LXC a port `8080`. Pro přístup ze ZeroTier přidejte v síti
 ZeroTier managed route pro LAN subnet (například `192.168.100.0/24`) přes ZeroTier adresu Omnie
