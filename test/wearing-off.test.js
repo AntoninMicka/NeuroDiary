@@ -108,6 +108,38 @@ test("doctor report keeps clinical interpretations disabled", () => {
   assert.doesNotMatch(html, /class="chart-plan-change"/);
 });
 
+test("doctor report can disable every page after the first one", () => {
+  const html = buildDoctorReportHtml({
+    entries: { "2026-03-01": createReliableEntry(1) },
+    treatmentPlan,
+    selectedDate: "2026-03-01",
+    includeDayStateSummary: false,
+    includeDailyTrend: false,
+    includeHourlySummary: false,
+    includeWeeklyCharts: false,
+  });
+
+  assert.doesNotMatch(html, /class="sheet analysis-page"/);
+  assert.doesNotMatch(html, /class="weekly-hour-chart"/);
+});
+
+test("doctor report controls descriptive sections independently", () => {
+  const html = buildDoctorReportHtml({
+    entries: { "2026-03-01": createReliableEntry(1) },
+    treatmentPlan,
+    selectedDate: "2026-03-01",
+    includeDayStateSummary: false,
+    includeDailyTrend: true,
+    includeHourlySummary: false,
+    includeWeeklyCharts: true,
+  });
+
+  assert.doesNotMatch(html, /class="analysis-cards"/);
+  assert.match(html, /<h3>Denní trend<\/h3>/);
+  assert.doesNotMatch(html, /<h3>Hodinový souhrn<\/h3>/);
+  assert.equal((html.match(/class="weekly-hour-chart"/g) ?? []).length, TRACKING_HOURS.length);
+});
+
 test("doctor report excludes today unless including it is enabled", () => {
   const entries = {
     "2026-03-01": { ...createReliableEntry(1), notes: "TODAY_ONLY_NOTE" },

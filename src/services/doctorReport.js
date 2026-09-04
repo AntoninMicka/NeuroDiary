@@ -546,11 +546,17 @@ function buildWeeklyChartsPages(entries, selectedDate, weekIntervals) {
   return pages.join("");
 }
 
-function buildAnalysisPage(entries, selectedDate) {
+function buildAnalysisPages(entries, selectedDate, {
+  includeDayStateSummary,
+  includeDailyTrend,
+  includeHourlySummary,
+  includeWeeklyCharts,
+}) {
   const summary = summarizeWindow(entries, selectedDate, ANALYSIS_DAYS);
   const weekIntervals = buildWeekIntervals(selectedDate);
+  const includeOverviewPage = includeDayStateSummary || includeDailyTrend || includeHourlySummary;
 
-  return `
+  const overviewPage = includeOverviewPage ? `
     <section class="sheet analysis-page">
       <header class="analysis-header">
         <div>
@@ -560,7 +566,7 @@ function buildAnalysisPage(entries, selectedDate) {
         </div>
       </header>
 
-      <section class="analysis-cards">
+      ${includeDayStateSummary ? `<section class="analysis-cards">
         <article class="analysis-card">
           <strong>Dny se záznamem</strong>
           <span>${escapeHtml(String(summary.daysWithData))} / ${ANALYSIS_DAYS}</span>
@@ -577,10 +583,10 @@ function buildAnalysisPage(entries, selectedDate) {
           <strong>Celkem hodin OFF</strong>
           <span>${escapeHtml(String(summary.offHours))}</span>
         </article>
-      </section>
+      </section>` : ""}
 
       <section class="analysis-grid">
-        <article class="analysis-panel">
+        ${includeDailyTrend ? `<article class="analysis-panel">
           <h3>Denní trend</h3>
           <table class="trend-table">
             <thead>
@@ -593,9 +599,9 @@ function buildAnalysisPage(entries, selectedDate) {
             </thead>
             <tbody>${buildTrendRows(entries, selectedDate)}</tbody>
           </table>
-        </article>
+        </article>` : ""}
 
-        <article class="analysis-panel">
+        ${includeHourlySummary ? `<article class="analysis-panel">
           <h3>Hodinový souhrn</h3>
           <table class="hour-summary-table">
             <thead>
@@ -615,11 +621,12 @@ function buildAnalysisPage(entries, selectedDate) {
             </thead>
             <tbody>${buildHourSummaryRows(entries, selectedDate, weekIntervals)}</tbody>
           </table>
-        </article>
+        </article>` : ""}
       </section>
     </section>
-    ${buildWeeklyChartsPages(entries, selectedDate, weekIntervals)}
-  `;
+  ` : "";
+
+  return `${overviewPage}${includeWeeklyCharts ? buildWeeklyChartsPages(entries, selectedDate, weekIntervals) : ""}`;
 }
 
 export function buildDoctorReportHtml({
@@ -630,6 +637,10 @@ export function buildDoctorReportHtml({
   birthYear = "",
   includeToday = true,
   skipEmptyDays = true,
+  includeDayStateSummary = true,
+  includeDailyTrend = true,
+  includeHourlySummary = true,
+  includeWeeklyCharts = true,
   todayDate = getTodayKey(),
 }) {
   const reportEndDate = !includeToday && selectedDate === todayDate
@@ -1270,7 +1281,12 @@ export function buildDoctorReportHtml({
           </section>
         </section>
 
-        ${buildAnalysisPage(entries, reportEndDate)}
+        ${buildAnalysisPages(entries, reportEndDate, {
+          includeDayStateSummary,
+          includeDailyTrend,
+          includeHourlySummary,
+          includeWeeklyCharts,
+        })}
 
       </main>
     </body>
@@ -1285,6 +1301,10 @@ export function openDoctorReportPrint({
   birthYear,
   includeToday = true,
   skipEmptyDays = true,
+  includeDayStateSummary = true,
+  includeDailyTrend = true,
+  includeHourlySummary = true,
+  includeWeeklyCharts = true,
 }) {
   const reportWindow = window.open("", "_blank");
   if (!reportWindow) {
@@ -1299,6 +1319,10 @@ export function openDoctorReportPrint({
     birthYear,
     includeToday,
     skipEmptyDays,
+    includeDayStateSummary,
+    includeDailyTrend,
+    includeHourlySummary,
+    includeWeeklyCharts,
   });
   reportWindow.document.open();
   reportWindow.document.write(html);

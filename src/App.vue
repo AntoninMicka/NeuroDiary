@@ -238,6 +238,10 @@ const selectedTreatmentPlanId = ref("");
 const reportOptions = reactive({
   includeToday: false,
   skipEmptyDays: true,
+  includeDayStateSummary: true,
+  includeDailyTrend: true,
+  includeHourlySummary: true,
+  includeWeeklyCharts: true,
 });
 const doctorContact = reactive({ name: "", email: "" });
 const contacts = ref(loadContacts());
@@ -1474,6 +1478,10 @@ function printSharedDiaryReport() {
       birthYear: view.state.birthYear ?? "",
       includeToday: reportOptions.includeToday,
       skipEmptyDays: reportOptions.skipEmptyDays,
+      includeDayStateSummary: reportOptions.includeDayStateSummary,
+      includeDailyTrend: reportOptions.includeDailyTrend,
+      includeHourlySummary: reportOptions.includeHourlySummary,
+      includeWeeklyCharts: reportOptions.includeWeeklyCharts,
     });
     sharingMessage.value = "Sdílený report byl otevřen k tisku.";
   } catch (error) {
@@ -1954,6 +1962,10 @@ function printDoctorReport() {
       birthYear: state.birthYear,
       includeToday: reportOptions.includeToday,
       skipEmptyDays: reportOptions.skipEmptyDays,
+      includeDayStateSummary: reportOptions.includeDayStateSummary,
+      includeDailyTrend: reportOptions.includeDailyTrend,
+      includeHourlySummary: reportOptions.includeHourlySummary,
+      includeWeeklyCharts: reportOptions.includeWeeklyCharts,
     });
     storageMessage.value = "Report pro lékaře byl otevřen k tisku.";
   } catch (error) {
@@ -1973,6 +1985,10 @@ async function saveDoctorReportPdf() {
       birthYear: state.birthYear,
       includeToday: reportOptions.includeToday,
       skipEmptyDays: reportOptions.skipEmptyDays,
+      includeDayStateSummary: reportOptions.includeDayStateSummary,
+      includeDailyTrend: reportOptions.includeDailyTrend,
+      includeHourlySummary: reportOptions.includeHourlySummary,
+      includeWeeklyCharts: reportOptions.includeWeeklyCharts,
     });
     storageMessage.value = "PDF report byl ulozen.";
   } catch (error) {
@@ -1990,6 +2006,10 @@ function buildCurrentReportOptions() {
     birthYear: state.birthYear,
     includeToday: reportOptions.includeToday,
     skipEmptyDays: reportOptions.skipEmptyDays,
+    includeDayStateSummary: reportOptions.includeDayStateSummary,
+    includeDailyTrend: reportOptions.includeDailyTrend,
+    includeHourlySummary: reportOptions.includeHourlySummary,
+    includeWeeklyCharts: reportOptions.includeWeeklyCharts,
   };
 }
 
@@ -3337,6 +3357,11 @@ function syncFloatingMenuHeight() {
               <legend>Obsah reportu</legend>
               <label><input v-model="reportOptions.includeToday" type="checkbox" /> Zahrnout dnešní den</label>
               <label><input v-model="reportOptions.skipEmptyDays" type="checkbox" /> Přeskočit prázdné dny na první straně</label>
+              <span class="panel-tip">Obsah od druhé stránky</span>
+              <label><input v-model="reportOptions.includeDayStateSummary" type="checkbox" /> Souhrn dnů a stavů</label>
+              <label><input v-model="reportOptions.includeDailyTrend" type="checkbox" /> Denní tabulka</label>
+              <label><input v-model="reportOptions.includeHourlySummary" type="checkbox" /> Hodinový souhrn</label>
+              <label><input v-model="reportOptions.includeWeeklyCharts" type="checkbox" /> Týdenní grafy podle hodin</label>
               <div class="clinical-analysis-warning" role="alert">
                 <strong>Report obsahuje popisné souhrny</strong>
                 <span>Součástí jsou souhrny dnů a stavů a týdenní grafy. Wearing-off a klinické interpretace zůstávají vypnuté.</span>
@@ -3614,6 +3639,11 @@ function syncFloatingMenuHeight() {
                   <legend>Obsah reportu</legend>
                   <label><input v-model="reportOptions.includeToday" type="checkbox" /> Zahrnout dnešní den</label>
                   <label><input v-model="reportOptions.skipEmptyDays" type="checkbox" /> Přeskočit prázdné dny na první straně</label>
+                  <span class="panel-tip">Obsah od druhé stránky</span>
+                  <label><input v-model="reportOptions.includeDayStateSummary" type="checkbox" /> Souhrn dnů a stavů</label>
+                  <label><input v-model="reportOptions.includeDailyTrend" type="checkbox" /> Denní tabulka</label>
+                  <label><input v-model="reportOptions.includeHourlySummary" type="checkbox" /> Hodinový souhrn</label>
+                  <label><input v-model="reportOptions.includeWeeklyCharts" type="checkbox" /> Týdenní grafy podle hodin</label>
                   <div class="clinical-analysis-warning" role="alert">
                     <strong>Report obsahuje popisné souhrny</strong>
                     <span>Součástí jsou souhrny dnů a stavů a týdenní grafy. Wearing-off a klinické interpretace zůstávají vypnuté.</span>
