@@ -81,7 +81,7 @@ test("ignores incomplete days even if they contain an OFF observation", () => {
   assert.equal(result.candidatePercent, null);
 });
 
-test("doctor report never includes uncertified analyses", () => {
+test("doctor report includes descriptive day and state summaries without wearing-off", () => {
   const entries = { "2026-03-01": createReliableEntry(1) };
   const html = buildDoctorReportHtml({
     entries,
@@ -89,24 +89,23 @@ test("doctor report never includes uncertified analyses", () => {
     selectedDate: "2026-03-01",
   });
   assert.doesNotMatch(html, /Orientační wearing-off pozorování/);
-  assert.doesNotMatch(html, /<h3>Denní trend<\/h3>/);
-  assert.doesNotMatch(html, /class="weekly-hour-chart"/);
+  assert.match(html, /Souhrn dnů a stavů/);
+  assert.match(html, /<h3>Denní trend<\/h3>/);
+  assert.match(html, /<h3>Hodinový souhrn<\/h3>/);
+  assert.equal((html.match(/class="weekly-hour-chart"/g) ?? []).length, TRACKING_HOURS.length);
+  assert.doesNotMatch(html, /Průměr dávek/);
 });
 
-test("doctor report can omit daily trend and wearing-off observations", () => {
+test("doctor report keeps clinical interpretations disabled", () => {
   const entries = { "2026-03-01": createReliableEntry(1) };
   const html = buildDoctorReportHtml({
     entries,
     treatmentPlan,
     selectedDate: "2026-03-01",
-    includeDailyTrend: false,
-    includeWearingOff: false,
-    includeWeeklyCharts: false,
   });
-  assert.doesNotMatch(html, /<h3>Denní trend<\/h3>/);
   assert.doesNotMatch(html, /Orientační wearing-off pozorování/);
-  assert.doesNotMatch(html, /class="weekly-hour-chart"/);
-  assert.doesNotMatch(html, /<h3>Hodinový souhrn<\/h3>/);
+  assert.doesNotMatch(html, /Změna léčebného plánu/);
+  assert.doesNotMatch(html, /class="chart-plan-change"/);
 });
 
 test("doctor report excludes today unless including it is enabled", () => {
@@ -120,6 +119,7 @@ test("doctor report excludes today unless including it is enabled", () => {
     selectedDate: "2026-03-01",
     todayDate: "2026-03-01",
     includeToday: false,
+    skipEmptyDays: false,
   });
   const withToday = buildDoctorReportHtml({
     entries,
@@ -127,6 +127,7 @@ test("doctor report excludes today unless including it is enabled", () => {
     selectedDate: "2026-03-01",
     todayDate: "2026-03-01",
     includeToday: true,
+    skipEmptyDays: false,
   });
 
   assert.doesNotMatch(withoutToday, /TODAY_ONLY_NOTE/);
@@ -134,6 +135,30 @@ test("doctor report excludes today unless including it is enabled", () => {
   assert.match(withoutToday, /25\. 02\. 2026 - 28\. 02\. 2026/);
   assert.match(withToday, /TODAY_ONLY_NOTE/);
   assert.match(withToday, /26\. 02\. 2026 - 01\. 03\. 2026/);
+});
+
+test("doctor report skips empty first-page days by default and can include calendar gaps", () => {
+  const entries = {
+    "2026-03-01": createReliableEntry(1),
+    "2026-03-03": createReliableEntry(3),
+    "2026-03-04": createDefaultEntry(),
+    "2026-03-05": createReliableEntry(5),
+  };
+
+  const skipping = buildDoctorReportHtml({
+    entries,
+    treatmentPlan,
+    selectedDate: "2026-03-05",
+  });
+  const including = buildDoctorReportHtml({
+    entries,
+    treatmentPlan,
+    selectedDate: "2026-03-05",
+    skipEmptyDays: false,
+  });
+
+  assert.match(skipping, /01\. 03\. 2026 - 05\. 03\. 2026/);
+  assert.match(including, /02\. 03\. 2026 - 05\. 03\. 2026/);
 });
 
 test("doctor report colors medication names consistently and separates colliding labels into two lanes", () => {
@@ -168,7 +193,7 @@ test("tracking axis ends at hour 23", () => {
   assert.equal(TRACKING_HOURS.includes("24"), false);
 });
 
-test("doctor report keeps weekly analyses disabled even when data is available", () => {
+test("doctor report renders descriptive weekly state charts without treatment markers", () => {
   const entries = { "2026-03-07": createReliableEntry(7) };
   const html = buildDoctorReportHtml({
     entries,
@@ -179,7 +204,8 @@ test("doctor report keeps weekly analyses disabled even when data is available",
     selectedDate: "2026-03-07",
   });
   assert.doesNotMatch(html, /Nejcastejsi hodnota/);
-  assert.doesNotMatch(html, /25× 7 dní/);
+  assert.match(html, /25× 7 dní/);
   assert.doesNotMatch(html, /class="chart-plan-change"/);
-  assert.equal((html.match(/class="weekly-hour-chart"/g) ?? []).length, 0);
+  assert.doesNotMatch(html, /Od 15\. 02\. 2026: Levodopa 100 mg/);
+  assert.equal((html.match(/class="weekly-hour-chart"/g) ?? []).length, TRACKING_HOURS.length);
 });

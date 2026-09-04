@@ -237,6 +237,7 @@ const selectedStateKey = ref("on");
 const selectedTreatmentPlanId = ref("");
 const reportOptions = reactive({
   includeToday: false,
+  skipEmptyDays: true,
 });
 const doctorContact = reactive({ name: "", email: "" });
 const contacts = ref(loadContacts());
@@ -1472,6 +1473,7 @@ function printSharedDiaryReport() {
       patientName: view.state.patientName ?? "",
       birthYear: view.state.birthYear ?? "",
       includeToday: reportOptions.includeToday,
+      skipEmptyDays: reportOptions.skipEmptyDays,
     });
     sharingMessage.value = "Sdílený report byl otevřen k tisku.";
   } catch (error) {
@@ -1951,6 +1953,7 @@ function printDoctorReport() {
       patientName: state.patientName,
       birthYear: state.birthYear,
       includeToday: reportOptions.includeToday,
+      skipEmptyDays: reportOptions.skipEmptyDays,
     });
     storageMessage.value = "Report pro lékaře byl otevřen k tisku.";
   } catch (error) {
@@ -1969,6 +1972,7 @@ async function saveDoctorReportPdf() {
       patientName: state.patientName,
       birthYear: state.birthYear,
       includeToday: reportOptions.includeToday,
+      skipEmptyDays: reportOptions.skipEmptyDays,
     });
     storageMessage.value = "PDF report byl ulozen.";
   } catch (error) {
@@ -1985,6 +1989,7 @@ function buildCurrentReportOptions() {
     patientName: state.patientName,
     birthYear: state.birthYear,
     includeToday: reportOptions.includeToday,
+    skipEmptyDays: reportOptions.skipEmptyDays,
   };
 }
 
@@ -3331,9 +3336,10 @@ function syncFloatingMenuHeight() {
             <fieldset class="contact-keyring">
               <legend>Obsah reportu</legend>
               <label><input v-model="reportOptions.includeToday" type="checkbox" /> Zahrnout dnešní den</label>
+              <label><input v-model="reportOptions.skipEmptyDays" type="checkbox" /> Přeskočit prázdné dny na první straně</label>
               <div class="clinical-analysis-warning" role="alert">
-                <strong>Analýzy jsou v reportech vypnuté</strong>
-                <span>Necertifikované trendy, wearing-off výpočty a analytické grafy se do reportu nevytvářejí.</span>
+                <strong>Report obsahuje popisné souhrny</strong>
+                <span>Součástí jsou souhrny dnů a stavů a týdenní grafy. Wearing-off a klinické interpretace zůstávají vypnuté.</span>
               </div>
             </fieldset>
 
@@ -3607,9 +3613,10 @@ function syncFloatingMenuHeight() {
                 <fieldset class="contact-keyring shared-report-options">
                   <legend>Obsah reportu</legend>
                   <label><input v-model="reportOptions.includeToday" type="checkbox" /> Zahrnout dnešní den</label>
+                  <label><input v-model="reportOptions.skipEmptyDays" type="checkbox" /> Přeskočit prázdné dny na první straně</label>
                   <div class="clinical-analysis-warning" role="alert">
-                    <strong>Analýzy jsou v reportech vypnuté</strong>
-                    <span>Necertifikované trendy, wearing-off výpočty a analytické grafy nejsou dostupné.</span>
+                    <strong>Report obsahuje popisné souhrny</strong>
+                    <span>Součástí jsou souhrny dnů a stavů a týdenní grafy. Wearing-off a klinické interpretace zůstávají vypnuté.</span>
                   </div>
                 </fieldset>
                 <button class="primary-button" type="button" @click="printSharedDiaryReport">Vytvořit report pro tisk</button>

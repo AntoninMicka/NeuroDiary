@@ -9,7 +9,6 @@ import {
   TRACKING_HOURS,
 } from "../domain/diary.js";
 import { evaluateDayQuality } from "./dataQuality.js";
-import { analyzeWearingOff } from "./wearingOff.js";
 
 const REPORT_DAYS_PAGE_ONE = 4;
 const ANALYSIS_DAYS = 7;
@@ -52,6 +51,17 @@ function shiftDateKey(dateKey, offsetDays) {
 
 function buildDateKeys(selectedDate, count) {
   return Array.from({ length: count }, (_, index) => shiftDateKey(selectedDate, index - count + 1));
+}
+
+function buildFirstPageDateKeys(entries, selectedDate, count, skipEmptyDays) {
+  if (!skipEmptyDays) {
+    return buildDateKeys(selectedDate, count);
+  }
+
+  return Object.keys(entries)
+    .filter((dateKey) => dateKey <= selectedDate && evaluateDayQuality(entries[dateKey], dateKey).hasAnyData)
+    .sort()
+    .slice(-count);
 }
 
 function formatNumericDate(dateKey) {
@@ -392,7 +402,7 @@ function buildTrendRows(entries, selectedDate) {
         return `
           <tr>
             <td>${escapeHtml(formatLongDate(dateKey))}</td>
-            <td colspan="4">Bez záznamu</td>
+            <td colspan="3">Bez záznamu</td>
           </tr>
         `;
       }
@@ -406,7 +416,6 @@ function buildTrendRows(entries, selectedDate) {
           <td>${escapeHtml(formatSleepQuality(entry.sleepQuality))}</td>
           <td>${escapeHtml(`${formatOverallStatus(entry.overallStatus)} · ${quality.label}`)}</td>
           <td>${escapeHtml(getStateDefinition(dominantStateKey).label)}</td>
-          <td>${escapeHtml(String(entry.medications.length))}</td>
         </tr>
       `;
     })
@@ -511,7 +520,6 @@ function buildChartLegend() {
       ${HOUR_STATES.map((state) => `
         <span><i style="background:${STATE_CHART_COLORS[state.key]}"></i>${escapeHtml(state.shortLabel)}</span>
       `).join("")}
-      <span><i class="plan-change-line"></i>Změna léčebného plánu</span>
     </div>
   `;
 }
@@ -538,41 +546,28 @@ function buildWeeklyChartsPages(entries, selectedDate, weekIntervals) {
   return pages.join("");
 }
 
-function buildAnalysisPage(
-  entries,
-  treatmentPlan,
-  selectedDate,
-  { includeDailyTrend, includeWearingOff, includeWeeklyCharts },
-) {
+function buildAnalysisPage(entries, selectedDate) {
   const summary = summarizeWindow(entries, selectedDate, ANALYSIS_DAYS);
-  const weekIntervals = buildWeekIntervals(selectedDate, treatmentPlan);
-  const wearingOff = includeWearingOff
-    ? analyzeWearingOff({
-        entries,
-        treatmentPlan,
-        endDateKey: selectedDate,
-        days: ANALYSIS_LONG_DAYS,
-      })
-    : null;
+  const weekIntervals = buildWeekIntervals(selectedDate);
 
   return `
     <section class="sheet analysis-page">
       <header class="analysis-header">
         <div>
-          <p class="section-label">Strana 2 · Nacrt analyz</p>
-          <h2>Souhrn za posledních ${ANALYSIS_DAYS} dní</h2>
-          <p>Navrh dalsi reportove strany: rychly prehled trendu, stability a lecby.</p>
+          <p class="section-label">Popisný souhrn</p>
+          <h2>Souhrn dnů a stavů za posledních ${ANALYSIS_DAYS} dní</h2>
+          <p>Pouze přehled zaznamenaných údajů bez klinické interpretace.</p>
         </div>
       </header>
 
       <section class="analysis-cards">
         <article class="analysis-card">
-          <strong>Spolehlive dny</strong>
-          <span>${escapeHtml(String(summary.reliableDays))} / ${ANALYSIS_DAYS}</span>
+          <strong>Dny se záznamem</strong>
+          <span>${escapeHtml(String(summary.daysWithData))} / ${ANALYSIS_DAYS}</span>
         </article>
         <article class="analysis-card">
-          <strong>Průměr dávek / den</strong>
-          <span>${escapeHtml(String(summary.averageDoses))}</span>
+          <strong>Spolehlivé dny</strong>
+          <span>${escapeHtml(String(summary.reliableDays))} / ${ANALYSIS_DAYS}</span>
         </article>
         <article class="analysis-card">
           <strong>Prevladajici stav</strong>
@@ -584,22 +579,8 @@ function buildAnalysisPage(
         </article>
       </section>
 
-      ${includeWearingOff ? `<section class="analysis-panel wearing-off-report-note">
-        <h3>Orientační wearing-off pozorování za ${ANALYSIS_LONG_DAYS} dní</h3>
-        <p>
-          ${escapeHtml(String(wearingOff.candidateDoses))} / ${escapeHtml(String(wearingOff.evaluatedDoses))}
-          dávek vykázalo MID/OFF před plánovanou dávkou po předchozím ON/dyskinezi.
-          Medián do dalšího ON/dyskineze:
-          ${escapeHtml(wearingOff.medianResponseMinutes === null ? "bez dat" : `${wearingOff.medianResponseMinutes} min`)}.
-        </p>
-        <p>
-          Zahrnuto ${escapeHtml(String(wearingOff.reliableDays))} spolehlivých dní.
-          Jde o hrubý odhad z hodinových záznamů, nikoli diagnózu ani doporučení ke změně léčby.
-        </p>
-      </section>` : ""}
-
       <section class="analysis-grid">
-        ${includeDailyTrend ? `<article class="analysis-panel">
+        <article class="analysis-panel">
           <h3>Denní trend</h3>
           <table class="trend-table">
             <thead>
@@ -608,12 +589,11 @@ function buildAnalysisPage(
                 <th>Spánek</th>
                 <th>Den</th>
                 <th>Prevladajici stav</th>
-                <th>Davky</th>
               </tr>
             </thead>
             <tbody>${buildTrendRows(entries, selectedDate)}</tbody>
           </table>
-        </article>` : ""}
+        </article>
 
         <article class="analysis-panel">
           <h3>Hodinový souhrn</h3>
@@ -638,7 +618,7 @@ function buildAnalysisPage(
         </article>
       </section>
     </section>
-    ${includeWeeklyCharts ? buildWeeklyChartsPages(entries, selectedDate, weekIntervals) : ""}
+    ${buildWeeklyChartsPages(entries, selectedDate, weekIntervals)}
   `;
 }
 
@@ -649,13 +629,9 @@ export function buildDoctorReportHtml({
   patientName = "",
   birthYear = "",
   includeToday = true,
+  skipEmptyDays = true,
   todayDate = getTodayKey(),
 }) {
-  const entry = entries[selectedDate];
-  if (!entry) {
-    throw new Error(`Pro datum ${selectedDate} nebyl nalezen záznam deníku.`);
-  }
-
   const reportEndDate = !includeToday && selectedDate === todayDate
     ? shiftDateKey(selectedDate, -1)
     : selectedDate;
@@ -665,7 +641,10 @@ export function buildDoctorReportHtml({
     timeStyle: "short",
   }).format(new Date());
 
-  const dateKeys = buildDateKeys(reportEndDate, REPORT_DAYS_PAGE_ONE);
+  const dateKeys = buildFirstPageDateKeys(entries, reportEndDate, REPORT_DAYS_PAGE_ONE, skipEmptyDays);
+  if (!dateKeys.length) {
+    throw new Error(`Do data ${reportEndDate} nebyl nalezen žádný vyplněný den.`);
+  }
   const medicationColorMap = buildMedicationColorMap(entries);
 
   return `<!DOCTYPE html>
@@ -1291,6 +1270,8 @@ export function buildDoctorReportHtml({
           </section>
         </section>
 
+        ${buildAnalysisPage(entries, reportEndDate)}
+
       </main>
     </body>
   </html>`;
@@ -1303,6 +1284,7 @@ export function openDoctorReportPrint({
   patientName,
   birthYear,
   includeToday = true,
+  skipEmptyDays = true,
 }) {
   const reportWindow = window.open("", "_blank");
   if (!reportWindow) {
@@ -1316,6 +1298,7 @@ export function openDoctorReportPrint({
     patientName,
     birthYear,
     includeToday,
+    skipEmptyDays,
   });
   reportWindow.document.open();
   reportWindow.document.write(html);
