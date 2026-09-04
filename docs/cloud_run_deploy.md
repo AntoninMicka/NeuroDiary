@@ -3,8 +3,9 @@
 Tento projekt ma pripraveny GitHub Actions deploy backendu do `Google Cloud Run`.
 Stejna Cloud Run sluzba nyni servíruje i zabaleny Vue frontend na root URL `/`.
 
-Workflow je v [deploy-cloud-run-backend.yml](/home/antonin/Projects/NeuroDiary/NeuroDiary/.github/workflows/deploy-cloud-run-backend.yml:1)
-a nasazuje `backend/` pri pushi do `main` nebo rucne pres `workflow_dispatch`.
+Workflow je v [deploy-cloud-run-backend.yml](/home/antonin/Projects/NeuroDiary/NeuroDiary/.github/workflows/deploy-cloud-run-backend.yml:1).
+Automaticky deploy při pushi do `main` je po migraci na Turris deaktivovaný. Cloud Run lze
+výjimečně nasadit pouze vědomým ručním spuštěním přes `workflow_dispatch`.
 
 Prakticky odskrtavaci seznam je v [cloud_run_manual_todo.md](/home/antonin/Projects/NeuroDiary/NeuroDiary/docs/cloud_run_manual_todo.md:1).
 Pro prvni lokalni deploy je pripraven i skript [cloud_run_bootstrap.sh](/home/antonin/Projects/NeuroDiary/NeuroDiary/scripts/cloud_run_bootstrap.sh:1)
