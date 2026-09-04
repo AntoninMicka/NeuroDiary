@@ -301,6 +301,12 @@ class AuthConfigResponseModel(BaseModel):
     appleRedirectPath: str = "/auth/apple/callback"
     legacyApiTokenEnabled: bool = False
     federatedAuthEnabled: bool = False
+    localAuthEnabled: bool = False
+
+
+class LocalLoginRequestModel(BaseModel):
+    username: str = Field(min_length=1, max_length=128)
+    password: str = Field(min_length=1, max_length=1024)
 
 
 class IdentityProfileModel(BaseModel):
@@ -318,7 +324,7 @@ class IdentityExchangeRequestModel(BaseModel):
 
 class AuthenticatedUserModel(BaseModel):
     isAuthenticated: bool = True
-    provider: Literal["google", "apple", "cloud-token"]
+    provider: Literal["google", "apple", "cloud-token", "local"]
     userId: str = Field(min_length=1)
     email: str = ""
     name: str = ""

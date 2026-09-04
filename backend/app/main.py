@@ -32,6 +32,7 @@ from .models import (
     AuthSessionResponseModel,
     AuthenticatedUserModel,
     IdentityExchangeRequestModel,
+    LocalLoginRequestModel,
     SyncPullResponseModel,
     SyncPushRequestModel,
     SyncPushResponseModel,
@@ -199,7 +200,7 @@ def on_startup() -> None:
         "INFO",
         "application_started",
         storage="postgres" if DATABASE_URL else "sqlite",
-        auth="federated" if auth_manager.federated_auth_enabled else "legacy",
+        auth="local" if auth_manager.local_auth_enabled else ("federated" if auth_manager.federated_auth_enabled else "legacy"),
     )
 
 
@@ -255,7 +256,7 @@ def verify_sharing_user(
 @app.get("/healthz")
 def healthcheck() -> dict[str, str]:
     backend = "postgres" if DATABASE_URL else "sqlite"
-    auth_mode = "federated" if auth_manager.federated_auth_enabled else "legacy"
+    auth_mode = "local" if auth_manager.local_auth_enabled else ("federated" if auth_manager.federated_auth_enabled else "legacy")
     return {"status": "ok", "storage": backend, "auth": auth_mode, "version": APP_VERSION}
 
 
@@ -438,6 +439,7 @@ def auth_config() -> AuthConfigResponseModel:
         appleRedirectPath=auth_manager.apple_redirect_path,
         legacyApiTokenEnabled=bool(API_TOKEN),
         federatedAuthEnabled=auth_manager.federated_auth_enabled,
+        localAuthEnabled=auth_manager.local_auth_enabled,
     )
 
 
@@ -570,14 +572,23 @@ def exchange_identity_token(payload: IdentityExchangeRequestModel) -> AuthSessio
         accessToken=access_token,
         expiresAt=expires_at,
         user=AuthenticatedUserModel(
-            provider=user.provider,
-            userId=user.user_id,
-            email=user.email,
-            name=user.name,
+            provider=user.provider, userId=user.user_id, email=user.email, name=user.name,
         ),
     )
 
 
+@app.post("/api/v1/auth/local", response_model=AuthSessionResponseModel)
+def login_local_user(payload: LocalLoginRequestModel) -> AuthSessionResponseModel:
+    user, access_token, expires_at = auth_manager.authenticate_local_user(payload.username, payload.password)
+    share_store.register_identity(user.user_id, user.email, user.name)
+    audit_security(user.user_id, "authentication", AuditEventType.AUTH_SESSION_CREATED, provider=user.provider)
+    return AuthSessionResponseModel(
+        accessToken=access_token,
+        expiresAt=expires_at,
+        user=AuthenticatedUserModel(
+            provider=user.provider, userId=user.user_id, email=user.email, name=user.name,
+        ),
+    )
 def resolve_frontend_path(path: str) -> Path:
     base_dir = FRONTEND_DIST.resolve()
     candidate = (base_dir / path).resolve()

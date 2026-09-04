@@ -41,6 +41,7 @@ import {
   loadStoredAuthSession,
   requestGoogleGmailSendAccessToken,
   renderGoogleSignInButton,
+  signInLocal,
   startAppleSignIn,
 } from "./services/authService.js";
 import {
@@ -297,6 +298,8 @@ const localBackupItems = ref([]);
 const webPushConfig = reactive({ enabled: false, publicKey: "" });
 const authConfig = reactive(createDefaultAuthConfig());
 const authSession = ref(loadStoredAuthSession());
+const localUsername = ref("");
+const localPassword = ref("");
 const previousAuthUserId = ref(authSession.value?.user?.userId ?? "");
 const recoverySecretInput = ref("");
 const generatedRecoverySecret = ref("");
@@ -546,8 +549,9 @@ const environmentLabel = computed(() => {
     : "cloud";
 });
 const isFederatedAuthEnabled = computed(() => authConfig.federatedAuthEnabled);
-const showLegacyApiTokenField = computed(() => !isFederatedAuthEnabled.value || authConfig.legacyApiTokenEnabled);
-const requiresSignedInUserForSync = computed(() => isFederatedAuthEnabled.value);
+const isSessionAuthEnabled = computed(() => authConfig.federatedAuthEnabled || authConfig.localAuthEnabled);
+const showLegacyApiTokenField = computed(() => !isSessionAuthEnabled.value || authConfig.legacyApiTokenEnabled);
+const requiresSignedInUserForSync = computed(() => isSessionAuthEnabled.value);
 const authSummary = computed(() => {
   if (!authSession.value?.user) {
     return "Nepřihlášeno";
@@ -2336,6 +2340,24 @@ async function signInWithApple() {
   }
 }
 
+async function signInWithLocalAccount() {
+  isAuthBusy.value = true;
+  try {
+    const session = await signInLocal(localUsername.value, localPassword.value);
+    authSession.value = session;
+    localPassword.value = "";
+    applyAuthenticatedAccount(session.user);
+    await ensureCurrentDeviceRegistered();
+    await tryAutoRecoverLocalSyncKey();
+    await refreshAdminConsole({ silent: true });
+    storageMessage.value = `Přihlášení uživatele ${session.user.name || session.user.userId} bylo úspěšné.`;
+  } catch (error) {
+    storageMessage.value = `Přihlášení selhalo: ${error.message}`;
+  } finally {
+    isAuthBusy.value = false;
+  }
+}
+
 async function signOut() {
   if (webPushStatus.value === "active") {
     try {
@@ -3764,14 +3786,19 @@ function syncFloatingMenuHeight() {
                 />
               </label>
 
-              <div v-if="isFederatedAuthEnabled" class="auth-panel">
+              <div v-if="isSessionAuthEnabled" class="auth-panel">
                 <div class="auth-panel-copy">
                   <span>Přihlášení</span>
                   <p class="panel-tip">
-                    {{ authSession?.user ? `Přihlášeno jako ${authSummary}.` : "Přihlaste se přes Google nebo Apple a bearer token už nebude potřeba." }}
+                    {{ authSession?.user ? `Přihlášeno jako ${authSummary}.` : "Přihlaste se uživatelským účtem." }}
                   </p>
                 </div>
                 <div class="auth-panel-actions">
+                  <form v-if="!authSession?.user && authConfig.localAuthEnabled" class="stack-form" @submit.prevent="signInWithLocalAccount">
+                    <label><span>Uživatelské jméno</span><input v-model="localUsername" autocomplete="username" required /></label>
+                    <label><span>Heslo</span><input v-model="localPassword" type="password" autocomplete="current-password" required /></label>
+                    <button class="primary-button" type="submit" :disabled="isAuthBusy">Přihlásit</button>
+                  </form>
                   <div v-if="!authSession?.user && authConfig.googleEnabled" ref="googleSignInTarget" class="google-signin-slot"></div>
                   <button
                     v-if="!authSession?.user && authConfig.appleEnabled"

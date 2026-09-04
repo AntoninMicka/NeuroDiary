@@ -65,6 +65,7 @@ export function createDefaultAuthConfig() {
     appleRedirectPath: "/auth/apple/callback",
     legacyApiTokenEnabled: false,
     federatedAuthEnabled: false,
+    localAuthEnabled: false,
   };
 }
 
@@ -125,6 +126,15 @@ export async function exchangeIdentityToken({ provider, idToken, nonce = "", pro
     }),
   });
 
+  return saveAuthSession(result);
+}
+
+export async function signInLocal(username, password) {
+  const result = await fetchJson("/api/v1/auth/local", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
   return saveAuthSession(result);
 }
 

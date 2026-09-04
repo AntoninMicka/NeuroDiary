@@ -1,6 +1,11 @@
 from __future__ import annotations
 
 import os
+import base64
+import hashlib
+import hmac
+import json
+from pathlib import Path
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from functools import cached_property
@@ -45,6 +50,11 @@ class AuthManager:
             os.getenv("NEURODIARY_APPLE_CLIENT_IDS", os.getenv("NEURODIARY_APPLE_CLIENT_ID", "")),
         )
         self.apple_redirect_path = os.getenv("NEURODIARY_APPLE_REDIRECT_PATH", "/auth/apple/callback").strip()
+        self.local_users_file = os.getenv("NEURODIARY_LOCAL_USERS_FILE", "").strip()
+
+    @property
+    def local_auth_enabled(self) -> bool:
+        return bool(self.local_users_file)
 
     @property
     def google_enabled(self) -> bool:
@@ -146,6 +156,43 @@ class AuthManager:
 
         session_token, expires_at = self.build_session_token(user)
         return user, session_token, expires_at
+
+    def authenticate_local_user(self, username: str, password: str) -> tuple[AuthenticatedUser, str, datetime]:
+        if not self.local_users_file:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Local sign-in is not configured.")
+        try:
+            document = json.loads(Path(self.local_users_file).read_text(encoding="utf-8"))
+            users = document.get("users", [])
+        except (OSError, ValueError, AttributeError) as error:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Local user file is unavailable.") from error
+
+        normalized = username.strip().casefold()
+        record = next((item for item in users if str(item.get("username", "")).casefold() == normalized), None)
+        valid = False
+        if record:
+            password_data = record.get("password", {})
+            try:
+                salt = base64.b64decode(password_data["salt"], validate=True)
+                expected = base64.b64decode(password_data["hash"], validate=True)
+                actual = hashlib.scrypt(
+                    password.encode("utf-8"), salt=salt,
+                    n=int(password_data.get("n", 16384)), r=int(password_data.get("r", 8)),
+                    p=int(password_data.get("p", 1)), dklen=len(expected),
+                )
+                valid = hmac.compare_digest(actual, expected)
+            except (KeyError, TypeError, ValueError):
+                valid = False
+        if not valid:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid username or password.")
+
+        user = AuthenticatedUser(
+            provider="local",
+            user_id=f"local:{record.get('userId') or record['username']}",
+            email=str(record.get("email") or ""),
+            name=str(record.get("name") or record["username"]),
+        )
+        token, expires_at = self.build_session_token(user)
+        return user, token, expires_at
 
     def verify_google_identity_token(self, token: str) -> AuthenticatedUser:
         if not self.google_client_ids:
