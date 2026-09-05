@@ -56,8 +56,31 @@ export function registerCurrentDevice(settings, name = getDefaultDeviceName()) {
   });
 }
 
+function isDeviceRecord(value) {
+  return Boolean(value && typeof value === "object" && typeof value.deviceId === "string");
+}
+
+export async function ensureCurrentDeviceRegistration(settings, name = getDefaultDeviceName()) {
+  const registration = await registerCurrentDevice(settings, name);
+  if (isDeviceRecord(registration)) {
+    return registration;
+  }
+
+  // Older or partially upgraded backends could persist the registration but return an empty body.
+  const currentDeviceId = getCurrentDeviceId();
+  const registeredDevice = (await fetchTrustedDevices(settings)).find(
+    (device) => device.current || device.deviceId === currentDeviceId,
+  );
+  if (registeredDevice) {
+    return registeredDevice;
+  }
+
+  throw new Error("Server potvrdil registraci, ale nevrátil údaje aktuálního zařízení.");
+}
+
 export async function fetchTrustedDevices(settings) {
-  return (await request(settings, "/api/v1/devices")).devices ?? [];
+  const payload = await request(settings, "/api/v1/devices");
+  return (Array.isArray(payload?.devices) ? payload.devices : []).filter(isDeviceRecord);
 }
 
 export function revokeTrustedDevice(settings, deviceId) {

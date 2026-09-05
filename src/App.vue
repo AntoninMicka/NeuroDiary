@@ -85,6 +85,7 @@ import {
 } from "./services/deviceKeyExchange.js";
 import {
   fetchTrustedDevices,
+  ensureCurrentDeviceRegistration,
   getCurrentDeviceId,
   regenerateCurrentDeviceId,
   registerCurrentDevice,
@@ -2146,7 +2147,7 @@ function downloadGeneratedPrivateKey() {
 }
 
 async function ensureCurrentDeviceRegistered() {
-  let registration = await registerCurrentDevice(syncSettings);
+  let registration = await ensureCurrentDeviceRegistration(syncSettings);
   try {
     identityKeyMigration.value = await fetchIdentityKeyMigration(syncSettings);
     await ensureDeviceExchangeKeyPublished(syncSettings);
